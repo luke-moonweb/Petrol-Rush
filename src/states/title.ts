@@ -6,6 +6,7 @@ import { Race } from '../race/race';
 import { trackHeadingAt, WORLD_W, wrapAngle } from '../track/track';
 import { driverName } from '../gfx/vehicles';
 import { drawTitle, TITLE_ITEMS } from '../ui/menus';
+import { CreditsState } from './credits';
 import { Game, loadOptions, State } from './game';
 import { HelpState } from './info';
 import { RaceState } from './race';
@@ -84,6 +85,9 @@ export class TitleState implements State {
         break;
       case 'SETTINGS':
         this.game.set(new SettingsState(this.game, this));
+        break;
+      case 'CREDITS':
+        this.game.set(new CreditsState(this.game, this));
         break;
     }
   }

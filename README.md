@@ -147,7 +147,7 @@ src/
   config.ts        tuning constants and race options
   input.ts         keyboard, rebindable keys
   prefs.ts         SETTINGS → GAME options
-  states/          title (with demo race), controls, settings, race
+  states/          title (with demo race), controls, settings, credits, race
   track/           oval geometry, walls, pit road, night track pre-render
   race/            cars, physics & collisions, AI, oil, pit stops, race logic & classification
   ui/              HUD, menus, race overlays, text, palette
