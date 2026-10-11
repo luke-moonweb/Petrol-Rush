@@ -1,9 +1,9 @@
 import { ENGINE_STYLES } from '../audio/engines';
 import { CONFIG } from '../config';
-import { BINDABLE, BindableAction, Bindings, DEFAULT_BINDINGS, keyLabel, RESERVED_CODES, saveBindings } from '../input';
+import { BINDABLE, type BindableAction, type Bindings, DEFAULT_BINDINGS, keyLabel, RESERVED_CODES, saveBindings } from '../input';
 import { savePrefs } from '../prefs';
-import { drawSettings, GameOptionRow, KEYS_ROWS, SettingsTab } from '../ui/menus';
-import { Game, State } from './game';
+import { drawSettings, type GameOptionRow, KEYS_ROWS, type SettingsTab } from '../ui/menus/settings';
+import type { Game, State } from './game';
 
 const ROW_RESET = BINDABLE.length + 1;
 const ROW_BACK = BINDABLE.length + 2;
@@ -39,7 +39,7 @@ export class SettingsState implements State {
   }
 
   private assign(code: string): void {
-    const action = BINDABLE[this.row - 1].action;
+    const action = BINDABLE[this.row - 1]!.action;
     if (RESERVED_CODES.has(code)) {
       this.message = `${keyLabel(code)} IS RESERVED – PICK ANOTHER KEY`;
       this.game.audio.ui('error');
@@ -69,7 +69,7 @@ export class SettingsState implements State {
     switch (opt) {
       case 'sound': {
         const i = ENGINE_STYLES.findIndex((e) => e.id === audio.engineStyle);
-        audio.setEngineStyle(ENGINE_STYLES[(i + step + ENGINE_STYLES.length) % ENGINE_STYLES.length].id);
+        audio.setEngineStyle(ENGINE_STYLES[(i + step + ENGINE_STYLES.length) % ENGINE_STYLES.length]!.id);
         return;
       }
       case 'penalties':
@@ -87,39 +87,41 @@ export class SettingsState implements State {
   }
 
   private gameRows(): GameOptionRow[] {
+    return GAME_OPTIONS.map((opt) => this.gameRow(opt));
+  }
+
+  private gameRow(opt: GameOption): GameOptionRow {
     const prefs = this.game.prefs;
     const on = (b: boolean) => (b ? 'ON' : 'OFF');
-    return GAME_OPTIONS.map((opt) => {
-      switch (opt) {
-        case 'sound':
-          return {
-            label: 'ENGINE SOUND',
-            value: ENGINE_STYLES.find((e) => e.id === this.game.audio.engineStyle)?.label ?? '',
-            desc: 'Engine sound of your car and your rivals. ENTER plays a sample.',
-          };
-        case 'penalties':
-          return {
-            label: 'CRASH PENALTIES',
-            value: on(prefs.penalties),
-            desc: `+${CONFIG.PENALTY_S} s for causing a crash. The car ahead has right of way – the car behind is at fault.`,
-          };
-        case 'speedBar':
-          return {
-            label: 'SPEED WARNING',
-            value: on(prefs.speedBar),
-            desc: `Bar under your car's arrow above ${CONFIG.SPIN_MPH} MPH: orange – slide, red – spin in a corner.`,
-          };
-        case 'collisions':
-          return {
-            label: 'COLLISIONS',
-            value: prefs.collisions === 'realistic' ? 'REALISTIC' : 'CLASSIC',
-            desc:
-              prefs.collisions === 'realistic'
-                ? 'The car hit in the rear or rear side spins – the hitter does not.'
-                : 'Old model: in a hard crash both cars spin.',
-          };
-      }
-    });
+    switch (opt) {
+      case 'sound':
+        return {
+          label: 'ENGINE SOUND',
+          value: ENGINE_STYLES.find((e) => e.id === this.game.audio.engineStyle)?.label ?? '',
+          desc: 'Engine sound of your car and your rivals. ENTER plays a sample.',
+        };
+      case 'penalties':
+        return {
+          label: 'CRASH PENALTIES',
+          value: on(prefs.penalties),
+          desc: `+${CONFIG.PENALTY_S} s for causing a crash. The car ahead has right of way – the car behind is at fault.`,
+        };
+      case 'speedBar':
+        return {
+          label: 'SPEED WARNING',
+          value: on(prefs.speedBar),
+          desc: `Bar under your car's arrow above ${CONFIG.SPIN_MPH} MPH: orange – slide, red – spin in a corner.`,
+        };
+      case 'collisions':
+        return {
+          label: 'COLLISIONS',
+          value: prefs.collisions === 'realistic' ? 'REALISTIC' : 'CLASSIC',
+          desc:
+            prefs.collisions === 'realistic'
+              ? 'The car hit in the rear or rear side spins – the hitter does not.'
+              : 'Old model: in a hard crash both cars spin.',
+        };
+    }
   }
 
   update(): void {
@@ -179,7 +181,7 @@ export class SettingsState implements State {
     if (input.pressed('navRight')) this.col = 1;
     const onAction = this.row >= 1 && this.row <= BINDABLE.length;
     if (onAction && input.pressed('clear')) {
-      const keys = this.bindings[BINDABLE[this.row - 1].action];
+      const keys = this.bindings[BINDABLE[this.row - 1]!.action];
       if (!keys[1 - this.col]) {
         this.message = 'EVERY ACTION NEEDS AT LEAST ONE KEY';
         audio.ui('error');

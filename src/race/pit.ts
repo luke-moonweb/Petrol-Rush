@@ -1,6 +1,6 @@
 import { CONFIG } from '../config';
 import { inPitBox } from '../track/track';
-import { Car } from './car';
+import type { Car } from './car';
 
 export { boxX, NUM_BOXES as MAX_BOXES } from '../track/track';
 

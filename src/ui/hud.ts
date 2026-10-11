@@ -1,7 +1,7 @@
 import { CONFIG } from '../config';
 import { CAR_SCHEMES, driverName } from '../gfx/vehicles';
 import { lapsCompleted, progress } from '../race/car';
-import { Race } from '../race/race';
+import type { Race } from '../race/race';
 import { TRACK_LEN } from '../track/track';
 import { FONT_UI } from './text';
 import { FONT_BLACK, PR } from './theme';
@@ -24,7 +24,16 @@ function label(g: CanvasRenderingContext2D, str: string, x: number, y: number, c
   return cx - x;
 }
 
-function glowText(g: CanvasRenderingContext2D, str: string, x: number, y: number, font: string, color: string, glow: string | null, align: CanvasTextAlign = 'left'): number {
+function glowText(
+  g: CanvasRenderingContext2D,
+  str: string,
+  x: number,
+  y: number,
+  font: string,
+  color: string,
+  glow: string | null,
+  align: CanvasTextAlign = 'left',
+): number {
   g.font = font;
   g.textAlign = align;
   g.textBaseline = 'alphabetic';
@@ -138,8 +147,8 @@ function drawNotice(g: CanvasRenderingContext2D, n: { text: string; age: number 
 
 function gapLabel(race: Race, i: number, list: ReturnType<Race['standings']>): string {
   if (i === 0) return 'LEADER';
-  const car = list[i];
-  const ahead = list[i - 1];
+  const car = list[i]!;
+  const ahead = list[i - 1]!;
   const laps = Math.floor((progress(ahead) - progress(car)) / TRACK_LEN);
   if (laps >= 1 && !race.leaderFinished) return `+${laps} LAP`;
   const gap = race.gap(car, ahead);
@@ -186,7 +195,7 @@ export function drawTower(g: CanvasRenderingContext2D, race: Race): void {
     g.textBaseline = 'middle';
     g.fillStyle = me ? PR.ink : PR.amber;
     g.fillText(String(i + 1), x + 11, ry + rowH / 2 + 0.5);
-    g.fillStyle = CAR_SCHEMES[car.colorIdx % CAR_SCHEMES.length].body;
+    g.fillStyle = CAR_SCHEMES[car.colorIdx % CAR_SCHEMES.length]!.body;
     g.fillRect(x + 23, ry + 3, 2, rowH - 6);
     let right = x + w - 5;
     const cy = ry + rowH / 2 + 0.5;

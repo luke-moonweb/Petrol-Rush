@@ -52,7 +52,10 @@ function project(face: Face, c: number, s: number, scale: number): Projected | n
 function fillPoly(g: CanvasRenderingContext2D, pr: Projected): void {
   const f = pr.face;
   g.beginPath();
-  pr.pts.forEach(([x, y], i) => (i === 0 ? g.moveTo(x, y) : g.lineTo(x, y)));
+  pr.pts.forEach(([x, y], i) => {
+    if (i === 0) g.moveTo(x, y);
+    else g.lineTo(x, y);
+  });
   g.closePath();
   const k = f.flat ? 0 : -0.3 + 0.42 * pr.light;
   g.fillStyle = shade(f.color, k);
@@ -64,14 +67,7 @@ function fillPoly(g: CanvasRenderingContext2D, pr: Projected): void {
   }
 }
 
-export function renderModel(
-  g: CanvasRenderingContext2D,
-  faces: Face[],
-  yaw: number,
-  scale: number,
-  ox: number,
-  oy: number,
-): void {
+export function renderModel(g: CanvasRenderingContext2D, faces: Face[], yaw: number, scale: number, ox: number, oy: number): void {
   const c = Math.cos(yaw);
   const s = Math.sin(yaw);
   const visible = faces

@@ -2,7 +2,7 @@ import { GameAudio } from './audio/audio';
 import { CONFIG } from './config';
 import { Input, loadBindings } from './input';
 import { Game, loadOptions, readParams } from './states/game';
-import { RaceState } from './states/race';
+import { RaceState } from './states/race/state';
 import { TitleState } from './states/title';
 
 const canvas = document.getElementById('screen') as HTMLCanvasElement;
@@ -12,7 +12,7 @@ let renderScale = 1;
 const params = readParams(location.search);
 const input = new Input(window, loadBindings());
 const audio = new GameAudio();
-const game = new Game(input, audio, params);
+const game = new Game(input, audio, params, (g) => new TitleState(g));
 
 input.onFirstInteraction = () => audio.unlock();
 input.onBlur = () => {
@@ -22,7 +22,8 @@ input.onBlur = () => {
 
 if (params.debug) (window as unknown as { __game: Game }).__game = game;
 
-game.set(params.quick ? new RaceState(game, loadOptions(params), 'running') : new TitleState(game));
+if (params.quick) game.set(new RaceState(game, loadOptions(params), 'running'));
+else game.toTitle();
 
 function resize(): void {
   const s = Math.min(window.innerWidth / CONFIG.SCREEN_W, window.innerHeight / CONFIG.SCREEN_H);

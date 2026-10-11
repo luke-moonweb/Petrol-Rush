@@ -1,10 +1,21 @@
 import { describe, expect, it } from 'vitest';
 import { CONFIG, DEFAULT_OPTIONS } from '../src/config';
-import { Car, initProgress, lapsCompleted, updateProgress } from '../src/race/car';
-import { Race } from '../src/race/race';
 import { aiInput } from '../src/race/ai';
+import { type Car, initProgress, lapsCompleted, updateProgress } from '../src/race/car';
 import { NO_INPUT } from '../src/race/physics';
-import { CY, PIT_LINE_IN_X, PIT_LINE_OUT_X, pointAt as pointAtS, R_OUT, S_TURN2, SECTOR_LEN, TRACK_LEN, WORLD_W, wrapS } from '../src/track/track';
+import { Race } from '../src/race/race';
+import {
+  CY,
+  PIT_LINE_IN_X,
+  PIT_LINE_OUT_X,
+  pointAt as pointAtS,
+  R_OUT,
+  S_TURN2,
+  SECTOR_LEN,
+  TRACK_LEN,
+  WORLD_W,
+  wrapS,
+} from '../src/track/track';
 
 function fakeCar(s: number): Car {
   const race = new Race({ ...DEFAULT_OPTIONS, cars: 1 }, 1);
@@ -53,8 +64,13 @@ describe('headless simulation', () => {
       race.step(dt, null);
       for (const c of race.cars) {
         const ok =
-          Number.isFinite(c.x) && Number.isFinite(c.y) && Number.isFinite(c.speed) &&
-          c.x > 0 && c.x < WORLD_W && c.y > CY - R_OUT && c.y < CY + R_OUT;
+          Number.isFinite(c.x) &&
+          Number.isFinite(c.y) &&
+          Number.isFinite(c.speed) &&
+          c.x > 0 &&
+          c.x < WORLD_W &&
+          c.y > CY - R_OUT &&
+          c.y < CY + R_OUT;
         if (!ok) violations++;
         const fueling = c.ai.pitPhase === 'fueling';
         if (fueling && !wasFueling.has(c.id)) {
@@ -98,9 +114,9 @@ describe('traffic jam behind the stopped player car', () => {
 });
 
 describe('classification', () => {
-  it('a lapped car that crossed the line ranks behind cars on the leader\'s lap', () => {
+  it("a lapped car that crossed the line ranks behind cars on the leader's lap", () => {
     const race = new Race({ ...DEFAULT_OPTIONS, cars: 3, laps: 5 }, 1);
-    const [a, b, c] = race.cars;
+    const [a, b, c] = race.cars as [Car, Car, Car];
     Object.assign(a, { finished: true, finishPos: 1, finalSectors: 40, finalProgress: 40 * SECTOR_LEN + 0.19 });
     Object.assign(c, { finished: true, finishPos: 2, finalSectors: 32, finalProgress: 32 * SECTOR_LEN + 0.18 });
     Object.assign(b, { finished: false, sectorsPassed: 39, lastSector: 7, s: 7.5 * SECTOR_LEN });
@@ -119,12 +135,12 @@ describe('time gaps (measured at sector boundaries)', () => {
   it('no gap before the first measurement, then non-negative gaps to the car ahead', () => {
     const race = new Race({ ...DEFAULT_OPTIONS, cars: 8, laps: 2 }, 7, true);
     const order0 = race.standings();
-    expect(race.gap(order0[1], order0[0])).toBeNull();
+    expect(race.gap(order0[1]!, order0[0]!)).toBeNull();
     race.start();
     for (let i = 0; i < 60 * 30; i++) race.step(1 / 60, null);
     const order = race.standings();
     for (let i = 1; i < order.length; i++) {
-      const gap = race.gap(order[i], order[i - 1]);
+      const gap = race.gap(order[i]!, order[i - 1]!);
       expect(gap).not.toBeNull();
       expect(gap!).toBeGreaterThanOrEqual(0);
       expect(gap!).toBeLessThan(15);
@@ -163,7 +179,7 @@ describe('oil and crash penalties', () => {
   function twoCars(rules?: { penalties: boolean; collisions: 'realistic' | 'classic' }) {
     const race = new Race({ ...DEFAULT_OPTIONS, cars: 2 }, 5, true, rules);
     race.start();
-    const [a, b] = race.cars;
+    const [a, b] = race.cars as [Car, Car];
     const place = (c: Car, s: number, d: number, mph: number) => {
       const p = pointAtS(s, d);
       Object.assign(c, { x: p.x, y: p.y, prevX: p.x, prevY: p.y, heading: p.heading, moveAngle: p.heading, speed: mph, spinTime: 0 });
@@ -204,9 +220,9 @@ describe('projected position with penalty (HUD)', () => {
     race.start();
     for (let i = 0; i < 60 * 30; i++) race.step(1 / 60, null);
     const order = race.standings();
-    const leader = order[0];
+    const leader = order[0]!;
     expect(race.projectedPosition(leader)).toBe(1);
-    leader.penalty = race.timeBehindLeader(order[order.length - 1]) + 5;
+    leader.penalty = race.timeBehindLeader(order[order.length - 1]!) + 5;
     expect(race.projectedPosition(leader)).toBe(order.length);
     expect(race.standings()[0]).toBe(leader);
   });

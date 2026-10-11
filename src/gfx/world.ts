@@ -1,7 +1,7 @@
 import { CONFIG } from '../config';
-import { Car } from '../race/car';
-import { OilSlick, oilRadius } from '../race/oil';
-import { buildTrackCanvas } from '../track/render';
+import type { Car } from '../race/car';
+import { type OilSlick, oilRadius } from '../race/oil';
+import { buildTrackCanvas } from './track/canvas';
 import { CAR_ANCHOR_X, CAR_ANCHOR_Y, carDirIndex, carGlowSprite } from './vehicles';
 
 let trackBg: HTMLCanvasElement | null = null;

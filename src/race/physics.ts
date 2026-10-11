@@ -1,6 +1,21 @@
-import { CollisionMode, CONFIG } from '../config';
-import { CAR_R, constrainPos, CX_L, CX_R, CY, deltaS, inPitLane, inTurn, inWallRange, project, trackHeadingAt, TRACK_LEN, WallNormal, wrapAngle } from '../track/track';
-import { Car } from './car';
+import { CONFIG, type CollisionMode } from '../config';
+import {
+  CAR_R,
+  CX_L,
+  CX_R,
+  CY,
+  constrainPos,
+  deltaS,
+  inPitLane,
+  inTurn,
+  inWallRange,
+  project,
+  TRACK_LEN,
+  trackHeadingAt,
+  type WallNormal,
+  wrapAngle,
+} from '../track/track';
+import type { Car } from './car';
 
 export interface DriveInput {
   steer: number;
@@ -109,14 +124,9 @@ export function stepCar(car: Car, input: DriveInput, dt: number): void {
     } else if (input.gas && hasFuel) {
       if (car.reverse) {
         car.speed =
-          car.speed > 0
-            ? towards(car.speed, 0, C.BRAKE_MPH_S * dt)
-            : Math.max(car.speed - C.ACCEL_MPH_S_LOW * dt, -C.MAX_REVERSE_MPH);
+          car.speed > 0 ? towards(car.speed, 0, C.BRAKE_MPH_S * dt) : Math.max(car.speed - C.ACCEL_MPH_S_LOW * dt, -C.MAX_REVERSE_MPH);
       } else {
-        car.speed =
-          car.speed < 0
-            ? towards(car.speed, 0, C.BRAKE_MPH_S * dt)
-            : Math.min(car.speed + accelAt(car.speed) * dt, C.MAX_MPH);
+        car.speed = car.speed < 0 ? towards(car.speed, 0, C.BRAKE_MPH_S * dt) : Math.min(car.speed + accelAt(car.speed) * dt, C.MAX_MPH);
       }
     } else if (C.THROTTLE_MODE === 'hold') {
       car.speed = towards(car.speed, 0, C.COAST_MPH_S * dt);
@@ -244,7 +254,12 @@ function setVelocity(car: Car, vx: number, vy: number): void {
 
 export type CrashHandler = (culprit: Car | null, victims: Car[]) => void;
 
-function blameFor(a: Car, b: Car, before: { aSpun: boolean; bSpun: boolean; aMph: number; bMph: number }, sideBySide: Car | null): Car | null {
+function blameFor(
+  a: Car,
+  b: Car,
+  before: { aSpun: boolean; bSpun: boolean; aMph: number; bMph: number },
+  sideBySide: Car | null,
+): Car | null {
   const { aSpun, bSpun } = before;
   if (Math.cos(a.heading - b.heading) < -0.5) return null;
   const ds = deltaS(project(a.x, a.y).s, project(b.x, b.y).s);
@@ -271,9 +286,9 @@ function zoneOf(car: Car, towardX: number, towardY: number, px: number, py: numb
 export function collideCars(cars: Car[], mode: CollisionMode = 'realistic', onCrash?: CrashHandler): void {
   const C = CONFIG;
   for (let i = 0; i < cars.length; i++) {
-    const a = cars[i];
+    const a = cars[i]!;
     for (let j = i + 1; j < cars.length; j++) {
-      const b = cars[j];
+      const b = cars[j]!;
       if (Math.abs(b.x - a.x) > 44 || Math.abs(b.y - a.y) > 44) continue;
       if (inWallRange(a.x) && inWallRange(b.x) && a.wasInPit && b.wasInPit && a.pitSide !== b.pitSide) continue;
 
@@ -385,8 +400,7 @@ export function collideCars(cars: Car[], mode: CollisionMode = 'realistic', onCr
             const sgn = rear === a ? 1 : -1;
             const [rvx, rvy] = velocity(rear);
             const vn = rvx * nx * sgn + rvy * ny * sgn;
-            const slide =
-              (rvx - vn * nx * sgn) * Math.cos(rear.moveAngle) + (rvy - vn * ny * sgn) * Math.sin(rear.moveAngle);
+            const slide = (rvx - vn * nx * sgn) * Math.cos(rear.moveAngle) + (rvy - vn * ny * sgn) * Math.sin(rear.moveAngle);
             rear.speed = Math.max(rear.reverse ? -C.MAX_REVERSE_MPH : 0, slide, along - 2);
             front.speed = Math.min(C.MAX_MPH, front.speed + lost * 0.3);
           }

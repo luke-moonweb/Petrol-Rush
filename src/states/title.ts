@@ -1,15 +1,15 @@
 import { CONFIG } from '../config';
 import { Particles } from '../gfx/particles';
+import { driverName } from '../gfx/vehicles';
 import { drawCars, drawOil, trackCanvas } from '../gfx/world';
-import { Car, lapsCompleted } from '../race/car';
+import { type Car, lapsCompleted } from '../race/car';
 import { Race } from '../race/race';
 import { trackHeadingAt, WORLD_W, wrapAngle } from '../track/track';
-import { driverName } from '../gfx/vehicles';
-import { drawTitle, TITLE_ITEMS } from '../ui/menus';
+import { drawTitle, TITLE_ITEMS } from '../ui/menus/title';
 import { CreditsState } from './credits';
-import { Game, loadOptions, State } from './game';
+import { type Game, loadOptions, type State } from './game';
 import { HelpState } from './info';
-import { RaceState } from './race';
+import { RaceState } from './race/state';
 import { SettingsState } from './settings';
 
 const W = CONFIG.SCREEN_W;
@@ -43,7 +43,7 @@ export class TitleState implements State {
   }
 
   private camTarget(): number {
-    const lead = this.demo.standings()[0];
+    const lead = this.demo.standings()[0]!;
     const x = lead.x + CAM_LEAD * Math.cos(trackHeadingAt(lead.x, lead.y));
     return Math.min(Math.max(x - W / 2, 0), WORLD_W - W);
   }
@@ -117,7 +117,7 @@ export class TitleState implements State {
     const order = race.standings();
     drawTitle(g, {
       sel: this.sel,
-      lap: Math.min(race.laps, lapsCompleted(order[0]) + 1),
+      lap: Math.min(race.laps, lapsCompleted(order[0]!) + 1),
       laps: race.laps,
       top: order.slice(0, 5).map((c) => driverName(c.colorIdx)),
     });

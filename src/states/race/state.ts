@@ -1,32 +1,39 @@
-import { CONFIG, LAP_CHOICES, QUALIFYING_CHOICES, RaceOptions } from '../config';
-import { drawCars, drawOil, trackCanvas } from '../gfx/world';
-import { Car, lapsCompleted } from '../race/car';
-import { cornerAssist, DriveInput, skidWarning, SteerRamp } from '../race/physics';
-import { NUM_COLORS, Race } from '../race/race';
-import { deltaS, inTurn, trackHeadingAt, WORLD_W, wrapAngle } from '../track/track';
-import { Particles } from '../gfx/particles';
-import { drawFuelGauge, drawHudTop, drawSkidLamp, drawSpeedo, drawTower } from '../ui/hud';
-import { keyLabel } from '../input';
-import { drawPause, drawRaceMenu, drawRaceSettings, drawResults, ResultRow, SettingRow } from '../ui/overlays';
-import { offBall, ordinal, redBall, text } from '../ui/text';
-import { FONT_BLACK, PR } from '../ui/theme';
-import { Game, saveOptions, State } from './game';
-import { HelpState } from './info';
-import { TitleState } from './title';
+import { CONFIG, LAP_CHOICES, QUALIFYING_CHOICES, type RaceOptions } from '../../config';
+import { Particles } from '../../gfx/particles';
+import { drawCars, drawOil, trackCanvas } from '../../gfx/world';
+import { keyLabel } from '../../input';
+import { type Car, lapsCompleted } from '../../race/car';
+import { cornerAssist, type DriveInput, SteerRamp, skidWarning } from '../../race/physics';
+import { NUM_COLORS, Race } from '../../race/race';
+import { deltaS, inTurn, trackHeadingAt, WORLD_W, wrapAngle } from '../../track/track';
+import { drawFuelGauge, drawHudTop, drawSkidLamp, drawSpeedo, drawTower } from '../../ui/hud';
+import { drawPause, drawRaceMenu, drawRaceSettings, drawResults, type SettingRow, type StatField } from '../../ui/overlays';
+import { ordinal } from '../../ui/text';
+import { PR } from '../../ui/theme';
+import { type Game, type State, saveOptions } from '../game';
+import { HelpState } from '../info';
+import { RaceSound } from './sound';
+import {
+  drawDebug,
+  drawRaceMessage,
+  drawSpeedBar,
+  drawStartLights,
+  LIGHT_INTERVAL_S,
+  LIGHTS_COUNT,
+  resultRows,
+  type StartLights,
+  VIEW_W,
+  VIEW_X,
+} from './view';
 
 type Phase = 'choose' | 'options' | 'running' | 'paused' | 'results';
 
 const W = CONFIG.SCREEN_W;
-const VIEW_X = CONFIG.HUD_LEFT_W;
-const VIEW_W = W - VIEW_X;
-const LIGHTS_COUNT = 5;
-const LIGHT_INTERVAL_S = 1;
 const PLAY_H = CONFIG.PLAY_H;
 const TOP = CONFIG.HUD_TOP_H;
 const CRASH_WARN_PX = 1100;
 const NOTICE_S = 4;
 const RADIO_GAP_S = 8;
-const SPEED_BAR_MAX_OVER = 20;
 
 let overlayImg: HTMLImageElement | null = null;
 
@@ -53,8 +60,9 @@ export class RaceState implements State {
   private notice: { text: string; age: number } | null = null;
   private radioCooldown = 0;
   private penaltyMsg = 0;
-  private sound = { crashes: new Map<number, number>(), scrape: 0, wallCd: 0, bumpCd: 0, lit: 0, laps: 0, lowFuel: false, finished: false };
-  private lights: { t: number; outAt: number } | null = null;
+  private sound!: RaceSound;
+  private lightsShown = 0;
+  private lights: StartLights | null = null;
   private readonly particles = new Particles();
   private seed: number;
   private fps = 0;
@@ -81,7 +89,8 @@ export class RaceState implements State {
     this.particles?.clear();
     this.camOff = NaN;
     this.assistLevel = 0;
-    if (this.sound) this.sound = { crashes: new Map(), scrape: 0, wallCd: 0, bumpCd: 0, lit: 0, laps: 0, lowFuel: false, finished: false };
+    this.sound = new RaceSound(this.game.audio);
+    this.lightsShown = 0;
     const prefs = this.game.prefs;
     this.notice = null;
     this.penaltyMsg = 0;
@@ -114,7 +123,7 @@ export class RaceState implements State {
         else if (input.pressed('help')) this.game.set(new HelpState(this.game, this));
         break;
       case 'results':
-        if (input.pressed('enter') || input.pressed('back')) this.game.set(new TitleState(this.game));
+        if (input.pressed('enter') || input.pressed('back')) this.game.toTitle();
         break;
     }
     if (this.phase !== 'running') this.game.audio.silence();
@@ -144,7 +153,7 @@ export class RaceState implements State {
     if (input.pressed('back') || input.pressed('menu')) {
       audio.ui('back');
       if (this.midRace && (this.race.started || this.lights)) this.phase = 'running';
-      else this.game.set(new TitleState(this.game));
+      else this.game.toTitle();
       return;
     }
     if (!input.pressed('enter')) return;
@@ -165,7 +174,7 @@ export class RaceState implements State {
         this.phase = 'running';
         break;
       case 'QUIT TO MAIN MENU':
-        this.game.set(new TitleState(this.game));
+        this.game.toTitle();
         break;
     }
   }
@@ -208,7 +217,7 @@ export class RaceState implements State {
       case 1: {
         const idx = LAP_CHOICES.indexOf(o.laps);
         const cur = idx < 0 ? LAP_CHOICES.indexOf(18) : idx;
-        o.laps = LAP_CHOICES[(cur + delta + LAP_CHOICES.length) % LAP_CHOICES.length];
+        o.laps = LAP_CHOICES[(cur + delta + LAP_CHOICES.length) % LAP_CHOICES.length]!;
         break;
       }
       case 2:
@@ -216,7 +225,7 @@ export class RaceState implements State {
         break;
       case 3: {
         const idx = QUALIFYING_CHOICES.indexOf(o.qualifying);
-        o.qualifying = QUALIFYING_CHOICES[(idx + delta + QUALIFYING_CHOICES.length) % QUALIFYING_CHOICES.length];
+        o.qualifying = QUALIFYING_CHOICES[(idx + delta + QUALIFYING_CHOICES.length) % QUALIFYING_CHOICES.length]!;
         break;
       }
     }
@@ -266,19 +275,14 @@ export class RaceState implements State {
       toggleReverse: input.pressed('reverse'),
     };
     this.reverseHint = Math.max(0, this.reverseHint - dt);
-    if (
-      drive.toggleReverse &&
-      !this.race.pitAuto &&
-      !p0.reverse &&
-      Math.abs(p0.speed) > CONFIG.REVERSE_TOGGLE_MAX_MPH
-    ) {
+    if (drive.toggleReverse && !this.race.pitAuto && !p0.reverse && Math.abs(p0.speed) > CONFIG.REVERSE_TOGGLE_MAX_MPH) {
       this.reverseHint = 1.5;
     }
     if (this.lights) {
       this.lights.t += dt;
       const lit = Math.min(LIGHTS_COUNT, Math.floor(this.lights.t / LIGHT_INTERVAL_S));
-      if (!this.race.started && lit > this.sound.lit) this.game.audio.lightOn();
-      this.sound.lit = lit;
+      if (!this.race.started && lit > this.lightsShown) this.game.audio.lightOn();
+      this.lightsShown = lit;
       if (!this.race.started && this.lights.t >= this.lights.outAt) {
         this.race.start();
         this.game.audio.lightsOut();
@@ -295,7 +299,7 @@ export class RaceState implements State {
     this.updateCamera(dt);
 
     const used = this.race.pitAuto ? this.race.playerDrive : drive;
-    this.updateSound(dt, used);
+    this.sound.update(dt, this.race, used, this.camXFor(this.race.player.x));
     this.handleEvents(dt);
     const p = this.race.player;
 
@@ -316,94 +320,6 @@ export class RaceState implements State {
     const p = this.race.player;
     const off = Number.isNaN(this.camOff) ? CONFIG.CAMERA_LEAD * Math.cos(trackHeadingAt(p.x, p.y)) : this.camOff;
     return Math.min(Math.max(Math.round(x + off) - VIEW_W / 2, 0), WORLD_W - VIEW_W);
-  }
-
-  private updateSound(dt: number, drive: DriveInput): void {
-    const audio = this.game.audio;
-    const race = this.race;
-    const p = race.player;
-    const snd = this.sound;
-    snd.wallCd = Math.max(0, snd.wallCd - dt);
-    snd.bumpCd = Math.max(0, snd.bumpCd - dt);
-
-    audio.setEngine(p.speed, true, drive.gas && !p.reverse);
-    const braking = drive.brake && Math.abs(p.speed) > 90 && p.spinTime <= 0;
-    audio.setScreech(p.spinTime > 0 ? 1 : p.slideTime > 0 ? 0.7 : braking ? 0.35 : 0);
-    audio.setRefuel(p.refueling);
-
-    let near = 0;
-    for (const c of race.cars) if (c !== p && Math.hypot(c.x - p.x, c.y - p.y) < 260) near++;
-    audio.setPack(near / 6);
-
-    const camX = this.camXFor(p.x);
-    const pxm = CONFIG.PX_PER_MPH;
-    const SOUND_C = 700;
-    const pvx = Math.cos(p.moveAngle) * p.speed * pxm;
-    const pvy = Math.sin(p.moveAngle) * p.speed * pxm;
-    const rivals = race.cars
-      .filter((c) => c !== p)
-      .map((c) => ({ c, dist: Math.hypot(c.x - p.x, c.y - p.y) }))
-      .filter((r) => r.dist < 450)
-      .sort((a, b) => a.dist - b.dist)
-      .slice(0, 3)
-      .map(({ c, dist }) => {
-        const ux = (c.x - p.x) / (dist || 1);
-        const uy = (c.y - p.y) / (dist || 1);
-        const toward = -(Math.cos(c.moveAngle) * c.speed * pxm * ux + Math.sin(c.moveAngle) * c.speed * pxm * uy);
-        const listener = pvx * ux + pvy * uy;
-        const doppler = Math.max(0.75, Math.min(1.3, (SOUND_C + listener) / (SOUND_C - toward)));
-        return {
-          mph: c.speed,
-          pan: (c.x - camX - VIEW_W / 2) / (VIEW_W / 2),
-          vol: 1 - dist / 450,
-          doppler,
-          pitch: 0.88 + (c.colorIdx % 7) * 0.04,
-        };
-      });
-    audio.setRivals(rivals);
-
-    const prevCrashes = snd.crashes.get(p.id) ?? 0;
-    const touching = p.wallImpact > 0 || p.contactStrength > 0;
-    let scrape = 0;
-    if (p.crashes > prevCrashes && touching) {
-      audio.crash(Math.max(p.wallImpact, p.contactStrength, 40));
-      snd.wallCd = snd.bumpCd = 0.4;
-    } else if (p.wallImpact > 0) {
-      if (p.wallImpact >= 12 && snd.wallCd <= 0) {
-        audio.wallHit(p.wallImpact);
-        snd.wallCd = 0.25;
-      } else if (Math.abs(p.speed) > 15) scrape = Math.min(1, 0.3 + Math.abs(p.speed) / 200);
-    } else if (p.contactStrength > 0) {
-      const fresh = p.contactPrev === 0;
-      if ((fresh || p.contactStrength >= 10) && snd.bumpCd <= 0) {
-        audio.carBump(p.contactStrength);
-        snd.bumpCd = 0.2;
-      } else scrape = Math.min(0.6, Math.abs(p.speed) / 300);
-    }
-    snd.scrape = scrape > 0 ? 0.08 : Math.max(0, snd.scrape - dt);
-    audio.setScrape(scrape > 0 ? scrape : snd.scrape > 0 ? 0.3 : 0);
-    snd.crashes.set(p.id, p.crashes);
-
-    for (const c of race.cars) {
-      if (c === p) continue;
-      const prev = snd.crashes.get(c.id) ?? 0;
-      snd.crashes.set(c.id, c.crashes);
-      const sx = c.x - camX;
-      if (sx < -40 || sx > VIEW_W + 40) continue;
-      const pan = (sx - VIEW_W / 2) / (VIEW_W / 2);
-      const vol = 0.45 * Math.max(0.2, 1 - Math.hypot(c.x - p.x, c.y - p.y) / 500);
-      if (c.crashes > prev && (c.wallImpact > 0 || c.contactStrength > 0)) audio.crash(40, pan, vol);
-      else if (c.wallImpact >= 20) audio.wallHit(c.wallImpact, pan, vol * 0.6);
-    }
-
-    const laps = lapsCompleted(p);
-    if (p.finished && !snd.finished) {
-      snd.finished = true;
-      audio.finishFanfare();
-    } else if (laps > snd.laps && !p.finished && laps > 0) audio.lapChime();
-    snd.laps = laps;
-    if (p.fuel < 0.12 && !snd.lowFuel && !p.finished) audio.lowFuel();
-    snd.lowFuel = p.fuel < 0.12;
   }
 
   render(g: CanvasRenderingContext2D, alpha = 1): void {
@@ -437,7 +353,7 @@ export class RaceState implements State {
     g.lineTo(px, py);
     g.closePath();
     g.fill();
-    if (this.game.prefs.speedBar && this.phase !== 'results') this.renderSpeedBar(g, px, py + 8);
+    if (this.game.prefs.speedBar && this.phase !== 'results') drawSpeedBar(g, race.player, race.pitAuto, px, py + 8);
     g.restore();
 
     drawHudTop(g, race, this.notice);
@@ -445,8 +361,9 @@ export class RaceState implements State {
     drawSpeedo(g, race.player.speed, 62, 396, 54);
     drawFuelGauge(g, race.player.fuel, race.time, 62, 456, 34);
     drawSkidLamp(g, this.phase === 'running' && race.started ? skidWarning(race.player) : 0, race.time, W - 6, TOP + 6);
-    this.renderMessages(g);
-    if (this.lights && this.phase !== 'choose' && this.phase !== 'options') this.renderLights(g);
+    const msg = this.message();
+    if (msg) drawRaceMessage(g, msg);
+    if (this.lights && this.phase !== 'choose' && this.phase !== 'options') drawStartLights(g, this.lights);
 
     switch (this.phase) {
       case 'choose':
@@ -461,7 +378,7 @@ export class RaceState implements State {
         break;
       }
       case 'results':
-        this.renderResults(g);
+        drawResults(g, resultRows(race), race.player.finished ? race.classification().indexOf(race.player) + 1 : 0);
         break;
       default:
         break;
@@ -472,7 +389,7 @@ export class RaceState implements State {
       g.drawImage(overlayImg, 0, 0, W, CONFIG.SCREEN_H);
       g.globalAlpha = 1;
     }
-    if (this.game.params.debug) this.renderDebug(g);
+    if (this.game.params.debug) drawDebug(g, this.debugLines());
   }
 
   private optionItems(): SettingRow[] {
@@ -498,10 +415,10 @@ export class RaceState implements State {
     const items = this.chooseItems();
     const live = this.midRace && (race.started || this.lights);
     const p = race.player;
-    let stats;
+    let stats: StatField[];
     if (live) {
       const list = race.standings();
-      const gap = list[0] === p ? null : race.gap(p, list[0]);
+      const gap = list[0] === p ? null : race.gap(p, list[0]!);
       stats = [
         { label: 'LAP', value: `${Math.min(race.laps, lapsCompleted(p) + 1)} / ${race.laps}` },
         { label: 'POSITION', value: `${race.position(p)} / ${race.cars.length}` },
@@ -514,7 +431,7 @@ export class RaceState implements State {
         { label: 'CARS', value: String(o.cars) },
         { label: 'LAPS', value: String(o.laps) },
         { label: 'YOUR CAR', carColor: o.playerColor },
-        { label: 'GRID', value: QUALIFYING_LABELS[o.qualifying].replace(' OF GRID', '').replace(' POSITION', '') },
+        { label: 'GRID', value: QUALIFYING_LABELS[o.qualifying]!.replace(' OF GRID', '').replace(' POSITION', '') },
       ];
     }
     drawRaceMenu(g, {
@@ -525,34 +442,6 @@ export class RaceState implements State {
       sel: this.sel,
       danger: ['QUIT TO MAIN MENU'],
     });
-  }
-
-  private renderLights(g: CanvasRenderingContext2D): void {
-    const L = this.lights!;
-    const out = L.t >= L.outAt;
-    const lit = out ? 0 : Math.min(LIGHTS_COUNT, Math.floor(L.t / LIGHT_INTERVAL_S));
-    const r = 7;
-    const gap = 10;
-    const w = LIGHTS_COUNT * 2 * r + (LIGHTS_COUNT + 1) * gap;
-    const h = 2 * r + 2 * 8;
-    const x0 = Math.round(VIEW_X + VIEW_W / 2 - w / 2);
-    const y0 = TOP + 12;
-    g.fillStyle = PR.night;
-    g.fillRect(x0, y0, w, h);
-    g.strokeStyle = '#2A2740';
-    g.lineWidth = 1;
-    g.strokeRect(x0 + 0.5, y0 + 0.5, w - 1, h - 1);
-    for (let i = 0; i < LIGHTS_COUNT; i++) {
-      const cx = x0 + gap + r + i * (2 * r + gap);
-      const cy = y0 + h / 2;
-      if (i < lit) {
-        g.save();
-        g.shadowColor = PR.red;
-        g.shadowBlur = 12;
-        redBall(g, cx, cy);
-        g.restore();
-      } else offBall(g, cx, cy);
-    }
   }
 
   private handleEvents(dt: number): void {
@@ -584,82 +473,27 @@ export class RaceState implements State {
     }
   }
 
-  private renderSpeedBar(g: CanvasRenderingContext2D, cx: number, bottom: number): void {
+  private message(): string | null {
+    if (this.phase !== 'running' && this.phase !== 'paused') return null;
     const p = this.race.player;
-    if (this.race.pitAuto || p.finished || p.spinTime > 0) return;
-    const over = Math.abs(p.speed) - CONFIG.SPIN_MPH;
-    if (over <= 0.5) return;
-    const W_BAR = 34;
-    const H_BAR = 4;
-    const scale = W_BAR / SPEED_BAR_MAX_OVER;
-    const len = Math.min(W_BAR, over * scale);
-    const slideEnd = CONFIG.SLIDE_SPIN_OVER * scale;
-    const x0 = Math.round(cx - W_BAR / 2);
-    const y0 = Math.round(bottom - H_BAR);
-    g.fillStyle = 'rgba(10,9,20,0.55)';
-    g.fillRect(x0 - 1, y0 - 1, W_BAR + 2, H_BAR + 2);
-    g.fillStyle = '#FF9A2E';
-    g.fillRect(x0, y0, Math.min(len, slideEnd), H_BAR);
-    if (len > slideEnd) {
-      g.fillStyle = PR.red;
-      g.fillRect(x0 + slideEnd, y0, len - slideEnd, H_BAR);
-    }
-    g.fillStyle = 'rgba(255,248,232,0.5)';
-    g.fillRect(x0 + slideEnd, y0 - 1, 1, H_BAR + 2);
+    if (p.finished) return `FINISHED ${ordinal(this.race.classification().indexOf(p) + 1)}!`;
+    if (p.fuel <= 0 && Math.abs(p.speed) < 1) return 'OUT OF FUEL  –  press ESC';
+    if (p.refueling) return 'REFUELING...';
+    if (this.race.pitAuto) return 'PIT LANE  –  AUTO';
+    if (p.fuel < 0.12 && Math.floor(this.race.time * 2) % 2 === 0) return 'LOW FUEL';
+    if (this.penaltyMsg > 0) return `PENALTY +${CONFIG.PENALTY_S} S  –  YOU CAUSED A CRASH`;
+    if (this.reverseHint > 0) return 'STOP TO ENGAGE REVERSE';
+    if (p.reverse) return 'REVERSE';
+    return null;
   }
 
-  private renderMessages(g: CanvasRenderingContext2D): void {
-    if (this.phase !== 'running' && this.phase !== 'paused') return;
+  private debugLines(): string[] {
     const p = this.race.player;
-    const f = `14px ${FONT_BLACK}`;
-    const y = TOP + 44;
-    let msg: string | null = null;
-    if (p.finished) msg = `FINISHED ${ordinal(this.race.classification().indexOf(p) + 1)}!`;
-    else if (p.fuel <= 0 && Math.abs(p.speed) < 1) msg = 'OUT OF FUEL  –  press ESC';
-    else if (p.refueling) msg = 'REFUELING...';
-    else if (this.race.pitAuto) msg = 'PIT LANE  –  AUTO';
-    else if (p.fuel < 0.12 && Math.floor(this.race.time * 2) % 2 === 0) msg = 'LOW FUEL';
-    else if (this.penaltyMsg > 0) msg = `PENALTY +${CONFIG.PENALTY_S} S  –  YOU CAUSED A CRASH`;
-    else if (this.reverseHint > 0) msg = 'STOP TO ENGAGE REVERSE';
-    else if (p.reverse) msg = 'REVERSE';
-    if (!msg) return;
-    g.save();
-    g.shadowColor = PR.amber;
-    g.shadowBlur = 8;
-    text(g, msg, VIEW_X + VIEW_W / 2, y, { font: f, align: 'center', color: PR.amber, shadow: null });
-    g.restore();
-  }
-
-  private renderResults(g: CanvasRenderingContext2D): void {
-    const race = this.race;
-    const list = race.classification();
-    const winner = list[0];
-    const tWin = race.resultTime(winner);
-    const rows: ResultRow[] = list.map((car, i) => {
-      let time: string;
-      const t = race.resultTime(car);
-      const lapsDown = lapsCompleted(winner) - lapsCompleted(car);
-      if (i === 0 && t !== null) {
-        const m = Math.floor(t / 60);
-        time = `${m}:${(t - m * 60).toFixed(2).padStart(5, '0')}`;
-      } else if (t !== null && tWin !== null && lapsDown === 0) time = `+${(t - tWin).toFixed(2)}`;
-      else if (lapsDown > 0) time = `+${lapsDown} LAP${lapsDown > 1 ? 'S' : ''}`;
-      else time = 'RUNNING';
-      return { colorIdx: car.colorIdx, isPlayer: car.isPlayer, time, penalty: car.penalty };
-    });
-    drawResults(g, rows, race.player.finished ? list.indexOf(race.player) + 1 : 0);
-  }
-
-  private renderDebug(g: CanvasRenderingContext2D): void {
-    const p = this.race.player;
-    const lines = [
+    return [
       `fps ${this.fps.toFixed(0)}  time x${this.game.timeScale} (])`,
       `x ${p.x.toFixed(0)} y ${p.y.toFixed(0)}  s ${p.s.toFixed(0)} d ${p.d.toFixed(1)}`,
       `mph ${p.speed.toFixed(1)}  fuel ${(p.fuel * 100).toFixed(1)}%  spin ${p.spinTime.toFixed(2)}`,
       `sector ${p.lastSector} passed ${p.sectorsPassed}  t ${this.race.time.toFixed(1)}`,
     ];
-    g.fillStyle = 'rgba(0,0,0,0.6)';
-    g.fillRect(4, 4, 300, lines.length * 12 + 6);
-    lines.forEach((l, i) => text(g, l, 8, 16 + i * 12, { font: `10px monospace`, shadow: null, color: '#8f8' }));
   }
 }

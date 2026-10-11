@@ -1,37 +1,37 @@
 import { CONFIG } from '../config';
 import {
+  BOX_PITCH,
+  boxX,
   CX_L,
   CY,
   deltaS,
   HALF_W,
+  inPitBox,
   inPitLane,
   inTurn,
+  islandHullR,
   LANES,
+  NUM_BOXES,
   PIT_BOX_Y,
   PIT_DRIVE_Y,
-  BOX_PITCH,
-  boxX,
-  inPitBox,
-  NUM_BOXES,
-  TURN_LEN,
+  PIT_ROAD_Y,
   PIT_X0,
   PIT_X1,
   pointAt,
-  islandHullR,
-  PIT_ROAD_Y,
   RC,
-  WALL_X0,
-  WALL_X1,
   S_BOTTOM,
   S_TURN1,
   S_TURN2,
+  TURN_LEN,
   trackHeadingAt,
+  WALL_X0,
+  WALL_X1,
   wrapAngle,
   wrapS,
 } from '../track/track';
-import { Car, lapsCompleted } from './car';
-import { OilSlick, oilRadius } from './oil';
-import { DriveInput } from './physics';
+import { type Car, lapsCompleted } from './car';
+import { type OilSlick, oilRadius } from './oil';
+import type { DriveInput } from './physics';
 
 export interface AiView {
   cars: Car[];
@@ -147,10 +147,10 @@ export function aiInput(car: Car, view: AiView, dt: number): DriveInput {
           target = 0;
         }
       } else {
-        laneD = mergeClear(car, LANES[0], view.cars) ? LANES[0] : EXIT_D;
-        if (Math.abs(car.d - LANES[0]) < 5 || car.y < CY) {
+        laneD = mergeClear(car, LANES[0]!, view.cars) ? LANES[0]! : EXIT_D;
+        if (Math.abs(car.d - LANES[0]!) < 5 || car.y < CY) {
           ai.pitPhase = 'none';
-          ai.lane = LANES[0];
+          ai.lane = LANES[0]!;
         }
       }
       break;
@@ -228,7 +228,7 @@ export function aiInput(car: Car, view: AiView, dt: number): DriveInput {
         } else {
           const nearest = Math.min(...hazards.map((h) => deltaS(car.s, h.s)));
           if (ai.hazardTime > ai.reaction + 3 && !oilLane) {
-            ai.lane = laneD = [...LANES].sort((p, q) => clearance(q, all) - clearance(p, all))[0];
+            ai.lane = laneD = [...LANES].sort((p, q) => clearance(q, all) - clearance(p, all))[0]!;
             target = Math.min(target, 12);
           } else {
             target = Math.min(target, Math.sqrt((2 * CONFIG.BRAKE_MPH_S * 0.7 * Math.max(0, nearest - 45)) / pxm));
@@ -257,10 +257,7 @@ export function aiInput(car: Car, view: AiView, dt: number): DriveInput {
     if (ahead && ahead.speed < target) {
       let changed = false;
       const blockedHard = ahead.speed < 60 && car.speed - ahead.speed > 15;
-      const canChange =
-        ai.laneCooldown <= 0 &&
-        ai.pitPhase === 'none' &&
-        (blockedHard || (!turnNow && car.speed > 50 && distToTurn > 160));
+      const canChange = ai.laneCooldown <= 0 && ai.pitPhase === 'none' && (blockedHard || (!turnNow && car.speed > 50 && distToTurn > 160));
       if (canChange) {
         const options = LANES.filter((l) => l !== laneD && Math.abs(l - laneD) < 25).sort(
           (p, q) => Math.abs(p - car.d) - Math.abs(q - car.d),
@@ -343,13 +340,7 @@ export function aiInput(car: Car, view: AiView, dt: number): DriveInput {
   }
   const herr = wrapAngle(trackHeadingAt(car.x, car.y) - car.heading);
   const misaligned = Math.abs(herr) > (car.contactPrev > 0 ? 0.35 : 0.7);
-  if (
-    view.started &&
-    !servicing &&
-    car.spinTime <= 0 &&
-    Math.abs(car.speed) < 4 &&
-    !car.finished
-  ) {
+  if (view.started && !servicing && car.spinTime <= 0 && Math.abs(car.speed) < 4 && !car.finished) {
     ai.stuckTime += dt;
     const blocked = noseBlocked(car, view.cars);
     if (ai.stuckTime > 0.8 && (misaligned || blocked)) {
@@ -392,8 +383,7 @@ const PIT_DIVE_AT = 0.6;
 
 function freeBox(car: Car, cars: Car[]): number {
   const own = Math.round((car.ai.boxX - PIT_X0 - BOX_PITCH / 2) / BOX_PITCH);
-  const occupied = (bx: number) =>
-    cars.some((o) => o !== car && inPitBox(o.x, o.y) && Math.abs(o.x - bx) < BOX_PITCH * 0.5 + 8);
+  const occupied = (bx: number) => cars.some((o) => o !== car && inPitBox(o.x, o.y) && Math.abs(o.x - bx) < BOX_PITCH * 0.5 + 8);
   for (let i = own; i < NUM_BOXES; i++) {
     const bx = boxX(i);
     if (bx - car.x > -8 && !occupied(bx)) return bx;
@@ -448,7 +438,7 @@ function bestLane(car: Car, cars: Car[]): number {
     return ds > -10 && ds < 70;
   });
   if (near.length === 0) return car.ai.lane;
-  return [...LANES].sort((p, q) => clearance(q, near) - clearance(p, near))[0];
+  return [...LANES].sort((p, q) => clearance(q, near) - clearance(p, near))[0]!;
 }
 
 function clearance(lane: number, hazards: Car[]): number {

@@ -13,7 +13,7 @@
 ![Zero assets](https://img.shields.io/badge/asset%20files-0-12B5A6)
 ![Tests](https://img.shields.io/badge/tests-Vitest-6E9F18?logo=vitest&logoColor=white)
 
-<img src="media/title.png" alt="Petrol Rush title screen – a live demo race runs behind an F1-style menu" width="720">
+<img src="docs/screenshots/title.png" alt="Petrol Rush title screen – a live demo race runs behind an F1-style menu" width="720">
 
 </div>
 
@@ -42,8 +42,8 @@ are no image, audio or font files in the project.
 
 <table>
   <tr>
-    <td><img src="media/race.png" alt="Race HUD: timing tower, semicircular speedometer and fuel gauge, night track"></td>
-    <td><img src="media/crash.png" alt="Crash ahead: yellow caution banner, oil slicks and a penalty in the timing tower"></td>
+    <td><img src="docs/screenshots/race.png" alt="Race HUD: timing tower, semicircular speedometer and fuel gauge, night track"></td>
+    <td><img src="docs/screenshots/crash.png" alt="Crash ahead: yellow caution banner, oil slicks and a penalty in the timing tower"></td>
   </tr>
   <tr>
     <td align="center"><sub>Packed night oval – live tower, fuel on the edge, one bad corner from disaster</sub></td>
@@ -53,7 +53,8 @@ are no image, audio or font files in the project.
 
 ## 🚀 Quick start
 
-Requires [Node.js](https://nodejs.org/) 22.12+, 24, or 26+ (CI uses Node 26).
+Requires [Node.js](https://nodejs.org/) 22.12+, 24, or 26+. The version used by CI is pinned in `.nvmrc`
+(`nvm use` picks it up).
 
 ```bash
 npm install
@@ -69,6 +70,8 @@ Open the address printed by Vite (by default http://localhost:5173).
 | `npm run preview` | Serve the production build locally |
 | `npm test` | Run the test suite (Vitest) |
 | `npm run typecheck` | TypeScript check only |
+| `npm run lint` | Lint and check formatting (Biome) |
+| `npm run lint:fix` | Apply safe lint fixes and format the code |
 
 The production build is a static site – `dist/` can be hosted on any static hosting.
 
@@ -145,14 +148,19 @@ Handy for testing and tuning:
 src/
   main.ts          game loop (fixed 60 Hz step), scaling
   config.ts        tuning constants and race options
+  meta.ts          author and repository links
   input.ts         keyboard, rebindable keys
   prefs.ts         SETTINGS → GAME options
-  states/          title (with demo race), controls, settings, credits, race
-  track/           oval geometry, walls, pit road, night track pre-render
+  states/          title (with demo race), controls, settings, credits
+    race/          race screen: flow, sound, race-only drawing
+  track/           oval geometry, walls, pit road
   race/            cars, physics & collisions, AI, oil, pit stops, race logic & classification
-  ui/              HUD, menus, race overlays, text, palette
+  ui/              HUD, race overlays, text, palette
+    menus/         title, controls, settings and credits screens
   gfx/             3D-to-sprite renderer, liveries, particles, world drawing
+    track/         night track pre-render: tarmac, pit road, paddock, infield
   audio/           Web Audio effects and four engine voices
+docs/screenshots/  images used in this README
 tests/             Vitest: track geometry, lap counting, physics, collisions, penalties,
                    oil, pit autopilot and full headless 20-car races
 ```

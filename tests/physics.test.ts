@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { CONFIG, DEFAULT_OPTIONS } from '../src/config';
-import { Car } from '../src/race/car';
-import { collideCars, cornerAssist, skidWarning, SteerRamp, stepCar } from '../src/race/physics';
+import type { Car } from '../src/race/car';
+import { collideCars, cornerAssist, SteerRamp, skidWarning, stepCar } from '../src/race/physics';
 import { Race } from '../src/race/race';
 import { pointAt, project, S_BOTTOM, S_TURN1, trackHeadingAt, wrapAngle } from '../src/track/track';
 
@@ -143,7 +143,7 @@ describe('driving model', () => {
 describe('crashes', () => {
   function pair(rearMph: number, frontMph: number): [Car, Car] {
     const race = new Race({ ...DEFAULT_OPTIONS, cars: 2 }, 5);
-    const [a, b] = race.cars;
+    const [a, b] = race.cars as [Car, Car];
     const pa = pointAt(200, 0);
     const pb = pointAt(233, 0);
     Object.assign(a, { x: pa.x, y: pa.y, heading: 0, moveAngle: 0, speed: rearMph, s: 200, d: 0 });
@@ -218,7 +218,7 @@ describe('crashes', () => {
   it('penalty: car ahead changes lane in front of the car behind – the car behind is at fault (both modes)', () => {
     for (const mode of ['realistic', 'classic'] as const) {
       const race = new Race({ ...DEFAULT_OPTIONS, cars: 2 }, 5);
-      const [rear, front] = race.cars;
+      const [rear, front] = race.cars as [Car, Car];
       const pr = pointAt(300, 0);
       const pf = pointAt(300 + 30, -16);
       Object.assign(rear, { x: pr.x, y: pr.y, heading: 0, moveAngle: 0, speed: 160, s: 300, d: 0 });
@@ -245,7 +245,7 @@ describe('crashes', () => {
 
   it('realistic mode: side-by-side rubbing does not cause a spin', () => {
     const race = new Race({ ...DEFAULT_OPTIONS, cars: 2 }, 5);
-    const [a, b] = race.cars;
+    const [a, b] = race.cars as [Car, Car];
     const pa = pointAt(300, -8);
     const pb = pointAt(300, 6);
     Object.assign(a, { x: pa.x, y: pa.y, heading: 0.12, moveAngle: 0.12, speed: 170, s: 300, d: -8 });

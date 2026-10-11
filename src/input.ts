@@ -1,16 +1,6 @@
 export type BindableAction = 'left' | 'right' | 'gas' | 'brake' | 'reverse' | 'pause' | 'menu' | 'help' | 'mute';
 
-export type Action =
-  | BindableAction
-  | 'up'
-  | 'down'
-  | 'navLeft'
-  | 'navRight'
-  | 'enter'
-  | 'back'
-  | 'clear'
-  | 'fit'
-  | 'debugSpeed';
+export type Action = BindableAction | 'up' | 'down' | 'navLeft' | 'navRight' | 'enter' | 'back' | 'clear' | 'fit' | 'debugSpeed';
 
 export type Bindings = Record<BindableAction, [string | null, string | null]>;
 
@@ -113,16 +103,14 @@ export function loadBindings(): Bindings {
       const ok = (k: unknown): k is string | null => k === null || (typeof k === 'string' && !RESERVED_CODES.has(k));
       if (ok(v[0]) && ok(v[1])) b[action] = [v[0], v[1]];
     }
-  } catch {
-  }
+  } catch {}
   return b;
 }
 
 export function saveBindings(b: Bindings): void {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(b));
-  } catch {
-  }
+  } catch {}
 }
 
 export class Input {

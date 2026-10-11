@@ -47,7 +47,17 @@ function spaced(g: CanvasRenderingContext2D, s: string, x: number, y: number, fo
   return cx - x - sp;
 }
 
-function skew(g: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, deg: number, fill: string, stroke?: string, glow?: string): void {
+function skew(
+  g: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  deg: number,
+  fill: string,
+  stroke?: string,
+  glow?: string,
+): void {
   g.save();
   g.translate(x + w / 2, y + h / 2);
   g.transform(1, 0, Math.tan(-deg * DEG), 1, 0, 0);
@@ -189,7 +199,17 @@ export function drawRaceMenu(g: CanvasRenderingContext2D, v: RaceMenuView): void
     menuButton(g, it, y, i === v.sel, v.danger.includes(it));
     y += 38;
   });
-  hints(g, [['↑↓', 'SELECT'], ['ENTER', 'OK'], ['ESC', 'BACK']], PAD, TOP + PLAY_H - 18, PANEL_W - PAD * 2);
+  hints(
+    g,
+    [
+      ['↑↓', 'SELECT'],
+      ['ENTER', 'OK'],
+      ['ESC', 'BACK'],
+    ],
+    PAD,
+    TOP + PLAY_H - 18,
+    PANEL_W - PAD * 2,
+  );
 }
 
 export interface SettingRow {
@@ -235,7 +255,17 @@ export function drawRaceSettings(g: CanvasRenderingContext2D, rows: SettingRow[]
     y += h + 6;
   });
   if (note) txt(g, note, PAD, y + 6, `bold 9px ${FONT_UI}`, PR.amber);
-  hints(g, [['↑↓', 'SELECT'], ['←→', 'CHANGE'], ['ESC', 'BACK']], PAD, TOP + PLAY_H - 18, PANEL_W - PAD * 2);
+  hints(
+    g,
+    [
+      ['↑↓', 'SELECT'],
+      ['←→', 'CHANGE'],
+      ['ESC', 'BACK'],
+    ],
+    PAD,
+    TOP + PLAY_H - 18,
+    PANEL_W - PAD * 2,
+  );
 }
 
 export function drawPause(g: CanvasRenderingContext2D, keys: { pause: string; help: string }): void {

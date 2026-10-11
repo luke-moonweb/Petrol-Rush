@@ -1,7 +1,7 @@
-import { GameAudio } from '../audio/audio';
-import { DEFAULT_OPTIONS, LAP_CHOICES, QUALIFYING_CHOICES, RaceOptions } from '../config';
-import { Input } from '../input';
-import { loadPrefs, Prefs } from '../prefs';
+import type { GameAudio } from '../audio/audio';
+import { DEFAULT_OPTIONS, LAP_CHOICES, QUALIFYING_CHOICES, type RaceOptions } from '../config';
+import type { Input } from '../input';
+import { loadPrefs, type Prefs } from '../prefs';
 
 export interface State {
   update(dt: number): void;
@@ -51,12 +51,11 @@ export function loadOptions(params: Params): RaceOptions {
         qualifying: QUALIFYING_CHOICES.includes(o.qualifying as never) ? o.qualifying! : opts.qualifying,
       };
     }
-  } catch {
-  }
+  } catch {}
   if (params.cars !== null) opts.cars = params.cars;
   if (params.laps !== null) opts.laps = params.laps;
   opts.cars = Math.max(1, Math.min(20, Math.round(opts.cars)));
-  opts.laps = Math.max(1, Math.min(LAP_CHOICES[LAP_CHOICES.length - 1], Math.round(opts.laps)));
+  opts.laps = Math.max(1, Math.min(LAP_CHOICES[LAP_CHOICES.length - 1]!, Math.round(opts.laps)));
   opts.playerColor = Math.max(0, Math.min(19, Math.round(opts.playerColor)));
   return opts;
 }
@@ -64,8 +63,7 @@ export function loadOptions(params: Params): RaceOptions {
 export function saveOptions(opts: RaceOptions): void {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(opts));
-  } catch {
-  }
+  } catch {}
 }
 
 export class Game {
@@ -78,9 +76,14 @@ export class Game {
     readonly input: Input,
     readonly audio: GameAudio,
     readonly params: Params,
+    private readonly titleScreen: (game: Game) => State,
   ) {}
 
   set(state: State): void {
     this.state = state;
+  }
+
+  toTitle(): void {
+    this.set(this.titleScreen(this));
   }
 }

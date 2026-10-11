@@ -60,7 +60,10 @@ function islandArc(pts: [number, number][], right: boolean, from: number, to: nu
 
 export function islandOutline(dy: number): [number, number][] {
   const roadY = CY + ISLE_ROAD_R + dy;
-  const pts: [number, number][] = [[CX_L, CY - ISLE_R + dy], [CX_R, CY - ISLE_R + dy]];
+  const pts: [number, number][] = [
+    [CX_L, CY - ISLE_R + dy],
+    [CX_R, CY - ISLE_R + dy],
+  ];
   islandArc(pts, true, -90, 90, () => dy);
   pts.push([PIT_X1 + 8, roadY], [PIT_X1 - 10, PIT_LABEL_TOP + dy], [PIT_X0 + 10, PIT_LABEL_TOP + dy], [PIT_X0 - 8, roadY]);
   islandArc(pts, false, 90, -90, () => dy);
@@ -69,7 +72,10 @@ export function islandOutline(dy: number): [number, number][] {
 
 function islandHull(): [number, number][] {
   const roadY = CY + ISLE_ROAD_R + CURB_H;
-  const pts: [number, number][] = [[CX_L, CY - ISLE_R], [CX_R, CY - ISLE_R]];
+  const pts: [number, number][] = [
+    [CX_L, CY - ISLE_R],
+    [CX_R, CY - ISLE_R],
+  ];
   islandArc(pts, true, -90, 0, () => 0);
   islandArc(pts, true, 0, 90, () => CURB_H);
   pts.push([PIT_X1 + 8, roadY], [PIT_X1 - 10, PIT_LABEL_TOP + CURB_H], [PIT_X0 + 10, PIT_LABEL_TOP + CURB_H], [PIT_X0 - 8, roadY]);
@@ -88,20 +94,20 @@ export function islandHullR(phi: number): number {
     const h = hull;
     for (let i = 0, j = h.length - 1; i < h.length; j = i++) {
       for (let k = 0; k <= 8; k++) {
-        const x = h[j][0] + ((h[i][0] - h[j][0]) * k) / 8;
-        const y = h[j][1] + ((h[i][1] - h[j][1]) * k) / 8;
+        const x = h[j]![0] + ((h[i]![0] - h[j]![0]) * k) / 8;
+        const y = h[j]![1] + ((h[i]![1] - h[j]![1]) * k) / 8;
         if (x > CX_L) continue;
         const a = Math.round((Math.atan2(y - CY, CX_L - x) * 180) / Math.PI);
         if (a < -90 || a > 90) continue;
-        t[a + 90] = Math.max(t[a + 90], Math.hypot(x - CX_L, y - CY));
+        t[a + 90] = Math.max(t[a + 90]!, Math.hypot(x - CX_L, y - CY));
       }
     }
-    for (let a = 1; a <= 180; a++) if (t[a] === 0) t[a] = t[a - 1];
+    for (let a = 1; a <= 180; a++) if (t[a] === 0) t[a] = t[a - 1]!;
     hullRadius = t;
   }
   const a = Math.max(-90, Math.min(90, Math.round(phi)));
   let r = 0;
-  for (let d = -6; d <= 6; d++) r = Math.max(r, hullRadius[Math.max(0, Math.min(180, a + 90 + d))]);
+  for (let d = -6; d <= 6; d++) r = Math.max(r, hullRadius[Math.max(0, Math.min(180, a + 90 + d))]!);
   return r;
 }
 
@@ -116,8 +122,8 @@ function collideIsland(p: { x: number; y: number }, r: number): WallNormal | nul
   let qx = 0;
   let qy = 0;
   for (let i = 0, j = h.length - 1; i < h.length; j = i++) {
-    const [ax, ay] = h[j];
-    const [bx, by] = h[i];
+    const [ax, ay] = h[j]!;
+    const [bx, by] = h[i]!;
     if (ay > p.y !== by > p.y && p.x < ((bx - ax) * (p.y - ay)) / (by - ay) + ax) inside = !inside;
     const ex = bx - ax;
     const ey = by - ay;

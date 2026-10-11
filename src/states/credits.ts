@@ -1,6 +1,6 @@
-import { AUTHOR_NAME, AUTHOR_URL, REPO_URL } from '../config';
-import { CREDITS_ITEMS, drawCredits } from '../ui/menus';
-import { Game, State } from './game';
+import { AUTHOR_NAME, AUTHOR_URL, REPO_URL } from '../meta';
+import { CREDITS_ITEMS, drawCredits } from '../ui/menus/credits';
+import type { Game, State } from './game';
 
 const LINKS = [AUTHOR_URL, REPO_URL];
 

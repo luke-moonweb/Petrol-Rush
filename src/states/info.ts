@@ -1,5 +1,5 @@
-import { drawHelp } from '../ui/menus';
-import { Game, State } from './game';
+import { drawHelp } from '../ui/menus/help';
+import type { Game, State } from './game';
 
 export class HelpState implements State {
   constructor(

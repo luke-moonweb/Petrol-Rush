@@ -1,10 +1,10 @@
-import { CONFIG, DEFAULT_RULES, RaceOptions, RaceRules } from '../config';
-import { createRng, lerp, Rng } from '../sim/rng';
+import { CONFIG, DEFAULT_RULES, type RaceOptions, type RaceRules } from '../config';
+import { createRng, lerp, type Rng } from '../sim/rng';
 import { inPitLane, NUM_SECTORS, PIT_LINE_IN_X, PIT_LINE_OUT_X, pointAt, project, SECTOR_LEN, TRACK_LEN } from '../track/track';
 import { aiInput } from './ai';
-import { Car, initProgress, lapsCompleted, progress, updateProgress } from './car';
-import { OilSlick, oilRadius } from './oil';
-import { collideCars, DriveInput, NO_INPUT, startSpin, stepCar } from './physics';
+import { type Car, initProgress, lapsCompleted, progress, updateProgress } from './car';
+import { type OilSlick, oilRadius } from './oil';
+import { collideCars, type DriveInput, NO_INPUT, startSpin, stepCar } from './physics';
 import { boxX, updatePit } from './pit';
 
 export const NUM_COLORS = 20;
@@ -50,10 +50,10 @@ export class Race {
     let aiIdx = 0;
     for (let slot = 0; slot < n; slot++) {
       const isPlayer = slot === playerSlot;
-      const colorIdx = isPlayer ? opts.playerColor : otherColors[aiIdx++];
+      const colorIdx = isPlayer ? opts.playerColor : otherColors[aiIdx++]!;
       this.cars.push(this.makeCar(slot, colorIdx, isPlayer));
     }
-    this.player = this.cars[playerSlot];
+    this.player = this.cars[playerSlot]!;
   }
 
   private playerSlot(n: number): number {
@@ -70,7 +70,7 @@ export class Race {
   }
 
   private makeCar(slot: number, colorIdx: number, isPlayer: boolean): Car {
-    const d = CONFIG.GRID_LANES[slot % 2];
+    const d = CONFIG.GRID_LANES[slot % 2]!;
     const s = gridS(slot);
     const p = pointAt(s, d);
     const car: Car = {
@@ -225,7 +225,7 @@ export class Race {
 
   private updateOil(dt: number): void {
     for (const o of this.oil) o.age += dt;
-    while (this.oil.length > 0 && this.oil[0].age >= CONFIG.OIL_LIFE_S) this.oil.shift();
+    while (this.oil.length > 0 && this.oil[0]!.age >= CONFIG.OIL_LIFE_S) this.oil.shift();
     for (const car of this.cars) {
       if (car.spinTime > 0 || car.oilImmune > 0 || Math.abs(car.speed) < CONFIG.OIL_MIN_MPH) continue;
       for (const o of this.oil) {
@@ -299,7 +299,7 @@ export class Race {
   }
 
   timeBehindLeader(car: Car): number {
-    const leader = this.standings()[0];
+    const leader = this.standings()[0]!;
     if (car === leader) return 0;
     const k = car.finished ? car.finalSectors : car.sectorsPassed;
     const t1 = this.sectorTimes.get(car.id)?.get(k);
@@ -315,7 +315,7 @@ export class Race {
   }
 
   lapsBehind(car: Car): number {
-    const leader = this.standings()[0];
+    const leader = this.standings()[0]!;
     if (this.leaderFinished) return Math.max(0, lapsCompleted(leader) - lapsCompleted(car));
     return Math.max(0, Math.floor((progress(leader) - progress(car)) / TRACK_LEN));
   }

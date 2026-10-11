@@ -1,5 +1,5 @@
 import { CONFIG } from '../config';
-import { Face, quad, renderModel, Vec3, wheel } from './model3d';
+import { type Face, quad, renderModel, type Vec3, wheel } from './model3d';
 import { makeCanvas } from './sprites';
 
 export interface CarScheme {
@@ -55,7 +55,7 @@ export const DRIVERS: { first: string; last: string }[] = [
 ];
 
 export function driverName(colorIdx: number): string {
-  return DRIVERS[colorIdx % DRIVERS.length].last.toUpperCase();
+  return DRIVERS[colorIdx % DRIVERS.length]!.last.toUpperCase();
 }
 
 export const CAR_DIRECTIONS = 32;
@@ -114,11 +114,51 @@ function carModel(sc: CarScheme, livery: Livery): Face[] {
     }
     if (livery === 'flames') {
       decals.push(
-        sideDecal([[1.98, 0.28], [1.98, 0.64], [1.62, 0.56], [1.4, 0.72], [1.15, 0.52], [0.9, 0.64], [0.62, 0.42], [0.35, 0.3]], yy, sgn, FLAME_OUT),
-        sideDecal([[1.96, 0.32], [1.96, 0.54], [1.66, 0.48], [1.45, 0.6], [1.22, 0.45], [0.95, 0.5], [0.7, 0.34]], yy + sgn * 0.002, sgn, FLAME_IN),
+        sideDecal(
+          [
+            [1.98, 0.28],
+            [1.98, 0.64],
+            [1.62, 0.56],
+            [1.4, 0.72],
+            [1.15, 0.52],
+            [0.9, 0.64],
+            [0.62, 0.42],
+            [0.35, 0.3],
+          ],
+          yy,
+          sgn,
+          FLAME_OUT,
+        ),
+        sideDecal(
+          [
+            [1.96, 0.32],
+            [1.96, 0.54],
+            [1.66, 0.48],
+            [1.45, 0.6],
+            [1.22, 0.45],
+            [0.95, 0.5],
+            [0.7, 0.34],
+          ],
+          yy + sgn * 0.002,
+          sgn,
+          FLAME_IN,
+        ),
       );
     }
-    if (livery === 'band') decals.push(sideDecal([[-1.92, 0.4], [1.96, 0.4], [1.96, 0.64], [-1.92, 0.64]], yy, sgn, sc.roof));
+    if (livery === 'band')
+      decals.push(
+        sideDecal(
+          [
+            [-1.92, 0.4],
+            [1.96, 0.4],
+            [1.96, 0.64],
+            [-1.92, 0.64],
+          ],
+          yy,
+          sgn,
+          sc.roof,
+        ),
+      );
     decals.push(wheel(-1.3, yy, 0.3, 0.3, sgn), wheel(1.3, yy, 0.3, 0.3, sgn));
     return { pts, color: body, normal: n, outline: true, decals };
   };
@@ -136,7 +176,12 @@ function carModel(sc: CarScheme, livery: Livery): Face[] {
   const roofDecals: Face[] = [];
   if (livery === 'stripes') {
     for (const y0 of [-0.3, 0.14]) {
-      const band = (x0: number, x1: number): [number, number][] => [[x0, y0], [x1, y0], [x1, y0 + 0.16], [x0, y0 + 0.16]];
+      const band = (x0: number, x1: number): [number, number][] => [
+        [x0, y0],
+        [x1, y0],
+        [x1, y0 + 0.16],
+        [x0, y0 + 0.16],
+      ];
       hoodDecals.push(topDecal(band(0.58, 1.68), hoodZ, sc.roof, [0.03, 0, 1]));
       trunkDecals.push(topDecal(band(-1.92, -1.02), trunkZ, sc.roof, [-0.02, 0, 1]));
       roofDecals.push(topDecal(band(-0.6, 0.0), () => 1.32, body, [0, 0, 1]));
@@ -144,12 +189,41 @@ function carModel(sc: CarScheme, livery: Livery): Face[] {
   }
   if (livery === 'arrow') {
     hoodDecals.push(
-      topDecal([[1.6, 0], [0.95, -0.55], [0.7, -0.55], [1.25, 0], [0.7, 0.55], [0.95, 0.55]], hoodZ, sc.roof, [0.03, 0, 1]),
+      topDecal(
+        [
+          [1.6, 0],
+          [0.95, -0.55],
+          [0.7, -0.55],
+          [1.25, 0],
+          [0.7, 0.55],
+          [0.95, 0.55],
+        ],
+        hoodZ,
+        sc.roof,
+        [0.03, 0, 1],
+      ),
     );
   }
   if (livery === 'flames') {
     hoodDecals.push(
-      topDecal([[1.68, -0.4], [1.68, 0.4], [1.3, 0.3], [1.15, 0.5], [0.95, 0.2], [0.75, 0.32], [0.62, 0], [0.75, -0.32], [0.95, -0.2], [1.15, -0.5], [1.3, -0.3]], hoodZ, FLAME_OUT, [0.03, 0, 1]),
+      topDecal(
+        [
+          [1.68, -0.4],
+          [1.68, 0.4],
+          [1.3, 0.3],
+          [1.15, 0.5],
+          [0.95, 0.2],
+          [0.75, 0.32],
+          [0.62, 0],
+          [0.75, -0.32],
+          [0.95, -0.2],
+          [1.15, -0.5],
+          [1.3, -0.3],
+        ],
+        hoodZ,
+        FLAME_OUT,
+        [0.03, 0, 1],
+      ),
     );
   }
   const rf: Vec3[] = [
@@ -168,14 +242,20 @@ function carModel(sc: CarScheme, livery: Livery): Face[] {
     }),
     quad([-2, h, zb], [-2, -h, zb], [-2, -h, zt + 0.04], [-2, h, zt + 0.04], body, [-1, 0, 0], { outline: true }),
     quad([1.7, -h, zt - 0.04], [2, -h, zt - 0.14], [2, h, zt - 0.14], [1.7, h, zt - 0.04], body, [0.3, 0, 0.95], { outline: true }),
-    quad([0.55, -h, zt], [1.7, -h, zt - 0.04], [1.7, h, zt - 0.04], [0.55, h, zt], body, [0.03, 0, 1], { outline: true, decals: hoodDecals }),
-    quad([-1.95, -h, zt + 0.04], [-1.0, -h, zt + 0.02], [-1.0, h, zt + 0.02], [-1.95, h, zt + 0.04], body, [-0.02, 0, 1], { outline: true, decals: trunkDecals }),
+    quad([0.55, -h, zt], [1.7, -h, zt - 0.04], [1.7, h, zt - 0.04], [0.55, h, zt], body, [0.03, 0, 1], {
+      outline: true,
+      decals: hoodDecals,
+    }),
+    quad([-1.95, -h, zt + 0.04], [-1.0, -h, zt + 0.02], [-1.0, h, zt + 0.02], [-1.95, h, zt + 0.04], body, [-0.02, 0, 1], {
+      outline: true,
+      decals: trunkDecals,
+    }),
     quad([-1.0, -h, zt + 0.02], [0.55, -h, zt], [0.55, h, zt], [-1.0, h, zt + 0.02], body, [0, 0, 1]),
     quad([-2, -h, zt + 0.04], [-2, h, zt + 0.04], [-1.88, h, zt + 0.2], [-1.88, -h, zt + 0.2], sc.roof, [-0.8, 0, 0.6], { outline: true }),
-    quad(cb[1], cb[2], rf[2], rf[1], GLASS, [0.6, 0, 0.8], { outline: true }),
-    quad(cb[3], cb[0], rf[0], rf[3], GLASS, [-0.7, 0, 0.7], { outline: true }),
-    quad(cb[3], rf[3], rf[2], cb[2], GLASS, [0, 0.93, 0.36], { outline: true }),
-    quad(cb[0], cb[1], rf[1], rf[0], GLASS, [0, -0.93, 0.36], { outline: true }),
+    quad(cb[1]!, cb[2]!, rf[2]!, rf[1]!, GLASS, [0.6, 0, 0.8], { outline: true }),
+    quad(cb[3]!, cb[0]!, rf[0]!, rf[3]!, GLASS, [-0.7, 0, 0.7], { outline: true }),
+    quad(cb[3]!, rf[3]!, rf[2]!, cb[2]!, GLASS, [0, 0.93, 0.36], { outline: true }),
+    quad(cb[0]!, cb[1]!, rf[1]!, rf[0]!, GLASS, [0, -0.93, 0.36], { outline: true }),
     { pts: rf, color: sc.roof, normal: [0, 0, 1], outline: true, decals: roofDecals },
   ];
 }
@@ -184,7 +264,7 @@ const carCache = new Map<string, HTMLCanvasElement>();
 
 export function carDirIndex(heading: number): number {
   const t = heading / (Math.PI * 2);
-  return (((Math.round(t * CAR_DIRECTIONS) % CAR_DIRECTIONS) + CAR_DIRECTIONS) % CAR_DIRECTIONS);
+  return ((Math.round(t * CAR_DIRECTIONS) % CAR_DIRECTIONS) + CAR_DIRECTIONS) % CAR_DIRECTIONS;
 }
 
 export function carSprite3d(colorIdx: number, dir: number): HTMLCanvasElement {
@@ -193,8 +273,15 @@ export function carSprite3d(colorIdx: number, dir: number): HTMLCanvasElement {
   if (cached) return cached;
   const c = makeCanvas(SPRITE, SPRITE);
   const g = c.getContext('2d')!;
-  const sc = CAR_SCHEMES[colorIdx % CAR_SCHEMES.length];
-  renderModel(g, carModel(sc, LIVERIES[colorIdx % LIVERIES.length]), (dir / CAR_DIRECTIONS) * Math.PI * 2, CAR_SCALE, CAR_ANCHOR_X, CAR_ANCHOR_Y);
+  const sc = CAR_SCHEMES[colorIdx % CAR_SCHEMES.length]!;
+  renderModel(
+    g,
+    carModel(sc, LIVERIES[colorIdx % LIVERIES.length]!),
+    (dir / CAR_DIRECTIONS) * Math.PI * 2,
+    CAR_SCALE,
+    CAR_ANCHOR_X,
+    CAR_ANCHOR_Y,
+  );
   carCache.set(key, c);
   return c;
 }
@@ -236,11 +323,11 @@ function haulerModel(trailer: string): Face[] {
   const hw = 1.05;
   const faces = boxFaces(-4.6, 1.6, hw, 0.6, 2.8, trailer);
   const cab = boxFaces(1.75, 3.6, 0.95, 0.4, 2.3, '#5a5a5e');
-  cab[2].decals = [quad([3.61, 0.75, 1.5], [3.61, -0.75, 1.5], [3.61, -0.75, 2.1], [3.61, 0.75, 2.1], '#20262c', [1, 0, 0])];
+  cab[2]!.decals = [quad([3.61, 0.75, 1.5], [3.61, -0.75, 1.5], [3.61, -0.75, 2.1], [3.61, 0.75, 2.1], '#20262c', [1, 0, 0])];
   for (const sgn of [1, -1] as const) {
     const y = sgn * (hw + 0.01);
-    faces[sgn > 0 ? 0 : 1].decals = [wheel(-3.9, y, 0.42, 0.42, sgn), wheel(-2.9, y, 0.42, 0.42, sgn)];
-    cab[sgn > 0 ? 0 : 1].decals = [wheel(3.0, sgn * 0.96, 0.42, 0.42, sgn), wheel(2.0, sgn * 0.96, 0.42, 0.42, sgn)];
+    faces[sgn > 0 ? 0 : 1]!.decals = [wheel(-3.9, y, 0.42, 0.42, sgn), wheel(-2.9, y, 0.42, 0.42, sgn)];
+    cab[sgn > 0 ? 0 : 1]!.decals = [wheel(3.0, sgn * 0.96, 0.42, 0.42, sgn), wheel(2.0, sgn * 0.96, 0.42, 0.42, sgn)];
   }
   return [...faces, ...cab];
 }

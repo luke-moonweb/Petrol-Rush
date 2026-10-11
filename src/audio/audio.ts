@@ -1,4 +1,4 @@
-import { EngineStyle, EngineVoice, loadEngineStyle, makeEngine, saveEngineStyle } from './engines';
+import { type EngineStyle, type EngineVoice, loadEngineStyle, makeEngine, saveEngineStyle } from './engines';
 
 export type UiSound = 'move' | 'ok' | 'back' | 'error';
 
@@ -253,7 +253,16 @@ export class GameAudio {
     return g;
   }
 
-  private burst(dest: AudioNode, at: number, dur: number, type: BiquadFilterType, freq: number, q: number, peak: number, freqEnd?: number): void {
+  private burst(
+    dest: AudioNode,
+    at: number,
+    dur: number,
+    type: BiquadFilterType,
+    freq: number,
+    q: number,
+    peak: number,
+    freqEnd?: number,
+  ): void {
     const ctx = this.ctx!;
     const src = ctx.createBufferSource();
     src.buffer = this.noise;
@@ -345,7 +354,9 @@ export class GameAudio {
   }
 
   finishFanfare(): void {
-    [523, 659, 784, 1047].forEach((f, i) => this.beep(f, i === 3 ? 0.5 : 0.14, 0.22, 'square', i * 0.13));
+    [523, 659, 784, 1047].forEach((f, i) => {
+      this.beep(f, i === 3 ? 0.5 : 0.14, 0.22, 'square', i * 0.13);
+    });
   }
 
   lowFuel(): void {

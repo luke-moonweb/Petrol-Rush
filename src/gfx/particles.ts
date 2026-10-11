@@ -1,7 +1,7 @@
 import { CONFIG } from '../config';
-import { Car } from '../race/car';
+import type { Car } from '../race/car';
 
-const enum Kind {
+enum Kind {
   Spark,
   Smoke,
 }
@@ -38,7 +38,7 @@ export class Particles {
   }
 
   private spawn(kind: Kind, x: number, y: number, vx: number, vy: number, life: number, size: number): void {
-    const p = this.pool[this.next];
+    const p = this.pool[this.next]!;
     this.next = (this.next + 1) % POOL_SIZE;
     p.alive = true;
     p.kind = kind;
@@ -144,7 +144,7 @@ export class Particles {
     for (const p of this.pool) {
       if (!p.alive || p.kind !== Kind.Spark) continue;
       const t = p.age / p.life;
-      g.fillStyle = SPARK_COLORS[Math.min(SPARK_COLORS.length - 1, Math.floor(t * SPARK_COLORS.length))];
+      g.fillStyle = SPARK_COLORS[Math.min(SPARK_COLORS.length - 1, Math.floor(t * SPARK_COLORS.length))]!;
       const x = Math.round(p.x - camX);
       const y = Math.round(p.y);
       g.fillRect(x, y, p.size, p.size);

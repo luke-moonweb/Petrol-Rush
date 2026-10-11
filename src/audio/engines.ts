@@ -89,8 +89,8 @@ class V8Engine implements EngineVoice {
     const v = Math.min(1, Math.abs(mph) / 180);
     const edges = [0, 0.25, 0.47, 0.72, 1];
     let g = 0;
-    while (g < 3 && v > edges[g + 1]) g++;
-    const frac = (v - edges[g]) / (edges[g + 1] - edges[g]);
+    while (g < 3 && v > edges[g + 1]!) g++;
+    const frac = (v - edges[g]!) / (edges[g + 1]! - edges[g]!);
     const rpm = Math.abs(mph) < 1 ? 0.18 : 0.3 + 0.7 * frac;
     const f = (34 + 92 * rpm) * pitch * doppler * (1 + this.variant * 0.03);
     this.saw1.frequency.setTargetAtTime(f, t, 0.04);
@@ -157,7 +157,7 @@ class TurbineEngine implements EngineVoice {
   set(mph: number, vol: number, bright: boolean, pan = 0, pitch = 1, doppler = 1): void {
     const t = this.ctx.currentTime;
     const v = Math.min(1, Math.abs(mph) / 180);
-    const spool = Math.pow(v, 0.7);
+    const spool = v ** 0.7;
     const f = (700 + 2300 * spool) * pitch * doppler * (1 + this.variant * 0.025);
     this.whistle.frequency.setTargetAtTime(f, t, 0.35);
     this.whistle2.frequency.setTargetAtTime(f * 1.51, t, 0.35);
@@ -221,7 +221,7 @@ class ChipEngine implements EngineVoice {
     const t = this.ctx.currentTime;
     const v = Math.min(1, Math.abs(mph) / 180);
     const semis = Math.round(v * 24);
-    const f = 110 * Math.pow(2, semis / 12) * pitch * doppler * (1 + this.variant * 0.02);
+    const f = 110 * 2 ** (semis / 12) * pitch * doppler * (1 + this.variant * 0.02);
     this.pulse.frequency.setValueAtTime(f, t);
     this.arp.frequency.setValueAtTime(bright ? 18 : 12, t);
     this.arpDepth.gain.setValueAtTime(Math.abs(mph) < 1 ? 0 : 250, t);
@@ -247,7 +247,7 @@ class ToyEngine implements EngineVoice {
     dest: AudioNode,
     variant: number,
   ) {
-    const vibRate = [23, 17, 20, 26][variant % 4];
+    const vibRate = [23, 17, 20, 26][variant % 4]!;
     this.buzz = ctx.createOscillator();
     this.buzz.type = 'square';
     this.whine = ctx.createOscillator();
@@ -291,7 +291,7 @@ class ToyEngine implements EngineVoice {
   set(mph: number, vol: number, bright: boolean, pan = 0, pitch = 1, doppler = 1): void {
     const t = this.ctx.currentTime;
     const v = Math.min(1, Math.abs(mph) / 180);
-    const f = (150 + 640 * Math.pow(v, 0.85)) * (bright ? 1.06 : 1) * pitch * doppler;
+    const f = (150 + 640 * v ** 0.85) * (bright ? 1.06 : 1) * pitch * doppler;
     this.buzz.frequency.setTargetAtTime(f, t, 0.05);
     this.whine.frequency.setTargetAtTime(f * 3.01, t, 0.05);
     this.vibDepth.gain.setTargetAtTime(f * (0.025 + (bright ? 0.015 : 0)), t, 0.05);
@@ -320,14 +320,12 @@ export function loadEngineStyle(): EngineStyle {
   try {
     const v = localStorage.getItem(STYLE_KEY);
     if (ENGINE_STYLES.some((s) => s.id === v)) return v as EngineStyle;
-  } catch {
-  }
+  } catch {}
   return 'v8';
 }
 
 export function saveEngineStyle(style: EngineStyle): void {
   try {
     localStorage.setItem(STYLE_KEY, style);
-  } catch {
-  }
+  } catch {}
 }

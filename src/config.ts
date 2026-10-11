@@ -120,7 +120,3 @@ export const DEFAULT_OPTIONS: RaceOptions = {
 
 export const LAP_CHOICES = [1, 2, 3, 5, 10, 15, 18, 20, 25, 30, 40, 50, 75, 100];
 export const QUALIFYING_CHOICES: Qualifying[] = ['last', 'middle', 'pole', 'random'];
-
-export const AUTHOR_NAME = 'luke-moonweb';
-export const AUTHOR_URL = 'https://github.com/luke-moonweb';
-export const REPO_URL = 'https://github.com/luke-moonweb/Petrol-Rush';
