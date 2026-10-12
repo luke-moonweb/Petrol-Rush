@@ -28,8 +28,10 @@ export class GameAudio {
   private scrapeFilter: BiquadFilterNode | null = null;
   private refuelGain: GainNode | null = null;
   muted = false;
+  private speechPrimed = false;
 
   unlock(): void {
+    this.primeSpeech();
     if (this.ctx) {
       if (this.ctx.state === 'suspended') void this.ctx.resume();
       return;
@@ -167,12 +169,27 @@ export class GameAudio {
     return src;
   }
 
+  // iOS Safari only lets speech start from a user gesture; once one utterance has played there,
+  // later ones from the game loop work too.
+  private primeSpeech(): void {
+    const synth = window.speechSynthesis;
+    if (this.speechPrimed || !synth || typeof SpeechSynthesisUtterance === 'undefined' || synth.speaking) return;
+    if (synth.pending) synth.cancel();
+    const u = new SpeechSynthesisUtterance('radio');
+    u.volume = 0;
+    u.onstart = u.onend = () => {
+      this.speechPrimed = true;
+    };
+    synth.speak(u);
+  }
+
   radio(text: string): void {
     if (!this.ctx || this.muted) return;
     this.squelch();
     const synth = window.speechSynthesis;
     if (!synth || typeof SpeechSynthesisUtterance === 'undefined') return;
-    synth.cancel();
+    // Chrome on Android can drop an utterance queued right after an unneeded cancel().
+    if (synth.speaking || synth.pending) synth.cancel();
     const u = new SpeechSynthesisUtterance(text);
     u.lang = 'en-US';
     u.rate = 1.12;
@@ -193,7 +210,8 @@ export class GameAudio {
   }
 
   private stopSpeech(): void {
-    window.speechSynthesis?.cancel();
+    const synth = window.speechSynthesis;
+    if (synth?.speaking || synth?.pending) synth.cancel();
   }
 
   toggleMute(): void {
