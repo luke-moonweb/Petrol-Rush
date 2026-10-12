@@ -5,6 +5,7 @@ import { drawCars, drawOil, trackCanvas } from '../gfx/world';
 import { type Car, lapsCompleted } from '../race/car';
 import { Race } from '../race/race';
 import { trackHeadingAt, WORLD_W, wrapAngle } from '../track/track';
+import type { Hit } from '../ui/hit';
 import { drawTitle, TITLE_ITEMS } from '../ui/menus/title';
 import { CreditsState } from './credits';
 import { type Game, loadOptions, type State } from './game';
@@ -90,6 +91,12 @@ export class TitleState implements State {
         this.game.set(new CreditsState(this.game, this));
         break;
     }
+  }
+
+  tap(hit: Hit | null): void {
+    if (!hit) return;
+    this.sel = hit.id;
+    this.game.input.tapVirtual('enter');
   }
 
   render(g: CanvasRenderingContext2D, alpha = 1): void {

@@ -2,7 +2,10 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black" />
     <title>Petrol Rush</title>
     <style>
       html,
@@ -21,6 +24,152 @@
         image-rendering: pixelated;
         image-rendering: crisp-edges;
         display: block;
+        max-width: 100vw;
+        max-height: 100vh;
+      }
+      .touch-mode,
+      .touch-mode body {
+        touch-action: none;
+        overscroll-behavior: none;
+        -webkit-user-select: none;
+        user-select: none;
+        -webkit-touch-callout: none;
+        -webkit-tap-highlight-color: transparent;
+      }
+      .touch-mode canvas {
+        position: absolute;
+      }
+      .tc-root {
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        font-family: 'Arial Black', 'Arial Bold', Arial, sans-serif;
+      }
+      .tc-zone {
+        position: absolute;
+        box-sizing: border-box;
+        display: flex;
+        flex-direction: column;
+        padding: 10px;
+      }
+      .tc-zone[hidden] {
+        display: none;
+      }
+      .tc-row {
+        display: flex;
+        gap: 10px;
+      }
+      .tc-right .tc-row {
+        justify-content: flex-end;
+      }
+      .tc-main {
+        margin-top: auto;
+      }
+      .tc-btn {
+        pointer-events: auto;
+        touch-action: none;
+        box-sizing: border-box;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 14px;
+        border: 2px solid rgba(255, 248, 232, 0.35);
+        background: rgba(38, 51, 197, 0.35);
+        color: #fff8e8;
+        transition: transform 60ms, background-color 60ms;
+      }
+      .tc-btn svg {
+        width: 50%;
+        height: 50%;
+        max-width: 44px;
+        max-height: 44px;
+        fill: currentColor;
+      }
+      .tc-btn.tc-active {
+        background: rgba(18, 181, 166, 0.75);
+        border-color: #7fe3d9;
+        transform: scale(0.95);
+      }
+      .tc-small {
+        width: 46px;
+        height: 46px;
+        border-radius: 12px;
+        background: rgba(14, 12, 28, 0.6);
+      }
+      .tc-small svg {
+        width: 24px;
+        height: 24px;
+      }
+      .tc-text {
+        font-size: 15px;
+        letter-spacing: 1px;
+      }
+      .tc-small.tc-text {
+        font-size: 12px;
+      }
+      .tc-big {
+        flex: 1;
+        height: var(--tc-big-h, 140px);
+      }
+      .tc-gas,
+      .tc-ok {
+        background: rgba(18, 181, 166, 0.4);
+      }
+      .tc-brake {
+        background: rgba(230, 59, 46, 0.4);
+      }
+      .tc-back {
+        flex: 0.7;
+      }
+      .tc-muted .tc-wave,
+      .tc-sound .tc-x {
+        display: none;
+      }
+      .tc-muted .tc-sound .tc-x {
+        display: inline;
+      }
+      .tc-no-fs .tc-fs {
+        display: none;
+      }
+      .tc-dpad {
+        margin-top: auto;
+        align-self: center;
+        width: var(--tc-pad, 160px);
+        height: var(--tc-pad, 160px);
+        display: grid;
+        grid-template: repeat(3, 1fr) / repeat(3, 1fr);
+        gap: 4px;
+      }
+      .tc-pad {
+        border-radius: 10px;
+      }
+      .tc-up {
+        grid-area: 1 / 2;
+      }
+      .tc-l {
+        grid-area: 2 / 1;
+      }
+      .tc-r {
+        grid-area: 2 / 3;
+      }
+      .tc-down {
+        grid-area: 3 / 2;
+      }
+      .tc-hint {
+        position: absolute;
+        display: none;
+        box-sizing: border-box;
+        padding: 10px 16px;
+        text-align: center;
+        font-size: 11px;
+        letter-spacing: 1px;
+        color: #8a86a0;
+      }
+      .tc-portrait .tc-hint {
+        display: block;
+      }
+      .tc-portrait .tc-top {
+        margin-top: 34px;
       }
     </style>
   </head>

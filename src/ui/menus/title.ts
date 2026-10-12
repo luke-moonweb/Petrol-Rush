@@ -1,4 +1,5 @@
 import { CONFIG } from '../../config';
+import { addHit } from '../hit';
 import { FONT_UI } from '../text';
 import { FONT_BLACK, PR } from '../theme';
 import { circle, footerHints, H, logoText, tag, W } from './common';
@@ -63,6 +64,7 @@ export function drawTitle(g: CanvasRenderingContext2D, v: TitleView): void {
   TITLE_ITEMS.forEach((item, i) => {
     const ry = y + i * (rowH + 3);
     const sel = i === v.sel;
+    addHit(i, x, ry, w, rowH);
     g.fillStyle = sel ? PR.teal : 'rgba(28,25,48,0.92)';
     g.fillRect(x, ry, w, rowH);
     g.fillStyle = sel ? PR.night : PR.mango;

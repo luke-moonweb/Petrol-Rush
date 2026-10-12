@@ -2,8 +2,9 @@ import { ENGINE_STYLES } from '../audio/engines';
 import { CONFIG } from '../config';
 import { BINDABLE, type BindableAction, type Bindings, DEFAULT_BINDINGS, keyLabel, RESERVED_CODES, saveBindings } from '../input';
 import { savePrefs } from '../prefs';
-import { drawSettings, type GameOptionRow, KEYS_ROWS, type SettingsTab } from '../ui/menus/settings';
-import type { Game, State } from './game';
+import type { Hit } from '../ui/hit';
+import { drawSettings, type GameOptionRow, KEYS_ROWS, type SettingsTab, TAB_HIT } from '../ui/menus/settings';
+import { type Game, type State, tapSide } from './game';
 
 const ROW_RESET = BINDABLE.length + 1;
 const ROW_BACK = BINDABLE.length + 2;
@@ -23,6 +24,7 @@ export class SettingsState implements State {
     private readonly back: State,
   ) {
     this.bindings = game.input.getBindings();
+    if (game.touch) this.tab = 'game';
   }
 
   private rows(): number {
@@ -98,7 +100,9 @@ export class SettingsState implements State {
         return {
           label: 'ENGINE SOUND',
           value: ENGINE_STYLES.find((e) => e.id === this.game.audio.engineStyle)?.label ?? '',
-          desc: 'Engine sound of your car and your rivals. ENTER plays a sample.',
+          desc: this.game.touch
+            ? 'Engine sound of your car and your rivals. OK plays a sample.'
+            : 'Engine sound of your car and your rivals. ENTER plays a sample.',
         };
       case 'penalties':
         return {
@@ -128,14 +132,14 @@ export class SettingsState implements State {
     const input = this.game.input;
     if (this.listening) {
       const code = input.firstPressedCode();
-      if (!code) return;
-      if (code === 'Escape') {
+      if (input.pressed('back')) {
         this.listening = false;
         input.capture = false;
         this.message = null;
         this.game.audio.ui('back');
         return;
       }
+      if (!code) return;
       this.assign(code);
       return;
     }
@@ -204,6 +208,21 @@ export class SettingsState implements State {
       input.capture = true;
       this.message = null;
     }
+  }
+
+  tap(hit: Hit | null, x: number): void {
+    if (!hit || this.listening) return;
+    if (hit.id >= TAB_HIT) {
+      const tab: SettingsTab = hit.id === TAB_HIT ? 'keys' : 'game';
+      if (tab !== this.tab) this.game.audio.ui('move');
+      this.tab = tab;
+      this.row = 0;
+      this.message = null;
+      return;
+    }
+    this.row = hit.id;
+    const option = this.tab === 'game' && GAME_OPTIONS[hit.id - 1];
+    this.game.input.tapVirtual(option ? tapSide(hit, x) : 'enter');
   }
 
   onBlur(): void {

@@ -2,11 +2,15 @@ import type { GameAudio } from '../audio/audio';
 import { DEFAULT_OPTIONS, LAP_CHOICES, QUALIFYING_CHOICES, type RaceOptions } from '../config';
 import type { Input } from '../input';
 import { loadPrefs, type Prefs } from '../prefs';
+import type { TouchLayout } from '../touch';
+import type { Hit } from '../ui/hit';
 
 export interface State {
   update(dt: number): void;
   render(g: CanvasRenderingContext2D, alpha: number): void;
   onBlur?(): void;
+  touchLayout?(): TouchLayout;
+  tap?(hit: Hit | null, x: number): void;
 }
 
 export interface Params {
@@ -16,6 +20,7 @@ export interface Params {
   overlayUrl: string | null;
   cars: number | null;
   laps: number | null;
+  touch: boolean | null;
 }
 
 export function readParams(search: string): Params {
@@ -33,6 +38,7 @@ export function readParams(search: string): Params {
     overlayUrl: p.get('overlay'),
     cars: num('cars'),
     laps: num('laps'),
+    touch: p.has('touch') ? p.get('touch') !== '0' : null,
   };
 }
 
@@ -66,10 +72,15 @@ export function saveOptions(opts: RaceOptions): void {
   } catch {}
 }
 
+export function tapSide(hit: Hit, x: number): 'navLeft' | 'navRight' {
+  return x < hit.x + hit.w / 2 ? 'navLeft' : 'navRight';
+}
+
 export class Game {
   state!: State;
   timeScale = 1;
   fit = true;
+  touch = false;
   readonly prefs: Prefs = loadPrefs();
 
   constructor(

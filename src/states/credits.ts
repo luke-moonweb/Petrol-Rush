@@ -1,4 +1,5 @@
 import { AUTHOR_NAME, AUTHOR_URL, REPO_URL } from '../meta';
+import type { Hit } from '../ui/hit';
 import { CREDITS_ITEMS, drawCredits } from '../ui/menus/credits';
 import type { Game, State } from './game';
 
@@ -33,6 +34,12 @@ export class CreditsState implements State {
       audio.ui('ok');
       window.open(LINKS[this.sel], '_blank', 'noopener,noreferrer');
     }
+  }
+
+  tap(hit: Hit | null): void {
+    if (!hit) return;
+    this.sel = hit.id;
+    this.game.input.tapVirtual('enter');
   }
 
   render(g: CanvasRenderingContext2D): void {

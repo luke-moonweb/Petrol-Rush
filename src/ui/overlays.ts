@@ -1,5 +1,7 @@
 import { CONFIG } from '../config';
 import { carIcon, driverName } from '../gfx/vehicles';
+import { hintList } from './hints';
+import { addHit } from './hit';
 import { FONT_UI } from './text';
 import { FONT_BLACK, PR } from './theme';
 
@@ -103,7 +105,7 @@ function nightKey(g: CanvasRenderingContext2D, label: string, x: number, cy: num
 function hints(g: CanvasRenderingContext2D, list: [string, string][], x: number, y: number, maxW: number): void {
   let cx = x;
   let cy = y;
-  for (const [k, l] of list) {
+  for (const [k, l] of hintList(list)) {
     g.font = `9px ${FONT_BLACK}`;
     const kw = Math.max(18, g.measureText(k).width + 10);
     g.font = `bold 9px ${FONT_UI}`;
@@ -197,6 +199,7 @@ export function drawRaceMenu(g: CanvasRenderingContext2D, v: RaceMenuView): void
   y = statCard(g, y, v.stats) + 16;
   v.items.forEach((it, i) => {
     menuButton(g, it, y, i === v.sel, v.danger.includes(it));
+    addHit(i, PAD, y, PANEL_W - PAD * 2, 34);
     y += 38;
   });
   hints(
@@ -227,10 +230,12 @@ export function drawRaceSettings(g: CanvasRenderingContext2D, rows: SettingRow[]
     if (r.action) {
       y += 6;
       menuButton(g, r.label, y, selected, false);
+      addHit(i, PAD, y, w, 34);
       y += 38;
       return;
     }
     const h = 44;
+    addHit(i, PAD, y, w, h);
     g.fillStyle = selected ? 'rgba(18,181,166,0.16)' : '#1C1930';
     g.beginPath();
     g.roundRect(PAD, y, w, h, 4);
@@ -299,7 +304,7 @@ export function drawPause(g: CanvasRenderingContext2D, keys: { pause: string; he
   ];
   let total = 0;
   g.font = `bold 9px ${FONT_UI}`;
-  const parts = list.map(([k, l]) => {
+  const parts = hintList(list).map(([k, l]) => {
     g.font = `9px ${FONT_BLACK}`;
     const kw = Math.max(18, g.measureText(k).width + 10);
     g.font = `bold 9px ${FONT_UI}`;

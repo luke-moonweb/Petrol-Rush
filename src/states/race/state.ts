@@ -5,12 +5,14 @@ import { keyLabel } from '../../input';
 import { type Car, lapsCompleted } from '../../race/car';
 import { cornerAssist, type DriveInput, SteerRamp, skidWarning } from '../../race/physics';
 import { NUM_COLORS, Race } from '../../race/race';
+import type { TouchLayout } from '../../touch';
 import { deltaS, inTurn, trackHeadingAt, WORLD_W, wrapAngle } from '../../track/track';
+import type { Hit } from '../../ui/hit';
 import { drawFuelGauge, drawHudTop, drawSkidLamp, drawSpeedo, drawTower } from '../../ui/hud';
 import { drawPause, drawRaceMenu, drawRaceSettings, drawResults, type SettingRow, type StatField } from '../../ui/overlays';
 import { ordinal } from '../../ui/text';
 import { PR } from '../../ui/theme';
-import { type Game, type State, saveOptions } from '../game';
+import { type Game, type State, saveOptions, tapSide } from '../game';
 import { HelpState } from '../info';
 import { RaceSound } from './sound';
 import {
@@ -97,6 +99,32 @@ export class RaceState implements State {
     return new Race(this.opts, this.seed++, false, { penalties: prefs.penalties, collisions: prefs.collisions });
   }
 
+  touchLayout(): TouchLayout {
+    return this.phase === 'running' ? 'race' : 'menu';
+  }
+
+  tap(hit: Hit | null, x: number): void {
+    const input = this.game.input;
+    switch (this.phase) {
+      case 'choose':
+        if (!hit) return;
+        this.sel = hit.id;
+        input.tapVirtual('enter');
+        break;
+      case 'options':
+        if (!hit) return;
+        this.sel = hit.id;
+        input.tapVirtual(OPTION_LABELS[hit.id] === 'START RACE' ? 'enter' : tapSide(hit, x));
+        break;
+      case 'paused':
+      case 'results':
+        input.tapVirtual('enter');
+        break;
+      default:
+        break;
+    }
+  }
+
   onBlur(): void {
     if (this.phase === 'running') this.phase = 'paused';
     this.game.audio.silence();
@@ -118,7 +146,7 @@ export class RaceState implements State {
         this.updateRunning(dt);
         break;
       case 'paused':
-        if (input.pressed('pause')) this.phase = 'running';
+        if (input.pressed('pause') || input.pressed('enter')) this.phase = 'running';
         else if (input.pressed('menu') || input.pressed('back')) this.openMenu();
         else if (input.pressed('help')) this.game.set(new HelpState(this.game, this));
         break;
@@ -374,7 +402,8 @@ export class RaceState implements State {
         break;
       case 'paused': {
         const b = this.game.input.getBindings();
-        drawPause(g, { pause: keyLabel(b.pause[0] ?? b.pause[1]), help: keyLabel(b.help[0] ?? b.help[1]) });
+        const pause = this.game.touch ? 'ENTER' : keyLabel(b.pause[0] ?? b.pause[1]);
+        drawPause(g, { pause, help: keyLabel(b.help[0] ?? b.help[1]) });
         break;
       }
       case 'results':
@@ -477,7 +506,7 @@ export class RaceState implements State {
     if (this.phase !== 'running' && this.phase !== 'paused') return null;
     const p = this.race.player;
     if (p.finished) return `FINISHED ${ordinal(this.race.classification().indexOf(p) + 1)}!`;
-    if (p.fuel <= 0 && Math.abs(p.speed) < 1) return 'OUT OF FUEL  –  press ESC';
+    if (p.fuel <= 0 && Math.abs(p.speed) < 1) return this.game.touch ? 'OUT OF FUEL  –  open MENU' : 'OUT OF FUEL  –  press ESC';
     if (p.refueling) return 'REFUELING...';
     if (this.race.pitAuto) return 'PIT LANE  –  AUTO';
     if (p.fuel < 0.12 && Math.floor(this.race.time * 2) % 2 === 0) return 'LOW FUEL';

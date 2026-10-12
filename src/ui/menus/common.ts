@@ -1,4 +1,5 @@
 import { CONFIG } from '../../config';
+import { hintList } from '../hints';
 import { FONT_UI, text } from '../text';
 import { FONT_BLACK, PR } from '../theme';
 
@@ -138,7 +139,7 @@ export function keycap(g: CanvasRenderingContext2D, label: string, x: number, cy
 export function footerHints(g: CanvasRenderingContext2D, hints: [string, string][], cy: number): void {
   const gap = 22;
   g.font = `bold 11px ${FONT_UI}`;
-  const parts = hints.map(([k, l]) => {
+  const parts = hintList(hints).map(([k, l]) => {
     g.font = `bold 11px ${FONT_UI}`;
     const kw = g.measureText(k).width + 12;
     const lw = g.measureText(l).width;

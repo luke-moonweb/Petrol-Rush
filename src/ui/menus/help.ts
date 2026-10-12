@@ -10,7 +10,17 @@ const TIPS = [
   'Spun out? Stop, switch to reverse gear, back up and turn.',
 ];
 
-export function drawHelp(g: CanvasRenderingContext2D, b: Bindings): void {
+const TOUCH_ROWS: [string, string][] = [
+  ['◀ ▶', 'STEER (LEFT THUMB)'],
+  ['GAS', 'ACCELERATE (RIGHT THUMB)'],
+  ['BRAKE', 'BRAKE'],
+  ['REV', 'REVERSE GEAR ON / OFF'],
+  ['❚❚', 'PAUSE'],
+  ['☰', 'RACE MENU'],
+  ['▲▼ OK', 'MENUS – OR TAP AN ITEM'],
+];
+
+export function drawHelp(g: CanvasRenderingContext2D, b: Bindings, touch = false): void {
   stripesBg(g);
   screenHeader(g, 'CONTROLS', 'HOW TO RACE');
 
@@ -19,17 +29,19 @@ export function drawHelp(g: CanvasRenderingContext2D, b: Bindings): void {
   const pw = 272;
   const ph = 300;
   darkPanel(g, px, py, pw, ph);
-  text(g, 'YOUR KEYS', px + 17, py + 24, { font: `12px ${FONT_BLACK}`, color: PR.mango, shadow: null });
+  text(g, touch ? 'TOUCH CONTROLS' : 'YOUR KEYS', px + 17, py + 24, { font: `12px ${FONT_BLACK}`, color: PR.mango, shadow: null });
   const k = (a: keyof Bindings) => keyLabel(b[a][0] ?? b[a][1]);
-  const rows: [string, string][] = [
-    [`${k('left')} ${k('right')}`, 'STEER'],
-    [k('gas'), 'ACCELERATE'],
-    [k('brake'), 'BRAKE'],
-    [k('reverse'), 'REVERSE GEAR ON / OFF'],
-    [k('pause'), 'PAUSE'],
-    [`ESC ${keyLabel(b.menu[0])}`, 'RACE MENU'],
-    [k('mute'), 'SOUND ON / OFF'],
-  ];
+  const rows: [string, string][] = touch
+    ? TOUCH_ROWS
+    : [
+        [`${k('left')} ${k('right')}`, 'STEER'],
+        [k('gas'), 'ACCELERATE'],
+        [k('brake'), 'BRAKE'],
+        [k('reverse'), 'REVERSE GEAR ON / OFF'],
+        [k('pause'), 'PAUSE'],
+        [`ESC ${keyLabel(b.menu[0])}`, 'RACE MENU'],
+        [k('mute'), 'SOUND ON / OFF'],
+      ];
   rows.forEach(([key, label], i) => {
     const cy = py + 54 + i * 28;
     keycap(g, key, px + 17, cy, 54, 10);
@@ -37,7 +49,11 @@ export function drawHelp(g: CanvasRenderingContext2D, b: Bindings): void {
   });
   g.fillStyle = PR.ultra;
   g.fillRect(px + 17, py + ph - 42, pw - 34, 22);
-  text(g, 'CHANGE ANY KEY IN SETTINGS', px + 27, py + ph - 27, { font: `bold 10px ${FONT_UI}`, color: PR.mango, shadow: null });
+  text(g, touch ? 'SLIDE A THUMB BETWEEN BUTTONS' : 'CHANGE ANY KEY IN SETTINGS', px + 27, py + ph - 27, {
+    font: `bold 10px ${FONT_UI}`,
+    color: PR.mango,
+    shadow: null,
+  });
 
   const qx = px + pw + 16;
   darkPanel(g, qx, py, pw, ph);

@@ -39,6 +39,8 @@ are no image, audio or font files in the project.
 - 📺 **Live-on-air title screen** – a silent 20-car demo race plays behind the menu, filmed like a
   TV broadcast.
 - ⌨️ **Fully rebindable keys** (primary + alternate per action), saved in the browser.
+- 📱 **Touch controls on phones and tablets** – on-screen steering, pedals and menu buttons appear
+  automatically; menu items can also be tapped directly.
 
 <table>
   <tr>
@@ -91,6 +93,21 @@ The production build is a static site – `dist/` can be hosted on any static ho
 
 All driving keys can be changed in **SETTINGS → KEYS**. Arrows, Enter and Esc always navigate menus.
 
+### 📱 Touch screens
+
+On a phone or tablet (detected via `(hover: none) and (pointer: coarse)`) the game shows on-screen
+controls next to the picture in landscape, or under it in portrait. Nothing covers the race view.
+
+| Where | Race | Menus |
+|---|---|---|
+| Left thumb | ◀ ▶ steer – slide between them without lifting | ▲ ▼ ◀ ▶ pad (hold to repeat) |
+| Right thumb | BRAKE · GAS – slide between them | BACK · OK |
+| Small buttons | REV (reverse), pause, race menu, sound, fullscreen* | sound, fullscreen* |
+
+Menu items, setting rows and buttons can also be tapped directly on the game screen; tapping the left
+or right half of a setting row changes its value down or up. *Fullscreen is hidden where the
+browser does not support it (iPhone Safari).
+
 ## 🏆 How to race
 
 - **Corners are taken at 150 mph or less.** Go a little faster and the car slides wide and scrubs
@@ -132,6 +149,7 @@ Handy for testing and tuning:
 | `?seed=123` | Repeatable race |
 | `?debug` | Debug overlay, `]` speeds up time ×4/×8, `window.__game` and `window.__race` in the console |
 | `?overlay=URL` | Semi-transparent 640×480 image over the screen for layout comparison |
+| `?touch` / `?touch=0` | Force touch controls on / off, regardless of the device |
 
 ## 🧱 How it's built
 
@@ -149,7 +167,8 @@ src/
   main.ts          game loop (fixed 60 Hz step), scaling
   config.ts        tuning constants and race options
   meta.ts          author and repository links
-  input.ts         keyboard, rebindable keys
+  input.ts         keyboard, rebindable keys, virtual (touch) actions
+  touch.ts         phone detection, on-screen controls and their layout
   prefs.ts         SETTINGS → GAME options
   states/          title (with demo race), controls, settings, credits
     race/          race screen: flow, sound, race-only drawing

@@ -1,4 +1,5 @@
 import { BINDABLE, type Bindings, keyLabel } from '../../input';
+import { addHit } from '../hit';
 import { FONT_UI, text } from '../text';
 import { FONT_BLACK, PR } from '../theme';
 import { darkPanel, footerHints, keycap, logoText, skewBox, skewButton, stripesBg, tag } from './common';
@@ -22,6 +23,7 @@ export interface SettingsView {
 }
 
 export const KEYS_ROWS = BINDABLE.length + 3;
+export const TAB_HIT = 1000;
 
 function settingsTabs(g: CanvasRenderingContext2D, v: SettingsView, x: number): void {
   const tabs: [SettingsTab, string][] = [
@@ -29,15 +31,16 @@ function settingsTabs(g: CanvasRenderingContext2D, v: SettingsView, x: number): 
     ['game', 'GAME'],
   ];
   let tx = x;
-  for (const [id, label] of tabs) {
+  tabs.forEach(([id, label], i) => {
     const active = v.tab === id;
     const w = tag(g, label, tx, 50, active ? PR.ultra : PR.cream, active ? PR.mango : PR.ultra, 12, active);
     if (active && v.row === 0) {
       g.fillStyle = PR.ink;
       g.fillRect(tx + 6, 64, w - 12, 3);
     }
+    addHit(TAB_HIT + i, tx, 36, w, 30);
     tx += w + 10;
-  }
+  });
 }
 
 export function drawSettings(g: CanvasRenderingContext2D, v: SettingsView): void {
@@ -80,6 +83,7 @@ function drawKeysTab(g: CanvasRenderingContext2D, v: SettingsView): void {
     const y = hy + 12 + i * (rowH + 3);
     const cy = y + rowH / 2;
     const selected = v.row === i + 1;
+    addHit(i + 1, px + 14, y, pw - 28, rowH + 3);
     skewBox(g, px + pw / 2, cy, pw - 28, rowH, 8, () => {
       g.fillStyle = selected ? PR.ultra : i % 2 === 0 ? PR.inkRow : PR.ink;
       g.fillRect(0, 0, pw - 28, rowH);
@@ -117,6 +121,8 @@ function drawKeysTab(g: CanvasRenderingContext2D, v: SettingsView): void {
   const by = py + ph + 22;
   skewButton(g, 'BACK', v.row === BINDABLE.length + 2, px + pw, by, 110);
   skewButton(g, 'RESET DEFAULTS', v.row === BINDABLE.length + 1, px + pw - 128, by, 190);
+  addHit(BINDABLE.length + 2, px + pw - 110, by - 17, 110, 38);
+  addHit(BINDABLE.length + 1, px + pw - 128 - 190, by - 17, 190, 38);
   if (v.message) text(g, v.message, px, by + 5, { font: `bold 11px ${FONT_UI}`, color: PR.ink, shadow: null });
 
   footerHints(
@@ -150,6 +156,7 @@ function drawGameTab(g: CanvasRenderingContext2D, v: SettingsView): void {
   v.game.forEach((opt, i) => {
     const y = py + 16 + i * (rowH + gap);
     const selected = v.row === i + 1;
+    addHit(i + 1, px + 14, y, pw - 28, rowH + gap);
     skewBox(g, px + pw / 2, y + rowH / 2, pw - 28, rowH, 6, () => {
       g.fillStyle = selected ? PR.ultra : i % 2 === 0 ? PR.inkRow : PR.ink;
       g.fillRect(0, 0, pw - 28, rowH);
@@ -170,6 +177,7 @@ function drawGameTab(g: CanvasRenderingContext2D, v: SettingsView): void {
     text(g, '◀', right - 18 - vw - 8, y + 22, { font: `bold 11px ${FONT_UI}`, align: 'right', color: arrow, shadow: null });
   });
   skewButton(g, 'BACK', v.row === v.game.length + 1, px + pw, py + ph + 22, 110);
+  addHit(v.game.length + 1, px + pw - 110, py + ph + 5, 110, 38);
   footerHints(
     g,
     v.row === 0

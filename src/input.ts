@@ -117,6 +117,8 @@ export class Input {
   private down = new Set<string>();
   private pressedCodes = new Set<string>();
   private keymap = new Map<string, Action[]>();
+  private virtualDown = new Set<Action>();
+  private virtualPressed = new Set<Action>();
   private bindings: Bindings;
   capture = false;
   onFirstInteraction: (() => void) | null = null;
@@ -138,6 +140,7 @@ export class Input {
       this.down.delete(code);
     });
     target.addEventListener('pointerdown', () => this.onFirstInteraction?.());
+    target.addEventListener('touchend', () => this.onFirstInteraction?.());
     target.addEventListener('blur', () => this.lostFocus());
     document.addEventListener('visibilitychange', () => {
       if (document.hidden) this.lostFocus();
@@ -166,18 +169,32 @@ export class Input {
     }
   }
 
+  setVirtual(action: Action, held: boolean): void {
+    if (held && !this.virtualDown.has(action)) this.virtualPressed.add(action);
+    if (held) this.virtualDown.add(action);
+    else this.virtualDown.delete(action);
+  }
+
+  tapVirtual(action: Action): void {
+    this.virtualPressed.add(action);
+  }
+
   private lostFocus(): void {
     this.down.clear();
     this.pressedCodes.clear();
+    this.virtualDown.clear();
+    this.virtualPressed.clear();
     this.onBlur?.();
   }
 
   isDown(action: Action): boolean {
+    if (this.virtualDown.has(action)) return true;
     for (const code of this.down) if (this.keymap.get(code)?.includes(action)) return true;
     return false;
   }
 
   pressed(action: Action): boolean {
+    if (this.virtualPressed.has(action)) return true;
     for (const code of this.pressedCodes) if (this.keymap.get(code)?.includes(action)) return true;
     return false;
   }
@@ -189,5 +206,6 @@ export class Input {
 
   endStep(): void {
     this.pressedCodes.clear();
+    this.virtualPressed.clear();
   }
 }

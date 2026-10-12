@@ -1,3 +1,4 @@
+import { addHit } from '../hit';
 import { FONT_UI, text } from '../text';
 import { FONT_BLACK, PR } from '../theme';
 import { darkPanel, footerHints, rrect, screenHeader, skewButton, stripesBg } from './common';
@@ -52,6 +53,7 @@ export function drawCredits(g: CanvasRenderingContext2D, v: CreditsView): void {
   CREDITS_ITEMS.forEach((item, i) => {
     const cy = py + 62 + i * 76;
     skewButton(g, item, v.sel === i, qx + 22 + bw, cy, bw);
+    addHit(i, qx + 22, cy - 17, bw, 38);
     const link = v.links[i];
     if (link) {
       text(g, link.replace('https://', ''), qx + 22, cy + 38, {

@@ -15,7 +15,11 @@ export class HelpState implements State {
     }
   }
 
+  tap(): void {
+    this.game.input.tapVirtual('enter');
+  }
+
   render(g: CanvasRenderingContext2D): void {
-    drawHelp(g, this.game.input.getBindings());
+    drawHelp(g, this.game.input.getBindings(), this.game.touch);
   }
 }
