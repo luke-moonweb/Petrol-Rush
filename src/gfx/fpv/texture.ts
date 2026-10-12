@@ -178,7 +178,9 @@ export function drawTexQuad(g: CanvasRenderingContext2D, c: Camera, q: TexQuad, 
       if (!ok) continue;
       const hgt = Math.max(sy[0]!, sy[1]!, sy[2]!, sy[3]!) - Math.min(sy[0]!, sy[1]!, sy[2]!, sy[3]!);
       const wid = Math.max(sx[0]!, sx[1]!, sx[2]!, sx[3]!) - Math.min(sx[0]!, sx[1]!, sx[2]!, sx[3]!);
-      if (hgt < MIN_PX && wid < MIN_PX * 4) continue;
+      const lod = Math.min(1, Math.max(hgt / MIN_PX - 1, wid / (MIN_PX * 4) - 1));
+      if (lod <= 0) continue;
+      g.globalAlpha = fade * lod;
       const ua = (q.u0 + du * s0) * W;
       const ub = (q.u0 + du * s1) * W;
       us[0] = ua;

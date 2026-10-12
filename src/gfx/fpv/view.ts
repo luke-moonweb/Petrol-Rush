@@ -35,18 +35,18 @@ const SKY_HORIZON = '#221C3C';
 const GROUND = '#0B0A16';
 const SPIN_LOOK = 0.5;
 const CAM_EASE_S = 0.25;
-const RECOVER_S = 0.6;
+const SETTLED = 0.002;
 const CAR_REACH = 26;
 const OIL_MIN_PX = 6;
 const OWN_SMOKE = 15;
-const MAX_PUFF_PX = 90;
+const MAX_PUFF_PX = 60;
 
 let scene: Scene | null = null;
 const cam = new Camera();
 const mirrorCam = new Camera();
 let camYaw = Number.NaN;
 let camClock = 0;
-let recover = 0;
+let recovering = false;
 
 interface Star {
   a: number;
@@ -259,7 +259,12 @@ function drawOilSlicks(g: CanvasRenderingContext2D, c: Camera, race: Race, far: 
     rr(0.35, 'rgba(230,180,80,0.18)');
     g.globalCompositeOperation = 'source-over';
     g.globalAlpha = 1;
-    if (d > 60) drawGlow(g, c, { x: o.x, y: o.y, z: 0.6, r: Math.min(14, 4 + d * 0.012), color: '127,227,217' });
+    const glint = Math.max(0, Math.min(1, (d - 40) / 40));
+    if (glint > 0) {
+      g.globalAlpha = glint * fade;
+      drawGlow(g, c, { x: o.x, y: o.y, z: 0.6, r: Math.min(14, 4 + d * 0.012), color: '127,227,217' });
+      g.globalAlpha = 1;
+    }
   }
 }
 
@@ -323,6 +328,23 @@ function orderCarsAgainstWalls(c: Camera, items: Item[]): void {
   }
 }
 
+let smoke: HTMLCanvasElement | null = null;
+function smokeSprite(): HTMLCanvasElement {
+  if (!smoke) {
+    smoke = document.createElement('canvas');
+    smoke.width = 64;
+    smoke.height = 64;
+    const g = smoke.getContext('2d')!;
+    const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+    gr.addColorStop(0, 'rgba(138,134,160,1)');
+    gr.addColorStop(0.5, 'rgba(138,134,160,0.5)');
+    gr.addColorStop(1, 'rgba(138,134,160,0)');
+    g.fillStyle = gr;
+    g.fillRect(0, 0, 64, 64);
+  }
+  return smoke;
+}
+
 function drawPuff(g: CanvasRenderingContext2D, c: Camera, p: NonNullable<Item['puff']>): void {
   const dx = p.x - c.x;
   const dy = p.y - c.y;
@@ -339,10 +361,8 @@ function drawPuff(g: CanvasRenderingContext2D, c: Camera, p: NonNullable<Item['p
     g.fillRect(sx - r / 2, sy - r / 2, r, r);
     g.globalCompositeOperation = 'source-over';
   } else {
-    g.fillStyle = '#C8C6D4';
-    g.beginPath();
-    g.arc(sx, sy, r, 0, Math.PI * 2);
-    g.fill();
+    g.globalAlpha = p.a * 0.6;
+    g.drawImage(smokeSprite(), sx - r, sy - r, r * 2, r * 2);
   }
   g.globalAlpha = 1;
 }
@@ -646,15 +666,15 @@ function drawMirror(g: CanvasRenderingContext2D, w: number, h: number, f: Cockpi
 }
 
 // During a spin the camera keeps looking roughly where the car travels instead of turning with it,
-// then swings back to the car's heading. In normal driving it is locked to the heading.
+// then eases back until it meets the car's heading. In normal driving it is locked to the heading.
 export function cameraYaw(p: Car, heading: number): number {
   const now = performance.now() / 1000;
   const dt = Math.max(0, Math.min(0.1, now - camClock));
   camClock = now;
   const spinning = p.spinTime > 0 && Math.abs(p.speed) > 2;
-  if (spinning) recover = RECOVER_S;
-  else recover = Math.max(0, recover - dt);
-  if (!spinning && recover === 0) {
+  if (spinning) recovering = true;
+  else if (recovering && Math.abs(wrapAngle(heading - camYaw)) < SETTLED) recovering = false;
+  if (!spinning && !recovering) {
     camYaw = heading;
     return camYaw;
   }

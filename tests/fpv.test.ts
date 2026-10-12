@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { Camera, clipProject, outX, outY } from '../src/gfx/fpv/engine';
 import { upright } from '../src/gfx/fpv/geom';
 import { buildScene } from '../src/gfx/fpv/scene';
@@ -71,5 +71,28 @@ describe('cockpit camera', () => {
       const yaw = cameraYaw(spin, i * 0.4);
       expect(Math.abs(Math.atan2(Math.sin(yaw), Math.cos(yaw)))).toBeLessThanOrEqual(1.6);
     }
+  });
+
+  it('eases back to the heading after a spin without a final jump', async () => {
+    const { cameraYaw } = await import('../src/gfx/fpv/view');
+    let now = 1000;
+    const clock = vi.spyOn(performance, 'now').mockImplementation(() => now);
+    const spin = { spinTime: 1, speed: 60, moveAngle: 0 } as unknown as Car;
+    for (let i = 0; i < 40; i++) {
+      now += 16;
+      cameraYaw(spin, i * 0.12);
+    }
+    const done = { spinTime: 0, speed: 20, moveAngle: 0 } as unknown as Car;
+    let prev = cameraYaw(done, 2.98);
+    let maxStep = 0;
+    for (let i = 0; i < 200; i++) {
+      now += 16;
+      const yaw = cameraYaw(done, 2.98);
+      maxStep = Math.max(maxStep, Math.abs(Math.atan2(Math.sin(yaw - prev), Math.cos(yaw - prev))));
+      prev = yaw;
+    }
+    clock.mockRestore();
+    expect(prev).toBe(2.98);
+    expect(maxStep).toBeLessThan(0.2);
   });
 });
