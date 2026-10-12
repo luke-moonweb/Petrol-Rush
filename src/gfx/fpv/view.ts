@@ -36,6 +36,7 @@ const GROUND = '#0B0A16';
 const SPIN_LOOK = 0.5;
 const CAM_EASE_S = 0.25;
 const SETTLED = 0.002;
+const MAX_SWING = 2.5;
 const CAR_REACH = 26;
 const OIL_MIN_PX = 6;
 const OWN_SMOKE = 15;
@@ -684,7 +685,7 @@ export function cameraYaw(p: Car, heading: number): number {
     return camYaw;
   }
   if (recovering) {
-    camOff *= 1 - ease;
+    camOff -= Math.sign(camOff) * Math.min(Math.abs(camOff) * ease, MAX_SWING * dt);
     if (Math.abs(camOff) < SETTLED) recovering = false;
     else {
       camYaw = heading + camOff;

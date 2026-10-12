@@ -93,7 +93,7 @@ describe('cockpit camera', () => {
     }
     clock.mockRestore();
     expect(prev).toBe(2.98);
-    expect(maxStep).toBeLessThan(0.2);
+    expect(maxStep).toBeLessThanOrEqual(2.5 * 0.016 + 1e-9);
   });
 
   it('catches up with the heading when a corner follows a spin', async () => {
