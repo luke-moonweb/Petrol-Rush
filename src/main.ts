@@ -26,15 +26,29 @@ input.onBlur = () => {
   audio.suspend();
 };
 
-if (touch) {
-  canvas.addEventListener('pointerdown', (e) => {
-    e.preventDefault();
-    const r = canvas.getBoundingClientRect();
-    const x = ((e.clientX - r.left) / r.width) * CONFIG.SCREEN_W;
-    const y = ((e.clientY - r.top) / r.height) * CONFIG.SCREEN_H;
-    game.state.tap?.(hitAt(x, y), x);
-  });
+function pointAt(e: PointerEvent): { x: number; y: number } {
+  const r = canvas.getBoundingClientRect();
+  return { x: ((e.clientX - r.left) / r.width) * CONFIG.SCREEN_W, y: ((e.clientY - r.top) / r.height) * CONFIG.SCREEN_H };
 }
+
+canvas.addEventListener('pointerdown', (e) => {
+  if (e.pointerType === 'mouse') return;
+  e.preventDefault();
+  const p = pointAt(e);
+  game.state.tap?.(hitAt(p.x, p.y), p.x);
+});
+canvas.addEventListener('pointerup', (e) => {
+  if (e.pointerType !== 'mouse' || e.button !== 0) return;
+  const p = pointAt(e);
+  game.state.tap?.(hitAt(p.x, p.y), p.x);
+});
+canvas.addEventListener('pointermove', (e) => {
+  if (e.pointerType !== 'mouse') return;
+  const p = pointAt(e);
+  const hit = hitAt(p.x, p.y);
+  canvas.style.cursor = hit ? 'pointer' : '';
+  if (hit) game.state.hover?.(hit, p.x);
+});
 
 if (params.debug) (window as unknown as { __game: Game }).__game = game;
 

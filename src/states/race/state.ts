@@ -116,13 +116,16 @@ export class RaceState implements State {
         this.sel = hit.id;
         input.tapVirtual(OPTION_LABELS[hit.id] === 'START RACE' ? 'enter' : tapSide(hit, x));
         break;
-      case 'paused':
       case 'results':
         input.tapVirtual('enter');
         break;
       default:
         break;
     }
+  }
+
+  hover(hit: Hit): void {
+    if (this.phase === 'choose' || this.phase === 'options') this.sel = hit.id;
   }
 
   onBlur(): void {

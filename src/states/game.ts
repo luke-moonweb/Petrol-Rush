@@ -11,6 +11,7 @@ export interface State {
   onBlur?(): void;
   touchLayout?(): TouchLayout;
   tap?(hit: Hit | null, x: number): void;
+  hover?(hit: Hit, x: number): void;
 }
 
 export interface Params {

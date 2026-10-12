@@ -3,7 +3,7 @@ import { CONFIG } from '../config';
 import { BINDABLE, type BindableAction, type Bindings, DEFAULT_BINDINGS, keyLabel, RESERVED_CODES, saveBindings } from '../input';
 import { savePrefs } from '../prefs';
 import type { Hit } from '../ui/hit';
-import { drawSettings, type GameOptionRow, KEYS_ROWS, type SettingsTab, TAB_HIT } from '../ui/menus/settings';
+import { drawSettings, type GameOptionRow, KEYS_C_ALT, KEYS_ROWS, type SettingsTab, TAB_HIT } from '../ui/menus/settings';
 import { type Game, type State, tapSide } from './game';
 
 const ROW_RESET = BINDABLE.length + 1;
@@ -220,9 +220,15 @@ export class SettingsState implements State {
       this.message = null;
       return;
     }
-    this.row = hit.id;
+    this.hover(hit, x);
     const option = this.tab === 'game' && GAME_OPTIONS[hit.id - 1];
     this.game.input.tapVirtual(option ? tapSide(hit, x) : 'enter');
+  }
+
+  hover(hit: Hit, x: number): void {
+    if (this.listening || hit.id >= TAB_HIT) return;
+    this.row = hit.id;
+    if (this.tab === 'keys' && hit.id <= BINDABLE.length) this.col = x >= KEYS_C_ALT - 12 ? 1 : 0;
   }
 
   onBlur(): void {

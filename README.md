@@ -93,6 +93,9 @@ The production build is a static site – `dist/` can be hosted on any static ho
 
 All driving keys can be changed in **SETTINGS → KEYS**. Arrows, Enter and Esc always navigate menus.
 
+Menus also work with the **mouse**: hovering highlights an item, clicking chooses it, and clicking the
+left or right half of a setting row changes its value down or up.
+
 ### 📱 Touch screens
 
 On a phone or tablet (detected via `(hover: none) and (pointer: coarse)`) the game shows on-screen

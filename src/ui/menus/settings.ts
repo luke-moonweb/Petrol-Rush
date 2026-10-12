@@ -24,6 +24,10 @@ export interface SettingsView {
 
 export const KEYS_ROWS = BINDABLE.length + 3;
 export const TAB_HIT = 1000;
+const KEYS_X = 40;
+const KEYS_C_ACTION = KEYS_X + 24;
+const KEYS_C_KEY = KEYS_C_ACTION + 220;
+export const KEYS_C_ALT = KEYS_C_KEY + 150;
 
 function settingsTabs(g: CanvasRenderingContext2D, v: SettingsView, x: number): void {
   const tabs: [SettingsTab, string][] = [
@@ -59,15 +63,15 @@ const TAB_HINTS: [string, string][] = [
 ];
 
 function drawKeysTab(g: CanvasRenderingContext2D, v: SettingsView): void {
-  const px = 40;
+  const px = KEYS_X;
   const py = 80;
   const pw = 560;
   const rowH = 25;
   const ph = 22 + BINDABLE.length * (rowH + 3) + 20;
   darkPanel(g, px, py, pw, ph);
-  const cAction = px + 24;
-  const cKey = cAction + 220;
-  const cAlt = cKey + 150;
+  const cAction = KEYS_C_ACTION;
+  const cKey = KEYS_C_KEY;
+  const cAlt = KEYS_C_ALT;
   const hy = py + 22;
   for (const [label, x] of [
     ['ACTION', cAction],

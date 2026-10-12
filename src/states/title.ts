@@ -93,6 +93,10 @@ export class TitleState implements State {
     }
   }
 
+  hover(hit: Hit): void {
+    this.sel = hit.id;
+  }
+
   tap(hit: Hit | null): void {
     if (!hit) return;
     this.sel = hit.id;
