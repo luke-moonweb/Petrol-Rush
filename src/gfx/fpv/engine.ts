@@ -13,6 +13,7 @@ export interface Poly {
   radius: number;
   emissive?: boolean;
   styles?: string[];
+  plane?: [number, number, number];
 }
 
 export const NEAR = 1.5;
@@ -71,8 +72,23 @@ export function makePoly(pts: [number, number, number][], rgb: RGB, emissive = f
   cx /= n;
   cy /= n;
   let radius = 0;
-  for (let i = 0; i < n; i++) radius = Math.max(radius, Math.hypot(xs[i]! - cx, ys[i]! - cy));
-  return { xs, ys, zs, rgb, cx, cy, radius, emissive };
+  let zMin = Infinity;
+  let zMax = -Infinity;
+  for (let i = 0; i < n; i++) {
+    radius = Math.max(radius, Math.hypot(xs[i]! - cx, ys[i]! - cy));
+    zMin = Math.min(zMin, zs[i]!);
+    zMax = Math.max(zMax, zs[i]!);
+  }
+  const poly: Poly = { xs, ys, zs, rgb, cx, cy, radius, emissive };
+  const ex = xs[1]! - xs[0]!;
+  const ey = ys[1]! - ys[0]!;
+  const len = Math.hypot(ex, ey);
+  if (zMax - zMin > 0.5 && len > 0.01) {
+    const nx = -ey / len;
+    const ny = ex / len;
+    poly.plane = [nx, ny, nx * xs[0]! + ny * ys[0]!];
+  }
+  return poly;
 }
 
 export function hexRgb(hex: string): RGB {

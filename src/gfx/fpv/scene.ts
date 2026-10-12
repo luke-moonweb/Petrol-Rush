@@ -41,6 +41,7 @@ type P3 = [number, number, number];
 
 export const ISLAND_H = 6;
 const WALL_H = 10;
+const SEG = 24;
 const NIGHT: RGB = [0.62, 0.62, 0.8];
 
 function night(hex: string, k = 1): RGB {
@@ -94,7 +95,7 @@ function wall(x0: number, y0: number, x1: number, y1: number, z0: number, z1: nu
 
 function box(out: Poly[], x0: number, y0: number, x1: number, y1: number, z0: number, z1: number, side: RGB, top: RGB, front?: RGB): void {
   const seg = (ax: number, ay: number, bx: number, by: number, c: RGB) => {
-    const n = Math.max(1, Math.ceil(Math.hypot(bx - ax, by - ay) / 60));
+    const n = Math.max(1, Math.ceil(Math.hypot(bx - ax, by - ay) / SEG));
     for (let i = 0; i < n; i++) {
       const t0 = i / n;
       const t1 = (i + 1) / n;
@@ -149,10 +150,17 @@ export function buildScene(): Scene {
   const curb = night(COL.curbFace, 1.6);
   const curbTop = night(COL.curbTop);
   for (let i = 0; i < outline.length; i++) {
-    const [x0, y0] = outline[i]!;
-    const [x1, y1] = outline[(i + 1) % outline.length]!;
-    solids.push(makePoly(wall(x0, y0, x1, y1, 0, ISLAND_H - 1.4), curb));
-    solids.push(makePoly(wall(x0, y0, x1, y1, ISLAND_H - 1.4, ISLAND_H), curbTop));
+    const [ax, ay] = outline[i]!;
+    const [bx, by] = outline[(i + 1) % outline.length]!;
+    const n = Math.max(1, Math.ceil(Math.hypot(bx - ax, by - ay) / SEG));
+    for (let k = 0; k < n; k++) {
+      const x0 = ax + ((bx - ax) * k) / n;
+      const y0 = ay + ((by - ay) * k) / n;
+      const x1 = ax + ((bx - ax) * (k + 1)) / n;
+      const y1 = ay + ((by - ay) * (k + 1)) / n;
+      solids.push(makePoly(wall(x0, y0, x1, y1, 0, ISLAND_H - 1.4), curb));
+      solids.push(makePoly(wall(x0, y0, x1, y1, ISLAND_H - 1.4, ISLAND_H), curbTop));
+    }
   }
   const pad = night('#4A4858');
   island.push(makePoly(rect(PAD_L0 - 8, PAD_TOP, PAD_L0 + 6 * 75 + 2, PIT_LABEL_TOP - CURB_H, ISLAND_H + 0.05), pad));

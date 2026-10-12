@@ -232,6 +232,33 @@ function drawOilSlicks(g: CanvasRenderingContext2D, c: Camera, race: Race, far: 
 
 type Item = { d: number; poly?: import('./engine').Poly; car?: Car; dist?: number; glow?: Glow };
 
+const CAR_REACH = 26;
+
+// Centroid depth alone misplaces a car next to a wall piece. For walls close to a car, the side of the
+// wall plane the car is on (compared with the camera) decides which of the two must be drawn first.
+function orderCarsAgainstWalls(c: Camera, items: Item[]): void {
+  const walls = items.filter((it) => it.poly?.plane);
+  for (const it of items) {
+    if (!it.car) continue;
+    const x = it.car.x;
+    const y = it.car.y;
+    let front = Infinity;
+    let behind = -Infinity;
+    for (const w of walls) {
+      const p = w.poly!;
+      const reach = p.radius + CAR_REACH;
+      if (Math.abs(p.cx - x) > reach || Math.abs(p.cy - y) > reach) continue;
+      const [nx, ny, k] = p.plane!;
+      const sCar = nx * x + ny * y - k;
+      const sCam = nx * c.x + ny * c.y - k;
+      if (sCar * sCam >= 0) front = Math.min(front, w.d);
+      else behind = Math.max(behind, w.d);
+    }
+    if (front !== Infinity) it.d = Math.min(it.d, front - 0.01);
+    if (behind !== -Infinity && behind > it.d) it.d = behind + 0.01;
+  }
+}
+
 function renderWorld(g: CanvasRenderingContext2D, c: Camera, f: CockpitFrame, cheap: boolean): void {
   scene ??= buildScene();
   for (const p of scene.ground) {
@@ -268,6 +295,7 @@ function renderWorld(g: CanvasRenderingContext2D, c: Camera, f: CockpitFrame, ch
     if (dist > carFar || depth < -25) continue;
     items.push({ d: depth, car, dist });
   }
+  orderCarsAgainstWalls(c, items);
   items.sort((a, b) => b.d - a.d);
   for (const it of items) {
     if (it.poly) drawPoly(g, c, it.poly, c.dist(it.poly.cx, it.poly.cy));
