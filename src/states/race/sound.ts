@@ -18,7 +18,7 @@ export class RaceSound {
 
   constructor(private readonly audio: GameAudio) {}
 
-  update(dt: number, race: Race, drive: DriveInput, camX: number): void {
+  update(dt: number, race: Race, drive: DriveInput, camX: number, cockpit = false): void {
     const audio = this.audio;
     const p = race.player;
     this.wallCd = Math.max(0, this.wallCd - dt);
@@ -28,6 +28,16 @@ export class RaceSound {
     const braking = drive.brake && Math.abs(p.speed) > 90 && p.spinTime <= 0;
     audio.setScreech(p.spinTime > 0 ? 1 : p.slideTime > 0 ? 0.7 : braking ? 0.35 : 0);
     audio.setRefuel(p.refueling);
+
+    const pc = Math.cos(p.heading);
+    const ps = Math.sin(p.heading);
+    const panOf = (c: { x: number; y: number }): number | null => {
+      if (cockpit) return Math.max(-1, Math.min(1, ((c.x - p.x) * -ps + (c.y - p.y) * pc) / 120));
+      const sx = c.x - camX;
+      const vw = layout.view.w;
+      if (sx < -40 || sx > vw + 40) return null;
+      return (sx - vw / 2) / (vw / 2);
+    };
 
     let near = 0;
     for (const c of race.cars) if (c !== p && Math.hypot(c.x - p.x, c.y - p.y) < 260) near++;
@@ -50,7 +60,7 @@ export class RaceSound {
         const doppler = Math.max(0.75, Math.min(1.3, (SOUND_C + listener) / (SOUND_C - toward)));
         return {
           mph: c.speed,
-          pan: (c.x - camX - layout.view.w / 2) / (layout.view.w / 2),
+          pan: panOf(c) ?? Math.max(-1, Math.min(1, (c.x - camX - layout.view.w / 2) / (layout.view.w / 2))),
           vol: 1 - dist / 450,
           doppler,
           pitch: 0.88 + (c.colorIdx % 7) * 0.04,
@@ -84,10 +94,8 @@ export class RaceSound {
       if (c === p) continue;
       const prev = this.crashes.get(c.id) ?? 0;
       this.crashes.set(c.id, c.crashes);
-      const sx = c.x - camX;
-      const vw = layout.view.w;
-      if (sx < -40 || sx > vw + 40) continue;
-      const pan = (sx - vw / 2) / (vw / 2);
+      const pan = panOf(c);
+      if (pan === null) continue;
       const vol = 0.45 * Math.max(0.2, 1 - Math.hypot(c.x - p.x, c.y - p.y) / 500);
       if (c.crashes > prev && (c.wallImpact > 0 || c.contactStrength > 0)) audio.crash(40, pan, vol);
       else if (c.wallImpact >= 20) audio.wallHit(c.wallImpact, pan, vol * 0.6);

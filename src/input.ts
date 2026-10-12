@@ -1,4 +1,4 @@
-export type BindableAction = 'left' | 'right' | 'gas' | 'brake' | 'reverse' | 'pause' | 'menu' | 'help' | 'mute';
+export type BindableAction = 'left' | 'right' | 'gas' | 'brake' | 'reverse' | 'camera' | 'pause' | 'menu' | 'help' | 'mute';
 
 export type Action = BindableAction | 'up' | 'down' | 'navLeft' | 'navRight' | 'enter' | 'back' | 'clear' | 'fit' | 'debugSpeed';
 
@@ -10,6 +10,7 @@ export const BINDABLE: { action: BindableAction; label: string }[] = [
   { action: 'gas', label: 'ACCELERATE' },
   { action: 'brake', label: 'BRAKE' },
   { action: 'reverse', label: 'REVERSE GEAR' },
+  { action: 'camera', label: 'CAMERA VIEW' },
   { action: 'pause', label: 'PAUSE' },
   { action: 'menu', label: 'RACE MENU' },
   { action: 'help', label: 'CONTROLS (HELP)' },
@@ -22,6 +23,7 @@ export const DEFAULT_BINDINGS: Bindings = {
   gas: ['ArrowUp', 'KeyW'],
   brake: ['Space', 'ArrowDown'],
   reverse: ['ShiftLeft', null],
+  camera: ['KeyC', null],
   pause: ['KeyP', null],
   menu: ['Tab', null],
   help: ['F1', 'KeyH'],

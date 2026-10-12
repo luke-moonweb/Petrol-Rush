@@ -260,6 +260,19 @@ function carModel(sc: CarScheme, livery: Livery): Face[] {
   ];
 }
 
+const faceCache = new Map<number, Face[]>();
+
+export function carFaces(colorIdx: number): Face[] {
+  let f = faceCache.get(colorIdx);
+  if (!f) {
+    f = carModel(CAR_SCHEMES[colorIdx % CAR_SCHEMES.length]!, LIVERIES[colorIdx % LIVERIES.length]!);
+    faceCache.set(colorIdx, f);
+  }
+  return f;
+}
+
+export const MODEL_SCALE = CAR_SCALE;
+
 const carCache = new Map<string, HTMLCanvasElement>();
 
 export function carDirIndex(heading: number): number {

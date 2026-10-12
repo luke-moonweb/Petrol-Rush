@@ -1,0 +1,163 @@
+// Tiny flat-shaded 3D renderer on top of Canvas 2D: world polygons are moved into camera space,
+// clipped against the near plane, projected and filled back to front (painter's algorithm).
+
+export type RGB = [number, number, number];
+
+export interface Poly {
+  xs: Float32Array;
+  ys: Float32Array;
+  zs: Float32Array;
+  rgb: RGB;
+  cx: number;
+  cy: number;
+  radius: number;
+  emissive?: boolean;
+  styles?: string[];
+}
+
+export const NEAR = 1.5;
+const FOG_LEVELS = 12;
+
+export class Camera {
+  x = 0;
+  y = 0;
+  z = 0;
+  cos = 1;
+  sin = 0;
+  focal = 300;
+  ox = 0;
+  oy = 0;
+  flip = 1;
+  far = 1300;
+  fogNear = 220;
+  fog: RGB = [14, 12, 28];
+
+  set(x: number, y: number, z: number, yaw: number): void {
+    this.x = x;
+    this.y = y;
+    this.z = z;
+    this.cos = Math.cos(yaw);
+    this.sin = Math.sin(yaw);
+  }
+
+  depth(wx: number, wy: number): number {
+    return (wx - this.x) * this.cos + (wy - this.y) * this.sin;
+  }
+
+  dist(wx: number, wy: number): number {
+    return Math.hypot(wx - this.x, wy - this.y);
+  }
+
+  fogLevel(d: number): number {
+    if (d <= this.fogNear) return 0;
+    return Math.min(FOG_LEVELS - 1, Math.floor(((d - this.fogNear) / (this.far - this.fogNear)) * FOG_LEVELS));
+  }
+}
+
+export function makePoly(pts: [number, number, number][], rgb: RGB, emissive = false): Poly {
+  const n = pts.length;
+  const xs = new Float32Array(n);
+  const ys = new Float32Array(n);
+  const zs = new Float32Array(n);
+  let cx = 0;
+  let cy = 0;
+  pts.forEach(([x, y, z], i) => {
+    xs[i] = x;
+    ys[i] = y;
+    zs[i] = z;
+    cx += x;
+    cy += y;
+  });
+  cx /= n;
+  cy /= n;
+  let radius = 0;
+  for (let i = 0; i < n; i++) radius = Math.max(radius, Math.hypot(xs[i]! - cx, ys[i]! - cy));
+  return { xs, ys, zs, rgb, cx, cy, radius, emissive };
+}
+
+export function hexRgb(hex: string): RGB {
+  const n = Number.parseInt(hex.slice(1), 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+
+export function scaleRgb(c: RGB, k: number): RGB {
+  return [Math.min(255, c[0] * k), Math.min(255, c[1] * k), Math.min(255, c[2] * k)];
+}
+
+export function rgbStyle(c: RGB): string {
+  return `rgb(${c[0] | 0},${c[1] | 0},${c[2] | 0})`;
+}
+
+export function polyStyle(p: Poly, cam: Camera, d: number): string {
+  p.styles ??= [];
+  if (p.emissive) {
+    p.styles[0] ??= rgbStyle(p.rgb);
+    return p.styles[0];
+  }
+  const level = cam.fogLevel(d);
+  let s = p.styles[level];
+  if (!s) {
+    const t = level / (FOG_LEVELS - 1);
+    const f = cam.fog;
+    s = rgbStyle([p.rgb[0] + (f[0] - p.rgb[0]) * t, p.rgb[1] + (f[1] - p.rgb[1]) * t, p.rgb[2] + (f[2] - p.rgb[2]) * t]);
+    p.styles[level] = s;
+  }
+  return s;
+}
+
+const CAP = 256;
+const ax = new Float32Array(CAP);
+const ay = new Float32Array(CAP);
+const az = new Float32Array(CAP);
+export const outX = new Float32Array(CAP * 2);
+export const outY = new Float32Array(CAP * 2);
+
+export function clipProject(cam: Camera, xs: ArrayLike<number>, ys: ArrayLike<number>, zs: ArrayLike<number>, n: number): number {
+  for (let i = 0; i < n; i++) {
+    const dx = xs[i]! - cam.x;
+    const dy = ys[i]! - cam.y;
+    az[i] = dx * cam.cos + dy * cam.sin;
+    ax[i] = -dx * cam.sin + dy * cam.cos;
+    ay[i] = zs[i]! - cam.z;
+  }
+  let m = 0;
+  const f = cam.focal;
+  const emit = (x: number, y: number, z: number) => {
+    outX[m] = cam.ox + (cam.flip * f * x) / z;
+    outY[m] = cam.oy - (f * y) / z;
+    m++;
+  };
+  for (let i = 0; i < n; i++) {
+    const p = (i + n - 1) % n;
+    const inC = az[i]! >= NEAR;
+    const inP = az[p]! >= NEAR;
+    if (inC !== inP) {
+      const t = (NEAR - az[p]!) / (az[i]! - az[p]!);
+      emit(ax[p]! + (ax[i]! - ax[p]!) * t, ay[p]! + (ay[i]! - ay[p]!) * t, NEAR);
+    }
+    if (inC) emit(ax[i]!, ay[i]!, az[i]!);
+  }
+  return m;
+}
+
+export function fillProjected(g: CanvasRenderingContext2D, m: number, style: string): void {
+  if (m < 3) return;
+  g.beginPath();
+  g.moveTo(outX[0]!, outY[0]!);
+  for (let i = 1; i < m; i++) g.lineTo(outX[i]!, outY[i]!);
+  g.closePath();
+  g.fillStyle = style;
+  g.fill();
+}
+
+export function visible(p: Poly, cam: Camera): number {
+  const d = cam.dist(p.cx, p.cy);
+  if (d - p.radius > cam.far) return -1;
+  if (cam.depth(p.cx, p.cy) < -p.radius) return -1;
+  return d;
+}
+
+export function drawPoly(g: CanvasRenderingContext2D, cam: Camera, p: Poly, d: number): void {
+  const m = clipProject(cam, p.xs, p.ys, p.zs, p.xs.length);
+  fillProjected(g, m, polyStyle(p, cam, d));
+}

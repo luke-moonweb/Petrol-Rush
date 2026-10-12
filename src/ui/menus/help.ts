@@ -15,6 +15,7 @@ const TOUCH_ROWS: [string, string][] = [
   ['GAS', 'ACCELERATE (RIGHT THUMB)'],
   ['BRAKE', 'BRAKE'],
   ['REV', 'REVERSE GEAR ON / OFF'],
+  ['CAM', 'TOP-DOWN / COCKPIT VIEW'],
   ['❚❚', 'PAUSE'],
   ['☰', 'RACE MENU'],
   ['▲▼ OK', 'MENUS – OR TAP AN ITEM'],
@@ -38,12 +39,13 @@ export function drawHelp(g: CanvasRenderingContext2D, b: Bindings, touch = false
         [k('gas'), 'ACCELERATE'],
         [k('brake'), 'BRAKE'],
         [k('reverse'), 'REVERSE GEAR ON / OFF'],
+        [k('camera'), 'TOP-DOWN / COCKPIT VIEW'],
         [k('pause'), 'PAUSE'],
         [`ESC ${keyLabel(b.menu[0])}`, 'RACE MENU'],
         [k('mute'), 'SOUND ON / OFF'],
       ];
   rows.forEach(([key, label], i) => {
-    const cy = py + 54 + i * 28;
+    const cy = py + 52 + i * 25;
     keycap(g, key, px + 17, cy, 54, 10);
     text(g, label, px + 17 + 76, cy + 4, { font: `bold 11px ${FONT_UI}`, color: PR.cream, shadow: null });
   });
