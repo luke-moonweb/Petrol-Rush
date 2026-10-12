@@ -3,12 +3,15 @@ import type { Car } from '../../race/car';
 import { oilRadius } from '../../race/oil';
 import type { Race } from '../../race/race';
 import { createRng } from '../../sim/rng';
-import { wrapAngle } from '../../track/track';
+import { CY, R_OUT, WORLD_W, wrapAngle } from '../../track/track';
 import { FONT_BLACK, PR } from '../../ui/theme';
 import { shade } from '../sprites';
-import { carFaces, MODEL_SCALE } from '../vehicles';
+import { carFaces, driverName, MODEL_SCALE } from '../vehicles';
+import { trackCanvas } from '../world';
 import { Camera, clipProject, drawPoly, fillProjected, NEAR, visible } from './engine';
+import { setPylonNames } from './landmarks';
 import { buildScene, type Glow, type Scene } from './scene';
+import { type Billboard, drawBillboard, drawTexQuad, type TexQuad } from './texture';
 
 export interface CockpitFrame {
   race: Race;
@@ -230,7 +233,7 @@ function drawOilSlicks(g: CanvasRenderingContext2D, c: Camera, race: Race, far: 
   }
 }
 
-type Item = { d: number; poly?: import('./engine').Poly; car?: Car; dist?: number; glow?: Glow };
+type Item = { d: number; poly?: import('./engine').Poly; car?: Car; dist?: number; glow?: Glow; sign?: TexQuad; bill?: Billboard };
 
 const CAR_REACH = 26;
 
@@ -265,10 +268,15 @@ function renderWorld(g: CanvasRenderingContext2D, c: Camera, f: CockpitFrame, ch
     const d = visible(p, c);
     if (d >= 0) drawPoly(g, c, p, d);
   }
+  drawPools(g, c, scene, cheap ? 300 : 900);
   const decalFar = cheap ? 260 : 650;
   for (const p of scene.decals) {
     const d = visible(p, c);
     if (d >= 0 && d < decalFar) drawPoly(g, c, p, d);
+  }
+  for (const q of scene.groundSigns) {
+    const d = c.dist(q.cx, q.cy);
+    if (d < (cheap ? 200 : q.far) && c.depth(q.cx, q.cy) > -q.radius) drawTexQuad(g, c, q, d);
   }
   drawOilSlicks(g, c, f.race, cheap ? 300 : 700);
   for (const p of scene.island) {
@@ -279,6 +287,17 @@ function renderWorld(g: CanvasRenderingContext2D, c: Camera, f: CockpitFrame, ch
   for (const p of scene.solids) {
     if (visible(p, c) < 0) continue;
     items.push({ d: c.depth(p.cx, p.cy), poly: p });
+  }
+  for (const q of scene.signs) {
+    const dist = c.dist(q.cx, q.cy);
+    if (dist - q.radius > (cheap ? 300 : q.far) || c.depth(q.cx, q.cy) < -q.radius) continue;
+    items.push({ d: c.depth(q.cx, q.cy) - 0.3, sign: q, dist });
+  }
+  for (const b of scene.billboards) {
+    const dist = c.dist(b.x, b.y);
+    const d = c.depth(b.x, b.y);
+    if (dist > c.far || d < NEAR * 2) continue;
+    items.push({ d, bill: b, dist });
   }
   for (const gl of scene.glows) {
     const d = c.depth(gl.x, gl.y);
@@ -301,7 +320,81 @@ function renderWorld(g: CanvasRenderingContext2D, c: Camera, f: CockpitFrame, ch
     if (it.poly) drawPoly(g, c, it.poly, c.dist(it.poly.cx, it.poly.cy));
     else if (it.car) drawCar(g, c, it.car, f, it.dist!);
     else if (it.glow) drawGlows(g, c, [it.glow]);
+    else if (it.sign) drawTexQuad(g, c, it.sign, it.dist!);
+    else if (it.bill) drawBillboard(g, c, it.bill, it.dist!);
   }
+}
+
+function drawPools(g: CanvasRenderingContext2D, c: Camera, sc: Scene, far: number): void {
+  g.globalCompositeOperation = 'lighter';
+  for (const p of sc.pools) {
+    const d = c.dist(p.x, p.y);
+    if (d - p.r > far || c.depth(p.x, p.y) < -p.r) continue;
+    const fade = d > c.fogNear ? Math.max(0, 1 - (d - c.fogNear) / (far - c.fogNear)) : 1;
+    for (const [k, a] of [
+      [1, 0.06],
+      [0.55, 0.07],
+    ] as const) {
+      for (let i = 0; i < 16; i++) {
+        const t = (i / 16) * Math.PI * 2;
+        wx[i] = p.x + Math.cos(t) * p.r * k;
+        wy[i] = p.y + Math.sin(t) * p.r * k;
+        wz[i] = 0.015;
+      }
+      fillProjected(g, clipProject(c, wx, wy, wz, 16), `rgba(255,190,100,${(a * fade).toFixed(3)})`);
+    }
+  }
+  g.globalCompositeOperation = 'source-over';
+}
+
+const MAP_H = CY + R_OUT + 12;
+
+function drawMinimap(g: CanvasRenderingContext2D, w: number, h: number, f: CockpitFrame): void {
+  const mw = Math.round(Math.min(230, w * 0.3));
+  const mh = Math.round((mw * MAP_H) / WORLD_W);
+  const pad = 6;
+  const x0 = w - mw - pad - 8;
+  const y0 = h - mh - pad - 8;
+  const k = mw / WORLD_W;
+  g.fillStyle = 'rgba(10,9,18,0.85)';
+  g.beginPath();
+  g.roundRect(x0 - pad, y0 - pad, mw + pad * 2, mh + pad * 2, 6);
+  g.fill();
+  g.strokeStyle = 'rgba(18,181,166,0.55)';
+  g.lineWidth = 1;
+  g.stroke();
+  g.imageSmoothingEnabled = true;
+  g.drawImage(trackCanvas(), 0, 0, WORLD_W, MAP_H, x0, y0, mw, mh);
+  g.imageSmoothingEnabled = false;
+  const p = f.race.player;
+  const yaw = f.ih(p);
+  const px = x0 + f.ix(p) * k;
+  const py = y0 + f.iy(p) * k;
+  g.fillStyle = 'rgba(127,227,217,0.22)';
+  g.beginPath();
+  g.moveTo(px, py);
+  g.arc(px, py, 26, yaw - 0.55, yaw + 0.55);
+  g.closePath();
+  g.fill();
+  for (const car of f.race.cars) {
+    if (car === p) continue;
+    g.fillStyle = car.finished ? '#8A86A0' : '#FFF8E8';
+    g.fillRect(x0 + f.ix(car) * k - 1.5, y0 + f.iy(car) * k - 1.5, 3, 3);
+  }
+  g.save();
+  g.translate(px, py);
+  g.rotate(yaw);
+  g.fillStyle = PR.teal;
+  g.strokeStyle = '#0A0910';
+  g.lineWidth = 1;
+  g.beginPath();
+  g.moveTo(5, 0);
+  g.lineTo(-3.5, -3.5);
+  g.lineTo(-3.5, 3.5);
+  g.closePath();
+  g.fill();
+  g.stroke();
+  g.restore();
 }
 
 function drawCockpit(g: CanvasRenderingContext2D, w: number, h: number, f: CockpitFrame): void {
@@ -432,6 +525,12 @@ function drawMirror(g: CanvasRenderingContext2D, w: number, h: number, f: Cockpi
 
 export function drawCockpitView(g: CanvasRenderingContext2D, f: CockpitFrame): void {
   if (stars.length === 0) initSky();
+  setPylonNames(
+    f.race
+      .standings()
+      .slice(0, 4)
+      .map((car) => driverName(car.colorIdx).slice(0, 3).toUpperCase()),
+  );
   const v = f.view;
   const p = f.race.player;
   const yaw = f.ih(p);
@@ -458,5 +557,6 @@ export function drawCockpitView(g: CanvasRenderingContext2D, f: CockpitFrame): v
   renderWorld(g, cam, f, false);
   drawCockpit(g, v.w, v.h, f);
   drawMirror(g, v.w, v.h, f, ex, ey, yaw);
+  drawMinimap(g, v.w, v.h, f);
   g.restore();
 }

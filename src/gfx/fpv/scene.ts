@@ -20,6 +20,8 @@ import {
 import { PAD_L0, PAD_TOP, RC_TOP, RC_X0, RC_X1, STAND_TOP, STAND_X0, STAND_X1, TEAMS, UNIT_TOP, UNIT_W, unitXs } from '../track/paddock';
 import { COL } from '../track/style';
 import { hexRgb, makePoly, type Poly, type RGB, scaleRgb } from './engine';
+import { buildLandmarks, type Pool } from './landmarks';
+import type { Billboard, TexQuad } from './texture';
 
 export interface Glow {
   x: number;
@@ -35,6 +37,10 @@ export interface Scene {
   island: Poly[];
   solids: Poly[];
   glows: Glow[];
+  signs: TexQuad[];
+  groundSigns: TexQuad[];
+  billboards: Billboard[];
+  pools: Pool[];
 }
 
 type P3 = [number, number, number];
@@ -44,7 +50,7 @@ const WALL_H = 10;
 const SEG = 24;
 const NIGHT: RGB = [0.62, 0.62, 0.8];
 
-function night(hex: string, k = 1): RGB {
+export function night(hex: string, k = 1): RGB {
   const c = hexRgb(hex);
   return [c[0] * NIGHT[0] * k, c[1] * NIGHT[1] * k, c[2] * NIGHT[2] * k];
 }
@@ -211,5 +217,20 @@ export function buildScene(): Scene {
     mast(x + 100, CY + R_OUT + 14, -1);
   }
 
-  return { ground, decals, island, solids, glows };
+  const lm = buildLandmarks(ISLAND_H, depth);
+  decals.push(...lm.decals);
+  island.push(...lm.island);
+  solids.push(...lm.solids);
+  glows.push(...lm.glows);
+  return {
+    ground,
+    decals,
+    island,
+    solids,
+    glows,
+    signs: [...lm.signs, ...lm.pylon],
+    groundSigns: lm.groundSigns,
+    billboards: lm.billboards,
+    pools: lm.pools,
+  };
 }

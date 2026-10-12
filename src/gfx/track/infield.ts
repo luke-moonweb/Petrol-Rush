@@ -2,8 +2,8 @@ import type { Rng } from '../../sim/rng';
 import { CY, islandOutline } from '../../track/track';
 import { FONT_BLACK } from './style';
 
-const HELI = { x: 300, y: CY - 39, r: 24 };
-const PYLON = { x: 1945, y: CY - 39 };
+export const HELI = { x: 300, y: CY - 39, r: 24 };
+export const PYLON = { x: 1945, y: CY - 39 };
 const palms: { x: number; y: number; s: number }[] = [];
 
 function insideIsland(x: number, y: number, margin: number): boolean {
@@ -146,4 +146,8 @@ export function drawInfieldDecorLights(g: CanvasRenderingContext2D): void {
   g.shadowBlur = 6;
   g.fillRect(x - 1, top - 7, 2, 3);
   g.restore();
+}
+
+export function palmSpots(): readonly { x: number; y: number; s: number }[] {
+  return palms;
 }
