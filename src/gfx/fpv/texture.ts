@@ -123,7 +123,8 @@ function tri(g: CanvasRenderingContext2D, img: HTMLCanvasElement, i0: number, i1
   const my = (y0 + sy[i1]! + sy[i2]!) / 3;
   g.save();
   g.beginPath();
-  for (const [k, i] of [i0, i1, i2].entries()) {
+  for (let k = 0; k < 3; k++) {
+    const i = k === 0 ? i0 : k === 1 ? i1 : i2;
     const ex = sx[i]! - mx;
     const ey = sy[i]! - my;
     const l = Math.hypot(ex, ey) || 1;
@@ -139,7 +140,7 @@ function tri(g: CanvasRenderingContext2D, img: HTMLCanvasElement, i0: number, i1
   g.restore();
 }
 
-const MIN_PX = 3;
+const MIN_PX = 5;
 const us = [0, 0, 0, 0];
 const vs = [0, 0, 0, 0];
 

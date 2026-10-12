@@ -99,7 +99,7 @@ function box(out: Poly[], x0: number, y0: number, x1: number, y1: number, z0: nu
   face(x0, y1, x1, y1, front ?? side);
   face(x0, y0, x0, y1, side);
   const long = x1 - x0 >= y1 - y0;
-  pieces(long ? x0 : x0, y0, long ? x1 : x0, long ? y0 : y1, (a, b, c, d) => {
+  pieces(x0, y0, long ? x1 : x0, long ? y0 : y1, (a, b, c, d) => {
     out.push(makePoly(long ? rect(a, y0, c, y1, z1) : rect(x0, b, x1, d, z1), top));
   });
 }
@@ -129,7 +129,7 @@ function attachSigns(solids: Poly[], signs: TexQuad[]): TexQuad[] {
     }
     const dx = ux / len;
     const dy = uy / len;
-    const cuts: { a: number; b: number; p: Poly }[] = [];
+    const cuts: { a: number; b: number; p: Poly; z: number }[] = [];
     for (const p of solids) {
       if (!p.plane) continue;
       const [nx, ny, k] = p.plane;
@@ -142,7 +142,11 @@ function attachSigns(solids: Poly[], signs: TexQuad[]): TexQuad[] {
       const t1 = ((p.xs[1]! - tl[0]) * dx + (p.ys[1]! - tl[1]) * dy) / len;
       const a = Math.max(0, Math.min(t0, t1));
       const b = Math.min(1, Math.max(t0, t1));
-      if (b - a > 1e-3) cuts.push({ a, b, p });
+      const z = Math.min(zHi, q.pts[0][2]) - Math.max(zLo, q.pts[2][2]);
+      if (b - a <= 1e-3) continue;
+      const same = cuts.findIndex((u) => Math.abs(u.a - a) < 1e-3 && Math.abs(u.b - b) < 1e-3);
+      if (same < 0) cuts.push({ a, b, p, z });
+      else if (z > cuts[same]!.z) cuts[same] = { a, b, p, z };
     }
     if (cuts.length === 0) {
       loose.push(q);

@@ -24,7 +24,7 @@ import {
 import { HELI, PYLON, palmSpots } from '../track/infield';
 import { RC_X0, RC_X1, STAND_TOP, STAND_X0, STAND_X1, TEAMS, UNIT_TOP, UNIT_W, unitXs } from '../track/paddock';
 import { COL, FONT_BLACK } from '../track/style';
-import { hexRgb, makePoly, type Poly, scaleRgb } from './engine';
+import { hexRgb, makePoly, type Poly } from './engine';
 import { groundQuad, type P3, rect, upright, wall } from './geom';
 import { type Billboard, lazyCanvas, type TexQuad, texQuad } from './texture';
 
@@ -94,7 +94,16 @@ export function setPylonNames(names: string[]): void {
   pylonNames.splice(0, pylonNames.length, ...names.slice(0, 4));
 }
 
-function label(w: number, h: number, text: string, bg: string | null, fg: string, font: number, stripe?: string): () => HTMLCanvasElement {
+function label(
+  w: number,
+  h: number,
+  text: string,
+  bg: string | null,
+  fg: string,
+  font: number,
+  stripe?: string,
+  glow = true,
+): () => HTMLCanvasElement {
   return lazyCanvas(w, h, (g) => {
     if (bg) {
       g.fillStyle = bg;
@@ -109,7 +118,7 @@ function label(w: number, h: number, text: string, bg: string | null, fg: string
     g.textBaseline = 'middle';
     g.fillStyle = fg;
     g.shadowColor = fg;
-    g.shadowBlur = Math.max(2, font / 5);
+    g.shadowBlur = glow ? Math.max(2, font / 5) : 0;
     g.fillText(text, w / 2, h / 2 - (stripe ? h / 14 : 0), w - 8);
   });
 }
@@ -190,11 +199,21 @@ const palmTex = lazyCanvas(96, 192, (g) => {
   g.fill();
 });
 
+const garageDoor = lazyCanvas(112, 26, (g) => {
+  const gr = g.createLinearGradient(0, 0, 0, 26);
+  gr.addColorStop(0, '#6E6048');
+  gr.addColorStop(1, '#C8B088');
+  g.fillStyle = gr;
+  g.fillRect(0, 0, 112, 26);
+  g.fillStyle = 'rgba(23,20,43,0.35)';
+  for (let x = 14; x < 112; x += 28) g.fillRect(x, 4, 2, 22);
+});
+
 const digits = new Map<number, () => HTMLCanvasElement>();
 function gridNumber(n: number): () => HTMLCanvasElement {
   let t = digits.get(n);
   if (!t) {
-    t = label(32, 24, String(n), null, 'rgba(255,248,232,0.85)', 18);
+    t = label(32, 24, String(n), null, 'rgba(255,248,232,0.7)', 16, undefined, false);
     digits.set(n, t);
   }
   return t;
@@ -304,11 +323,10 @@ export function buildLandmarks(islandH: number, standDepth: number): Landmarks {
   signs.push(texQuad(upright(hx - 8, hy + 1.3, hx + 8, hy + 1.3, islandH + 3, islandH + 15), hTex));
   signs.push(texQuad(upright(hx + 8, hy - 1.3, hx - 8, hy - 1.3, islandH + 3, islandH + 15), hTex));
 
-  const doorLit = scaleRgb(hexRgb('#FFE2A8'), 0.55);
   unitXs().forEach((x, i) => {
     const tm = TEAMS[i % TEAMS.length]!;
     const y = UNIT_TOP + 52;
-    solids.push(makePoly(wall(x + 8, y + 0.4, x + UNIT_W - 8, y + 0.4, islandH, islandH + 13), doorLit, true));
+    signs.push(texQuad(upright(x + 8, y + 0.4, x + UNIT_W - 8, y + 0.4, islandH, islandH + 13), garageDoor));
     glows.push({ x: x + UNIT_W / 2, y: y + 2, z: islandH + 6, r: 14, color: '255,214,140' });
     pools.push({ x: x + UNIT_W / 2, y: y + 10, r: 26, z: islandH + 0.08 });
     signs.push(

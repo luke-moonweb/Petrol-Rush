@@ -34,14 +34,19 @@ const SKY_TOP = '#05040C';
 const SKY_HORIZON = '#221C3C';
 const GROUND = '#0B0A16';
 const SPIN_LOOK = 0.5;
-const CAM_EASE_S = 0.3;
+const CAM_EASE_S = 0.25;
+const RECOVER_S = 0.6;
 const CAR_REACH = 26;
+const OIL_MIN_PX = 6;
+const OWN_SMOKE = 15;
+const MAX_PUFF_PX = 90;
 
 let scene: Scene | null = null;
 const cam = new Camera();
 const mirrorCam = new Camera();
 let camYaw = Number.NaN;
-let camTime = 0;
+let camClock = 0;
+let recover = 0;
 
 interface Star {
   a: number;
@@ -244,14 +249,17 @@ function drawOilSlicks(g: CanvasRenderingContext2D, c: Camera, race: Race, far: 
       }
       fillProjected(g, clipProject(c, wx, wy, wz, 16), style);
     };
+    const grow = Math.max(1, (OIL_MIN_PX * d) / (c.focal * r * 0.8));
+    const rr = (k: number, style: string) => ring(k * Math.min(grow, 3), style);
     g.globalAlpha = fade;
-    ring(1, 'rgba(4,3,8,0.9)');
+    rr(1, 'rgba(4,3,8,0.9)');
     g.globalCompositeOperation = 'lighter';
-    ring(0.9, 'rgba(200,120,220,0.22)');
-    ring(0.7, 'rgba(70,180,170,0.3)');
-    ring(0.35, 'rgba(230,180,80,0.18)');
+    rr(0.9, 'rgba(200,120,220,0.22)');
+    rr(0.7, 'rgba(70,180,170,0.3)');
+    rr(0.35, 'rgba(230,180,80,0.18)');
     g.globalCompositeOperation = 'source-over';
     g.globalAlpha = 1;
+    if (d > 60) drawGlow(g, c, { x: o.x, y: o.y, z: 0.6, r: Math.min(14, 4 + d * 0.012), color: '127,227,217' });
   }
 }
 
@@ -263,7 +271,7 @@ function drawPools(g: CanvasRenderingContext2D, c: Camera, sc: Scene, far: numbe
     if (d - p.r > far || !c.inView(p.x, p.y, p.r)) continue;
     const fade = d > c.fogNear ? Math.max(0, 1 - (d - c.fogNear) / (far - c.fogNear)) : 1;
     g.globalAlpha = 0.045 * fade;
-    for (const k of [1, 0.66, 0.33]) {
+    for (const k of [1, 0.6]) {
       for (let i = 0; i < 16; i++) {
         const t = (i / 16) * Math.PI * 2;
         wx[i] = p.x + Math.cos(t) * p.r * k;
@@ -323,7 +331,7 @@ function drawPuff(g: CanvasRenderingContext2D, c: Camera, p: NonNullable<Item['p
   const k = c.focal / z;
   const sx = c.ox + c.flip * (-dx * c.sin + dy * c.cos) * k;
   const sy = c.oy - (p.z - c.z) * k;
-  const r = Math.max(p.spark ? 1 : 0.5, p.r * k);
+  const r = Math.min(MAX_PUFF_PX, Math.max(p.spark ? 1 : 0.5, p.r * k));
   g.globalAlpha = p.a;
   if (p.spark) {
     g.globalCompositeOperation = 'lighter';
@@ -397,7 +405,8 @@ function renderWorld(g: CanvasRenderingContext2D, c: Camera, f: CockpitFrame, ch
   }
   if (!cheap) {
     f.particles?.forEachLive((spark, x, y, t, size) => {
-      if (c.dist(x, y) > 500 || !c.inView(x, y, 10)) return;
+      const d = c.dist(x, y);
+      if (d > 500 || (!spark && d < OWN_SMOKE) || !c.inView(x, y, 10)) return;
       const puff = spark
         ? { x, y, z: 2 + (1 - t) * 3, r: size * 0.5, a: 1 - t, spark }
         : { x, y, z: 4 + t * 8, r: size * (1 + t * 2.2), a: 0.45 * (1 - t), spark };
@@ -636,18 +645,26 @@ function drawMirror(g: CanvasRenderingContext2D, w: number, h: number, f: Cockpi
   g.stroke();
 }
 
-// During a spin the camera keeps looking roughly where the car travels instead of turning with it.
-function cameraYaw(p: Car, heading: number, time: number): number {
-  const dt = Math.max(0, Math.min(0.1, time - camTime));
-  camTime = time;
+// During a spin the camera keeps looking roughly where the car travels instead of turning with it,
+// then swings back to the car's heading. In normal driving it is locked to the heading.
+export function cameraYaw(p: Car, heading: number): number {
+  const now = performance.now() / 1000;
+  const dt = Math.max(0, Math.min(0.1, now - camClock));
+  camClock = now;
+  const spinning = p.spinTime > 0 && Math.abs(p.speed) > 2;
+  if (spinning) recover = RECOVER_S;
+  else recover = Math.max(0, recover - dt);
+  if (!spinning && recover === 0) {
+    camYaw = heading;
+    return camYaw;
+  }
   let target = heading;
-  if (p.spinTime > 0 && Math.abs(p.speed) > 2) {
+  if (spinning) {
     const off = wrapAngle(heading - p.moveAngle);
     target = p.moveAngle + Math.max(-SPIN_LOOK, Math.min(SPIN_LOOK, off));
   }
-  if (Number.isNaN(camYaw) || (dt === 0 && p.spinTime <= 0)) camYaw = target;
-  else camYaw += wrapAngle(target - camYaw) * Math.min(1, dt / CAM_EASE_S);
-  if (p.spinTime <= 0 && Math.abs(wrapAngle(target - camYaw)) < 0.002) camYaw = target;
+  if (Number.isNaN(camYaw)) camYaw = target;
+  camYaw += wrapAngle(target - camYaw) * Math.min(1, dt / CAM_EASE_S);
   return camYaw;
 }
 
@@ -662,7 +679,7 @@ export function drawCockpitView(g: CanvasRenderingContext2D, f: CockpitFrame): v
   const v = f.view;
   const p = f.race.player;
   const heading = f.ih(p);
-  const yaw = cameraYaw(p, heading, f.time);
+  const yaw = cameraYaw(p, heading);
   const c = Math.cos(heading);
   const s = Math.sin(heading);
   const ex = f.ix(p) + EYE_BACK * c - EYE_SIDE * s;

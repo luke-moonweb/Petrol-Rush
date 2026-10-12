@@ -3,6 +3,7 @@ import { Camera, clipProject, outX, outY } from '../src/gfx/fpv/engine';
 import { upright } from '../src/gfx/fpv/geom';
 import { buildScene } from '../src/gfx/fpv/scene';
 import { texFacing, texQuad } from '../src/gfx/fpv/texture';
+import type { Car } from '../src/race/car';
 
 function camera(): Camera {
   const c = new Camera();
@@ -57,5 +58,18 @@ describe('first-person renderer', () => {
     expect(texFacing(q, c)).toBe(true);
     c.set(10, -30, 3, Math.PI / 2);
     expect(texFacing(q, c)).toBe(false);
+  });
+});
+
+describe('cockpit camera', () => {
+  it('stays locked to the heading while driving and limits the turn during a spin', async () => {
+    const { cameraYaw } = await import('../src/gfx/fpv/view');
+    const car = { spinTime: 0, speed: 120, moveAngle: 0 } as unknown as Car;
+    for (let i = 0; i < 30; i++) expect(cameraYaw(car, i * 0.05)).toBe(i * 0.05);
+    const spin = { spinTime: 1, speed: 120, moveAngle: 0 } as unknown as Car;
+    for (let i = 0; i < 30; i++) {
+      const yaw = cameraYaw(spin, i * 0.4);
+      expect(Math.abs(Math.atan2(Math.sin(yaw), Math.cos(yaw)))).toBeLessThanOrEqual(1.6);
+    }
   });
 });

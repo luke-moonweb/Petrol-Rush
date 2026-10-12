@@ -131,8 +131,8 @@ export function facesCamera(p: Poly, cam: Camera): boolean {
 }
 
 export function polyStyle(p: Poly, cam: Camera, d: number): string {
-  const level = p.emissive || p.noFog ? 0 : cam.fogLevel(d);
   const useBack = p.back !== undefined && !facesCamera(p, cam);
+  const level = p.emissive || p.noFog || useBack ? 0 : cam.fogLevel(d);
   if (useBack) p.backStyles ??= [];
   else p.styles ??= [];
   const cache = (useBack ? p.backStyles : p.styles)!;
