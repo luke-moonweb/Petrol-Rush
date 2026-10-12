@@ -134,7 +134,8 @@ function drawGlows(g: CanvasRenderingContext2D, c: Camera, glows: Glow[]): void 
   g.globalCompositeOperation = 'source-over';
 }
 
-function drawCar(g: CanvasRenderingContext2D, c: Camera, car: Car, f: CockpitFrame, dist: number, glows: Glow[]): void {
+function drawCar(g: CanvasRenderingContext2D, c: Camera, car: Car, f: CockpitFrame, dist: number): void {
+  const glows: Glow[] = [];
   const h = f.ih(car);
   const ox = f.ix(car);
   const oy = f.iy(car);
@@ -211,6 +212,7 @@ function drawCar(g: CanvasRenderingContext2D, c: Camera, car: Car, f: CockpitFra
       addGlow(glows, gx, gy, 4.6, 8, '255,244,210');
     }
   }
+  drawGlows(g, c, glows);
 }
 
 function drawOilSlicks(g: CanvasRenderingContext2D, c: Camera, race: Race, far: number): void {
@@ -228,7 +230,7 @@ function drawOilSlicks(g: CanvasRenderingContext2D, c: Camera, race: Race, far: 
   }
 }
 
-type Item = { d: number; poly?: import('./engine').Poly; car?: Car; dist?: number };
+type Item = { d: number; poly?: import('./engine').Poly; car?: Car; dist?: number; glow?: Glow };
 
 function renderWorld(g: CanvasRenderingContext2D, c: Camera, f: CockpitFrame, cheap: boolean): void {
   scene ??= buildScene();
@@ -251,6 +253,10 @@ function renderWorld(g: CanvasRenderingContext2D, c: Camera, f: CockpitFrame, ch
     if (visible(p, c) < 0) continue;
     items.push({ d: c.depth(p.cx, p.cy), poly: p });
   }
+  for (const gl of scene.glows) {
+    const d = c.depth(gl.x, gl.y);
+    if (d > NEAR * 2 && d < c.far) items.push({ d: d - 0.5, glow: gl });
+  }
   const player = f.race.player;
   const carFar = Math.min(c.far, CAR_FAR);
   for (const car of f.race.cars) {
@@ -263,12 +269,11 @@ function renderWorld(g: CanvasRenderingContext2D, c: Camera, f: CockpitFrame, ch
     items.push({ d: depth, car, dist });
   }
   items.sort((a, b) => b.d - a.d);
-  const glows: Glow[] = [...scene.glows];
   for (const it of items) {
     if (it.poly) drawPoly(g, c, it.poly, c.dist(it.poly.cx, it.poly.cy));
-    else if (it.car) drawCar(g, c, it.car, f, it.dist!, glows);
+    else if (it.car) drawCar(g, c, it.car, f, it.dist!);
+    else if (it.glow) drawGlows(g, c, [it.glow]);
   }
-  drawGlows(g, c, glows);
 }
 
 function drawCockpit(g: CanvasRenderingContext2D, w: number, h: number, f: CockpitFrame): void {
