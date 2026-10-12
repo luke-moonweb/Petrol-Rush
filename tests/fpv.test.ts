@@ -95,4 +95,25 @@ describe('cockpit camera', () => {
     expect(prev).toBe(2.98);
     expect(maxStep).toBeLessThan(0.2);
   });
+
+  it('catches up with the heading when a corner follows a spin', async () => {
+    const { cameraYaw } = await import('../src/gfx/fpv/view');
+    let now = 5000;
+    const clock = vi.spyOn(performance, 'now').mockImplementation(() => now);
+    const spin = { spinTime: 1, speed: 60, moveAngle: 0 } as unknown as Car;
+    for (let i = 0; i < 40; i++) {
+      now += 16;
+      cameraYaw(spin, i * 0.12);
+    }
+    const done = { spinTime: 0, speed: 60, moveAngle: 0 } as unknown as Car;
+    let heading = 1;
+    let yaw = 0;
+    for (let i = 0; i < 180; i++) {
+      now += 16;
+      heading += 1.4 * 0.016;
+      yaw = cameraYaw(done, heading);
+    }
+    clock.mockRestore();
+    expect(yaw).toBe(heading);
+  });
 });

@@ -47,6 +47,7 @@ const mirrorCam = new Camera();
 let camYaw = Number.NaN;
 let camClock = 0;
 let recovering = false;
+let camOff = 0;
 
 interface Star {
   a: number;
@@ -665,26 +666,32 @@ function drawMirror(g: CanvasRenderingContext2D, w: number, h: number, f: Cockpi
   g.stroke();
 }
 
-// During a spin the camera keeps looking roughly where the car travels instead of turning with it,
-// then eases back until it meets the car's heading. In normal driving it is locked to the heading.
+// During a spin the camera keeps looking roughly where the car travels instead of turning with it.
+// Afterwards it follows the car's heading and only its leftover offset fades out, so turning into the
+// rest of a corner does not leave it trailing. In normal driving it is locked to the heading.
 export function cameraYaw(p: Car, heading: number): number {
   const now = performance.now() / 1000;
   const dt = Math.max(0, Math.min(0.1, now - camClock));
   camClock = now;
-  const spinning = p.spinTime > 0 && Math.abs(p.speed) > 2;
-  if (spinning) recovering = true;
-  else if (recovering && Math.abs(wrapAngle(heading - camYaw)) < SETTLED) recovering = false;
-  if (!spinning && !recovering) {
-    camYaw = heading;
+  const ease = Math.min(1, dt / CAM_EASE_S);
+  if (p.spinTime > 0 && Math.abs(p.speed) > 2) {
+    const off = wrapAngle(heading - p.moveAngle);
+    const target = p.moveAngle + Math.max(-SPIN_LOOK, Math.min(SPIN_LOOK, off));
+    if (Number.isNaN(camYaw)) camYaw = heading;
+    camYaw += wrapAngle(target - camYaw) * ease;
+    camOff = wrapAngle(camYaw - heading);
+    recovering = true;
     return camYaw;
   }
-  let target = heading;
-  if (spinning) {
-    const off = wrapAngle(heading - p.moveAngle);
-    target = p.moveAngle + Math.max(-SPIN_LOOK, Math.min(SPIN_LOOK, off));
+  if (recovering) {
+    camOff *= 1 - ease;
+    if (Math.abs(camOff) < SETTLED) recovering = false;
+    else {
+      camYaw = heading + camOff;
+      return camYaw;
+    }
   }
-  if (Number.isNaN(camYaw)) camYaw = target;
-  camYaw += wrapAngle(target - camYaw) * Math.min(1, dt / CAM_EASE_S);
+  camYaw = heading;
   return camYaw;
 }
 
