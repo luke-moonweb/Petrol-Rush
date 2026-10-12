@@ -7,6 +7,8 @@ import type { Race } from '../../race/race';
 
 const SOUND_C = 700;
 
+const COCKPIT_HEAR = 450;
+
 export class RaceSound {
   private readonly crashes = new Map<number, number>();
   private scrape = 0;
@@ -32,7 +34,10 @@ export class RaceSound {
     const pc = Math.cos(p.heading);
     const ps = Math.sin(p.heading);
     const panOf = (c: { x: number; y: number }): number | null => {
-      if (cockpit) return Math.max(-1, Math.min(1, ((c.x - p.x) * -ps + (c.y - p.y) * pc) / 120));
+      if (cockpit) {
+        if (Math.hypot(c.x - p.x, c.y - p.y) > COCKPIT_HEAR) return null;
+        return Math.max(-1, Math.min(1, ((c.x - p.x) * -ps + (c.y - p.y) * pc) / 120));
+      }
       const sx = c.x - camX;
       const vw = layout.view.w;
       if (sx < -40 || sx > vw + 40) return null;

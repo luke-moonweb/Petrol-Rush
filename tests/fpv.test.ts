@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { Camera, clipProject, NEAR, outX, outY } from '../src/gfx/fpv/engine';
+import { Camera, clipProject, outX, outY } from '../src/gfx/fpv/engine';
+import { upright } from '../src/gfx/fpv/geom';
 import { buildScene } from '../src/gfx/fpv/scene';
+import { texFacing, texQuad } from '../src/gfx/fpv/texture';
 
 function camera(): Camera {
   const c = new Camera();
@@ -27,7 +29,6 @@ describe('first-person renderer', () => {
     const m = clipProject(c, [-20, 40, 40, -20], [-5, -5, 5, 5], [0, 0, 0, 0], 4);
     expect(m).toBe(4);
     for (let i = 0; i < m; i++) expect(Number.isFinite(outX[i]!)).toBe(true);
-    expect(NEAR).toBeGreaterThan(0);
   });
 
   it('builds the static night track scene', () => {
@@ -35,5 +36,26 @@ describe('first-person renderer', () => {
     expect(s.ground.length).toBeGreaterThan(0);
     expect(s.solids.length).toBeGreaterThan(200);
     expect(s.glows.length).toBeGreaterThan(5);
+  });
+
+  it('hangs wall signs on the wall pieces behind them, piece by piece', () => {
+    const s = buildScene();
+    const hung = s.solids.flatMap((p) => p.decals ?? []);
+    expect(hung.length).toBeGreaterThan(40);
+    for (const p of s.solids) {
+      for (const q of p.decals ?? []) {
+        expect(Math.abs(p.plane![0] * q.normal[0] + p.plane![1] * q.normal[1])).toBeGreaterThan(0.99);
+        expect(q.radius).toBeLessThanOrEqual(p.radius + 0.5);
+      }
+    }
+  });
+
+  it('shows signs only from the front', () => {
+    const q = texQuad(upright(0, 10, 20, 10, 0, 5), () => ({}) as HTMLCanvasElement);
+    const c = camera();
+    c.set(10, 50, 3, -Math.PI / 2);
+    expect(texFacing(q, c)).toBe(true);
+    c.set(10, -30, 3, Math.PI / 2);
+    expect(texFacing(q, c)).toBe(false);
   });
 });

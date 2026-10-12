@@ -134,6 +134,12 @@ export class RaceState implements State {
 
   update(dt: number): void {
     const input = this.game.input;
+    if (input.pressed('camera')) {
+      const prefs = this.game.prefs;
+      prefs.camera = prefs.camera === 'top' ? 'cockpit' : 'top';
+      savePrefs(prefs);
+      this.game.audio.ui('move');
+    }
     if (this.game.params.debug && input.pressed('debugSpeed')) {
       this.game.timeScale = this.game.timeScale === 1 ? 4 : this.game.timeScale === 4 ? 8 : 1;
     }
@@ -292,12 +298,6 @@ export class RaceState implements State {
       this.game.set(new HelpState(this.game, this));
       return;
     }
-    if (input.pressed('camera')) {
-      const prefs = this.game.prefs;
-      prefs.camera = prefs.camera === 'top' ? 'cockpit' : 'top';
-      savePrefs(prefs);
-      this.game.audio.ui('move');
-    }
     const p0 = this.race.player;
     const steerKey = (input.isDown('right') ? 1 : 0) - (input.isDown('left') ? 1 : 0);
     const assist = cornerAssist(p0);
@@ -310,7 +310,8 @@ export class RaceState implements State {
       brake: input.isDown('brake'),
       toggleReverse: input.pressed('reverse'),
     };
-    this.steerVis += (drive.steer - this.steerVis) * Math.min(1, dt * 12);
+    const shownSteer = this.race.pitAuto ? this.race.playerDrive.steer : drive.steer;
+    this.steerVis += (shownSteer - this.steerVis) * Math.min(1, dt * 12);
     this.reverseHint = Math.max(0, this.reverseHint - dt);
     if (drive.toggleReverse && !this.race.pitAuto && !p0.reverse && Math.abs(p0.speed) > CONFIG.REVERSE_TOGGLE_MAX_MPH) {
       this.reverseHint = 1.5;
@@ -372,7 +373,7 @@ export class RaceState implements State {
     const ih = (c: Car) => c.prevHeading + wrapAngle(c.heading - c.prevHeading) * a;
     const view = layout.view;
     const cockpit = this.game.prefs.camera === 'cockpit';
-    if (cockpit) drawCockpitView(g, { race, view, ix, iy, ih, steer: this.steerVis, time: race.time });
+    if (cockpit) drawCockpitView(g, { race, view, ix, iy, ih, steer: this.steerVis, time: race.time, particles: this.particles });
     else this.renderTopDown(g, race, ix, iy, ih);
 
     drawHudTop(g, race, this.notice);

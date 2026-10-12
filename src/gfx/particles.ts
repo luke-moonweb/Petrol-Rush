@@ -154,6 +154,10 @@ export class Particles {
     }
   }
 
+  forEachLive(fn: (spark: boolean, x: number, y: number, t: number, size: number) => void): void {
+    for (const p of this.pool) if (p.alive) fn(p.kind === Kind.Spark, p.x, p.y, p.age / p.life, p.size);
+  }
+
   aliveCount(): number {
     return this.pool.reduce((n, p) => n + (p.alive ? 1 : 0), 0);
   }

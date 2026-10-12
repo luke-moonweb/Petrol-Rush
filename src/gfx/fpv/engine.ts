@@ -1,5 +1,6 @@
 // Tiny flat-shaded 3D renderer on top of Canvas 2D: world polygons are moved into camera space,
 // clipped against the near plane, projected and filled back to front (painter's algorithm).
+import type { TexQuad } from './texture';
 
 export type RGB = [number, number, number];
 
@@ -12,12 +13,16 @@ export interface Poly {
   cy: number;
   radius: number;
   emissive?: boolean;
+  noFog?: boolean;
+  back?: RGB;
   styles?: string[];
+  backStyles?: string[];
   plane?: [number, number, number];
+  decals?: TexQuad[];
 }
 
 export const NEAR = 1.5;
-const FOG_LEVELS = 12;
+export const FOG_LEVELS = 12;
 
 export class Camera {
   x = 0;
@@ -28,6 +33,7 @@ export class Camera {
   focal = 300;
   ox = 0;
   oy = 0;
+  halfW = 300;
   flip = 1;
   far = 1300;
   fogNear = 220;
@@ -45,6 +51,10 @@ export class Camera {
     return (wx - this.x) * this.cos + (wy - this.y) * this.sin;
   }
 
+  lateral(wx: number, wy: number): number {
+    return -(wx - this.x) * this.sin + (wy - this.y) * this.cos;
+  }
+
   dist(wx: number, wy: number): number {
     return Math.hypot(wx - this.x, wy - this.y);
   }
@@ -52,6 +62,12 @@ export class Camera {
   fogLevel(d: number): number {
     if (d <= this.fogNear) return 0;
     return Math.min(FOG_LEVELS - 1, Math.floor(((d - this.fogNear) / (this.far - this.fogNear)) * FOG_LEVELS));
+  }
+
+  inView(x: number, y: number, radius: number): boolean {
+    const z = this.depth(x, y);
+    if (z < -radius) return false;
+    return Math.abs(this.lateral(x, y)) - radius <= ((Math.max(z, 0) + radius) * this.halfW) / this.focal;
   }
 }
 
@@ -104,19 +120,26 @@ export function rgbStyle(c: RGB): string {
   return `rgb(${c[0] | 0},${c[1] | 0},${c[2] | 0})`;
 }
 
+export function fogged(c: RGB, fog: RGB, level: number): string {
+  const t = level / (FOG_LEVELS - 1);
+  return rgbStyle([c[0] + (fog[0] - c[0]) * t, c[1] + (fog[1] - c[1]) * t, c[2] + (fog[2] - c[2]) * t]);
+}
+
+export function facesCamera(p: Poly, cam: Camera): boolean {
+  if (!p.plane) return true;
+  return p.plane[0] * cam.x + p.plane[1] * cam.y - p.plane[2] >= 0;
+}
+
 export function polyStyle(p: Poly, cam: Camera, d: number): string {
-  p.styles ??= [];
-  if (p.emissive) {
-    p.styles[0] ??= rgbStyle(p.rgb);
-    return p.styles[0];
-  }
-  const level = cam.fogLevel(d);
-  let s = p.styles[level];
+  const level = p.emissive || p.noFog ? 0 : cam.fogLevel(d);
+  const useBack = p.back !== undefined && !facesCamera(p, cam);
+  if (useBack) p.backStyles ??= [];
+  else p.styles ??= [];
+  const cache = (useBack ? p.backStyles : p.styles)!;
+  let s = cache[level];
   if (!s) {
-    const t = level / (FOG_LEVELS - 1);
-    const f = cam.fog;
-    s = rgbStyle([p.rgb[0] + (f[0] - p.rgb[0]) * t, p.rgb[1] + (f[1] - p.rgb[1]) * t, p.rgb[2] + (f[2] - p.rgb[2]) * t]);
-    p.styles[level] = s;
+    s = fogged(useBack ? p.back! : p.rgb, cam.fog, level);
+    cache[level] = s;
   }
   return s;
 }
@@ -169,7 +192,7 @@ export function fillProjected(g: CanvasRenderingContext2D, m: number, style: str
 export function visible(p: Poly, cam: Camera): number {
   const d = cam.dist(p.cx, p.cy);
   if (d - p.radius > cam.far) return -1;
-  if (cam.depth(p.cx, p.cy) < -p.radius) return -1;
+  if (!cam.inView(p.cx, p.cy, p.radius)) return -1;
   return d;
 }
 

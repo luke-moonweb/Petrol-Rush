@@ -99,11 +99,21 @@ export function loadBindings(): Bindings {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return b;
     const o = JSON.parse(raw) as Partial<Record<BindableAction, unknown>>;
+    const saved = new Set<BindableAction>();
     for (const { action } of BINDABLE) {
       const v = o[action];
       if (!Array.isArray(v) || v.length !== 2) continue;
       const ok = (k: unknown): k is string | null => k === null || (typeof k === 'string' && !RESERVED_CODES.has(k));
-      if (ok(v[0]) && ok(v[1])) b[action] = [v[0], v[1]];
+      if (ok(v[0]) && ok(v[1])) {
+        b[action] = [v[0], v[1]];
+        saved.add(action);
+      }
+    }
+    const used = new Set<string>();
+    for (const action of saved) for (const k of b[action]) if (k) used.add(k);
+    for (const { action } of BINDABLE) {
+      if (saved.has(action)) continue;
+      b[action] = b[action].map((k) => (k && used.has(k) ? null : k)) as [string | null, string | null];
     }
   } catch {}
   return b;
