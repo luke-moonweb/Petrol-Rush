@@ -1,9 +1,9 @@
 import type { GameAudio } from '../../audio/audio';
 import { CONFIG } from '../../config';
+import { layout } from '../../layout';
 import { lapsCompleted } from '../../race/car';
 import type { DriveInput } from '../../race/physics';
 import type { Race } from '../../race/race';
-import { VIEW_W } from './view';
 
 const SOUND_C = 700;
 
@@ -50,7 +50,7 @@ export class RaceSound {
         const doppler = Math.max(0.75, Math.min(1.3, (SOUND_C + listener) / (SOUND_C - toward)));
         return {
           mph: c.speed,
-          pan: (c.x - camX - VIEW_W / 2) / (VIEW_W / 2),
+          pan: (c.x - camX - layout.view.w / 2) / (layout.view.w / 2),
           vol: 1 - dist / 450,
           doppler,
           pitch: 0.88 + (c.colorIdx % 7) * 0.04,
@@ -85,8 +85,9 @@ export class RaceSound {
       const prev = this.crashes.get(c.id) ?? 0;
       this.crashes.set(c.id, c.crashes);
       const sx = c.x - camX;
-      if (sx < -40 || sx > VIEW_W + 40) continue;
-      const pan = (sx - VIEW_W / 2) / (VIEW_W / 2);
+      const vw = layout.view.w;
+      if (sx < -40 || sx > vw + 40) continue;
+      const pan = (sx - vw / 2) / (vw / 2);
       const vol = 0.45 * Math.max(0.2, 1 - Math.hypot(c.x - p.x, c.y - p.y) / 500);
       if (c.crashes > prev && (c.wallImpact > 0 || c.contactStrength > 0)) audio.crash(40, pan, vol);
       else if (c.wallImpact >= 20) audio.wallHit(c.wallImpact, pan, vol * 0.6);

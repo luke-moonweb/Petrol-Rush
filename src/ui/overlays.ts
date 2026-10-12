@@ -1,5 +1,6 @@
 import { CONFIG } from '../config';
 import { carIcon, driverName } from '../gfx/vehicles';
+import { layout } from '../layout';
 import { hintList } from './hints';
 import { addHit } from './hit';
 import { FONT_UI } from './text';
@@ -122,7 +123,7 @@ function hints(g: CanvasRenderingContext2D, list: [string, string][], x: number,
 
 function sidePanel(g: CanvasRenderingContext2D, tag: string, title: string): number {
   g.fillStyle = 'rgba(8,6,18,0.35)';
-  g.fillRect(PANEL_W, TOP, W - PANEL_W, PLAY_H);
+  g.fillRect(PANEL_W, TOP, layout.w - PANEL_W, PLAY_H);
   g.fillStyle = 'rgba(14,12,28,0.94)';
   g.fillRect(0, TOP, PANEL_W, PLAY_H);
   g.save();
@@ -199,7 +200,7 @@ export function drawRaceMenu(g: CanvasRenderingContext2D, v: RaceMenuView): void
   y = statCard(g, y, v.stats) + 16;
   v.items.forEach((it, i) => {
     menuButton(g, it, y, i === v.sel, v.danger.includes(it));
-    addHit(i, PAD, y, PANEL_W - PAD * 2, 34);
+    addHit(g, i, PAD, y, PANEL_W - PAD * 2, 34);
     y += 38;
   });
   hints(
@@ -230,12 +231,12 @@ export function drawRaceSettings(g: CanvasRenderingContext2D, rows: SettingRow[]
     if (r.action) {
       y += 6;
       menuButton(g, r.label, y, selected, false);
-      addHit(i, PAD, y, w, 34);
+      addHit(g, i, PAD, y, w, 34);
       y += 38;
       return;
     }
     const h = 44;
-    addHit(i, PAD, y, w, h);
+    addHit(g, i, PAD, y, w, h);
     g.fillStyle = selected ? 'rgba(18,181,166,0.16)' : '#1C1930';
     g.beginPath();
     g.roundRect(PAD, y, w, h, 4);
@@ -274,6 +275,7 @@ export function drawRaceSettings(g: CanvasRenderingContext2D, rows: SettingRow[]
 }
 
 export function drawPause(g: CanvasRenderingContext2D, keys: { pause: string; help: string }): void {
+  const W = layout.w;
   g.fillStyle = 'rgba(8,6,18,0.6)';
   g.fillRect(0, TOP, W, PLAY_H);
   const cw = 300;

@@ -1,16 +1,14 @@
 import { CONFIG } from '../../config';
+import { layout } from '../../layout';
 import { type Car, lapsCompleted } from '../../race/car';
 import type { Race } from '../../race/race';
 import type { ResultRow } from '../../ui/overlays';
 import { offBall, redBall, text } from '../../ui/text';
 import { FONT_BLACK, PR } from '../../ui/theme';
 
-export const VIEW_X = CONFIG.HUD_LEFT_W;
-export const VIEW_W = CONFIG.SCREEN_W - VIEW_X;
 export const LIGHTS_COUNT = 5;
 export const LIGHT_INTERVAL_S = 1;
 
-const TOP = CONFIG.HUD_TOP_H;
 const SPEED_BAR_MAX_OVER = 20;
 
 export interface StartLights {
@@ -25,8 +23,9 @@ export function drawStartLights(g: CanvasRenderingContext2D, lights: StartLights
   const gap = 10;
   const w = LIGHTS_COUNT * 2 * r + (LIGHTS_COUNT + 1) * gap;
   const h = 2 * r + 2 * 8;
-  const x0 = Math.round(VIEW_X + VIEW_W / 2 - w / 2);
-  const y0 = TOP + 12;
+  const v = layout.view;
+  const x0 = Math.round(v.x + v.w / 2 - w / 2);
+  const y0 = v.y + 12;
   g.fillStyle = PR.night;
   g.fillRect(x0, y0, w, h);
   g.strokeStyle = '#2A2740';
@@ -72,7 +71,12 @@ export function drawRaceMessage(g: CanvasRenderingContext2D, msg: string): void 
   g.save();
   g.shadowColor = PR.amber;
   g.shadowBlur = 8;
-  text(g, msg, VIEW_X + VIEW_W / 2, TOP + 44, { font: `14px ${FONT_BLACK}`, align: 'center', color: PR.amber, shadow: null });
+  text(g, msg, layout.view.x + layout.view.w / 2, layout.view.y + 44, {
+    font: `14px ${FONT_BLACK}`,
+    align: 'center',
+    color: PR.amber,
+    shadow: null,
+  });
   g.restore();
 }
 

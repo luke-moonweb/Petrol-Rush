@@ -3,7 +3,8 @@ import { CONFIG } from '../config';
 import { BINDABLE, type BindableAction, type Bindings, DEFAULT_BINDINGS, keyLabel, RESERVED_CODES, saveBindings } from '../input';
 import { savePrefs } from '../prefs';
 import type { Hit } from '../ui/hit';
-import { drawSettings, type GameOptionRow, KEYS_C_ALT, KEYS_ROWS, type SettingsTab, TAB_HIT } from '../ui/menus/settings';
+import { menuScreen } from '../ui/menus/common';
+import { drawSettings, type GameOptionRow, KEYS_ALT_FRAC, KEYS_ROWS, type SettingsTab, TAB_HIT } from '../ui/menus/settings';
 import { type Game, type State, tapSide } from './game';
 
 const ROW_RESET = BINDABLE.length + 1;
@@ -228,7 +229,7 @@ export class SettingsState implements State {
   hover(hit: Hit, x: number): void {
     if (this.listening || hit.id >= TAB_HIT) return;
     this.row = hit.id;
-    if (this.tab === 'keys' && hit.id <= BINDABLE.length) this.col = x >= KEYS_C_ALT - 12 ? 1 : 0;
+    if (this.tab === 'keys' && hit.id <= BINDABLE.length) this.col = (x - hit.x) / hit.w >= KEYS_ALT_FRAC ? 1 : 0;
   }
 
   onBlur(): void {
@@ -237,14 +238,16 @@ export class SettingsState implements State {
   }
 
   render(g: CanvasRenderingContext2D): void {
-    drawSettings(g, {
-      tab: this.tab,
-      row: this.row,
-      col: this.col,
-      listening: this.listening,
-      message: this.message,
-      bindings: this.bindings,
-      game: this.gameRows(),
-    });
+    menuScreen(g, () =>
+      drawSettings(g, {
+        tab: this.tab,
+        row: this.row,
+        col: this.col,
+        listening: this.listening,
+        message: this.message,
+        bindings: this.bindings,
+        game: this.gameRows(),
+      }),
+    );
   }
 }

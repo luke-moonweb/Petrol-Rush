@@ -2,7 +2,7 @@ import { CONFIG } from '../../config';
 import { addHit } from '../hit';
 import { FONT_UI } from '../text';
 import { FONT_BLACK, PR } from '../theme';
-import { circle, footerHints, H, logoText, tag, W } from './common';
+import { circle, footerHints, H, logoText, tag } from './common';
 
 export const TITLE_ITEMS = ['NEW GAME', 'CONTROLS', 'SETTINGS', 'CREDITS'];
 
@@ -11,9 +11,11 @@ export interface TitleView {
   lap: number;
   laps: number;
   top: string[];
+  w: number;
 }
 
 export function drawTitle(g: CanvasRenderingContext2D, v: TitleView): void {
+  const W = v.w;
   const top = CONFIG.HUD_TOP_H;
   const shade = g.createLinearGradient(0, 0, 360, 0);
   shade.addColorStop(0, 'rgba(14,12,28,0.92)');
@@ -64,7 +66,7 @@ export function drawTitle(g: CanvasRenderingContext2D, v: TitleView): void {
   TITLE_ITEMS.forEach((item, i) => {
     const ry = y + i * (rowH + 3);
     const sel = i === v.sel;
-    addHit(i, x, ry, w, rowH);
+    addHit(g, i, x, ry, w, rowH);
     g.fillStyle = sel ? PR.teal : 'rgba(28,25,48,0.92)';
     g.fillRect(x, ry, w, rowH);
     g.fillStyle = sel ? PR.night : PR.mango;
@@ -106,5 +108,6 @@ export function drawTitle(g: CanvasRenderingContext2D, v: TitleView): void {
       ['M', 'SOUND'],
     ],
     456,
+    W / 2,
   );
 }

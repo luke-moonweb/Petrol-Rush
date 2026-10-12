@@ -1,3 +1,4 @@
+import { menuScreen } from '../ui/menus/common';
 import { drawHelp } from '../ui/menus/help';
 import type { Game, State } from './game';
 
@@ -20,6 +21,6 @@ export class HelpState implements State {
   }
 
   render(g: CanvasRenderingContext2D): void {
-    drawHelp(g, this.game.input.getBindings(), this.game.touch);
+    menuScreen(g, () => drawHelp(g, this.game.input.getBindings(), this.game.touch));
   }
 }

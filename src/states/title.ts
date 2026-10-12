@@ -2,6 +2,7 @@ import { CONFIG } from '../config';
 import { Particles } from '../gfx/particles';
 import { driverName } from '../gfx/vehicles';
 import { drawCars, drawOil, trackCanvas } from '../gfx/world';
+import { layout } from '../layout';
 import { type Car, lapsCompleted } from '../race/car';
 import { Race } from '../race/race';
 import { trackHeadingAt, WORLD_W, wrapAngle } from '../track/track';
@@ -13,7 +14,6 @@ import { HelpState } from './info';
 import { RaceState } from './race/state';
 import { SettingsState } from './settings';
 
-const W = CONFIG.SCREEN_W;
 const TOP = CONFIG.HUD_TOP_H;
 const DEMO_LAPS = 18;
 const DEMO_WARMUP_S = 12;
@@ -46,6 +46,7 @@ export class TitleState implements State {
   private camTarget(): number {
     const lead = this.demo.standings()[0]!;
     const x = lead.x + CAM_LEAD * Math.cos(trackHeadingAt(lead.x, lead.y));
+    const W = layout.w;
     return Math.min(Math.max(x - W / 2, 0), WORLD_W - W);
   }
 
@@ -111,8 +112,12 @@ export class TitleState implements State {
     const ih = (c: Car) => c.prevHeading + wrapAngle(c.heading - c.prevHeading) * alpha;
     const camX = Math.round(this.prevCamX + (this.camX - this.prevCamX) * alpha);
 
+    const W = layout.w;
+    const dy = Math.round((layout.h - CONFIG.SCREEN_H) / 2);
     g.fillStyle = '#000';
-    g.fillRect(0, 0, W, CONFIG.SCREEN_H);
+    g.fillRect(0, 0, W, layout.h);
+    g.save();
+    g.translate(0, dy);
     g.save();
     g.translate(0, TOP);
     g.beginPath();
@@ -131,6 +136,8 @@ export class TitleState implements State {
       lap: Math.min(race.laps, lapsCompleted(order[0]!) + 1),
       laps: race.laps,
       top: order.slice(0, 5).map((c) => driverName(c.colorIdx)),
+      w: W,
     });
+    g.restore();
   }
 }

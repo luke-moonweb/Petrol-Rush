@@ -34,9 +34,10 @@ describe('virtual (touch) input', () => {
 
 describe('menu hit areas', () => {
   it('returns the topmost area under the point', () => {
+    const g = { getTransform: () => ({ a: 1, d: 1, e: 0, f: 0 }) } as unknown as CanvasRenderingContext2D;
     clearHits();
-    addHit(0, 0, 0, 100, 100);
-    addHit(1, 50, 50, 20, 20);
+    addHit(g, 0, 0, 0, 100, 100);
+    addHit(g, 1, 50, 50, 20, 20);
     expect(hitAt(60, 60)?.id).toBe(1);
     expect(hitAt(10, 10)?.id).toBe(0);
     expect(hitAt(200, 10)).toBeNull();

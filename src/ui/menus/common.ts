@@ -1,4 +1,5 @@
 import { CONFIG } from '../../config';
+import { frameRect, inFrame, layout } from '../../layout';
 import { hintList } from '../hints';
 import { FONT_UI, text } from '../text';
 import { FONT_BLACK, PR } from '../theme';
@@ -136,7 +137,7 @@ export function keycap(g: CanvasRenderingContext2D, label: string, x: number, cy
   return w;
 }
 
-export function footerHints(g: CanvasRenderingContext2D, hints: [string, string][], cy: number): void {
+export function footerHints(g: CanvasRenderingContext2D, hints: [string, string][], cy: number, cx = W / 2): void {
   const gap = 22;
   g.font = `bold 11px ${FONT_UI}`;
   const parts = hintList(hints).map(([k, l]) => {
@@ -146,7 +147,7 @@ export function footerHints(g: CanvasRenderingContext2D, hints: [string, string]
     return { k, l, kw, w: kw + 7 + lw };
   });
   const total = parts.reduce((s, p) => s + p.w, 0) + gap * (parts.length - 1);
-  let x = W / 2 - total / 2;
+  let x = cx - total / 2;
   for (const p of parts) {
     rrect(g, x, cy - 8, p.kw, 16, 3, PR.mango);
     g.fillStyle = PR.ink;
@@ -170,6 +171,17 @@ export function stripesBg(g: CanvasRenderingContext2D): void {
   g.fillRect(0, 430, W, 5);
   g.fillStyle = PR.ink;
   g.fillRect(0, 435, W, 45);
+}
+
+export function menuScreen(g: CanvasRenderingContext2D, draw: () => void): void {
+  const f = frameRect();
+  g.fillStyle = PR.mango;
+  g.fillRect(0, 0, layout.w, layout.h);
+  g.fillStyle = PR.red;
+  g.fillRect(0, f.y + 430 * f.s, layout.w, 5 * f.s);
+  g.fillStyle = PR.ink;
+  g.fillRect(0, f.y + 435 * f.s, layout.w, layout.h);
+  inFrame(g, draw);
 }
 
 export function screenHeader(g: CanvasRenderingContext2D, title: string, tagText: string): void {

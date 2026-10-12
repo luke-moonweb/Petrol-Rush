@@ -1,6 +1,7 @@
 import { GameAudio } from './audio/audio';
 import { CONFIG } from './config';
 import { Input, loadBindings } from './input';
+import { computeLayout, FRAME_H, FRAME_W, layout, setLayout } from './layout';
 import { Game, loadOptions, readParams } from './states/game';
 import { RaceState } from './states/race/state';
 import { TitleState } from './states/title';
@@ -28,7 +29,7 @@ input.onBlur = () => {
 
 function pointAt(e: PointerEvent): { x: number; y: number } {
   const r = canvas.getBoundingClientRect();
-  return { x: ((e.clientX - r.left) / r.width) * CONFIG.SCREEN_W, y: ((e.clientY - r.top) / r.height) * CONFIG.SCREEN_H };
+  return { x: ((e.clientX - r.left) / r.width) * layout.w, y: ((e.clientY - r.top) / r.height) * layout.h };
 }
 
 canvas.addEventListener('pointerdown', (e) => {
@@ -59,16 +60,17 @@ function resize(): void {
   const vw = window.innerWidth;
   const vh = window.innerHeight;
   const box = touch ? touch.gameBox(vw, vh) : { x: 0, y: 0, w: vw, h: vh };
-  const s = Math.min(box.w / CONFIG.SCREEN_W, box.h / CONFIG.SCREEN_H);
+  setLayout(touch ? computeLayout(FRAME_W, FRAME_H) : computeLayout(box.w, box.h));
+  const s = Math.min(box.w / layout.w, box.h / layout.h);
   const scale = game.fit || s < 1 ? s : Math.floor(s);
-  const cssW = Math.floor(CONFIG.SCREEN_W * scale);
-  const cssH = Math.floor(CONFIG.SCREEN_H * scale);
+  const cssW = Math.floor(layout.w * scale);
+  const cssH = Math.floor(layout.h * scale);
   const dpr = window.devicePixelRatio || 1;
   canvas.style.width = `${cssW}px`;
   canvas.style.height = `${cssH}px`;
   canvas.width = Math.round(cssW * dpr);
   canvas.height = Math.round(cssH * dpr);
-  renderScale = canvas.width / CONFIG.SCREEN_W;
+  renderScale = canvas.width / layout.w;
   if (touch) {
     const rect = {
       x: Math.round(box.x + (box.w - cssW) / 2),
@@ -110,7 +112,7 @@ function frame(now: number): void {
   touch?.update(game.state.touchLayout?.() ?? 'menu');
   ctx.setTransform(renderScale, 0, 0, renderScale, 0, 0);
   ctx.imageSmoothingEnabled = false;
-  clearHits();
+  clearHits(renderScale);
   game.state.render(ctx, Math.min(1, acc / STEP));
   requestAnimationFrame(frame);
 }

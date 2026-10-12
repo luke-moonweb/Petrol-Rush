@@ -1,5 +1,6 @@
 import { AUTHOR_NAME, AUTHOR_URL, REPO_URL } from '../meta';
 import type { Hit } from '../ui/hit';
+import { menuScreen } from '../ui/menus/common';
 import { CREDITS_ITEMS, drawCredits } from '../ui/menus/credits';
 import type { Game, State } from './game';
 
@@ -47,6 +48,6 @@ export class CreditsState implements State {
   }
 
   render(g: CanvasRenderingContext2D): void {
-    drawCredits(g, { sel: this.sel, author: AUTHOR_NAME, links: LINKS });
+    menuScreen(g, () => drawCredits(g, { sel: this.sel, author: AUTHOR_NAME, links: LINKS }));
   }
 }

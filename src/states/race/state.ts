@@ -2,13 +2,14 @@ import { CONFIG, LAP_CHOICES, QUALIFYING_CHOICES, type RaceOptions } from '../..
 import { Particles } from '../../gfx/particles';
 import { drawCars, drawOil, trackCanvas } from '../../gfx/world';
 import { keyLabel } from '../../input';
+import { inFrame, layout } from '../../layout';
 import { type Car, lapsCompleted } from '../../race/car';
 import { cornerAssist, type DriveInput, SteerRamp, skidWarning } from '../../race/physics';
 import { NUM_COLORS, Race } from '../../race/race';
 import type { TouchLayout } from '../../touch';
 import { deltaS, inTurn, trackHeadingAt, WORLD_W, wrapAngle } from '../../track/track';
 import type { Hit } from '../../ui/hit';
-import { drawFuelGauge, drawHudTop, drawSkidLamp, drawSpeedo, drawTower } from '../../ui/hud';
+import { drawHudPanel, drawHudTop, drawSkidLamp } from '../../ui/hud';
 import { drawPause, drawRaceMenu, drawRaceSettings, drawResults, type SettingRow, type StatField } from '../../ui/overlays';
 import { ordinal } from '../../ui/text';
 import { PR } from '../../ui/theme';
@@ -24,15 +25,10 @@ import {
   LIGHTS_COUNT,
   resultRows,
   type StartLights,
-  VIEW_W,
-  VIEW_X,
 } from './view';
 
 type Phase = 'choose' | 'options' | 'running' | 'paused' | 'results';
 
-const W = CONFIG.SCREEN_W;
-const PLAY_H = CONFIG.PLAY_H;
-const TOP = CONFIG.HUD_TOP_H;
 const CRASH_WARN_PX = 1100;
 const NOTICE_S = 4;
 const RADIO_GAP_S = 8;
@@ -350,7 +346,8 @@ export class RaceState implements State {
   private camXFor(x: number): number {
     const p = this.race.player;
     const off = Number.isNaN(this.camOff) ? CONFIG.CAMERA_LEAD * Math.cos(trackHeadingAt(p.x, p.y)) : this.camOff;
-    return Math.min(Math.max(Math.round(x + off) - VIEW_W / 2, 0), WORLD_W - VIEW_W);
+    const vw = layout.view.w;
+    return Math.min(Math.max(Math.round(x + off) - vw / 2, 0), WORLD_W - vw);
   }
 
   render(g: CanvasRenderingContext2D, alpha = 1): void {
@@ -365,15 +362,16 @@ export class RaceState implements State {
     const ih = (c: Car) => c.prevHeading + wrapAngle(c.heading - c.prevHeading) * a;
     const camX = this.camXFor(Math.round(ix(race.player)));
     g.save();
-    g.translate(VIEW_X, TOP);
+    const view = layout.view;
+    g.translate(view.x, view.y);
     g.beginPath();
-    g.rect(0, 0, VIEW_W, PLAY_H);
+    g.rect(0, 0, view.w, view.h);
     g.clip();
-    g.drawImage(trackCanvas(), camX, 0, VIEW_W, PLAY_H, 0, 0, VIEW_W, PLAY_H);
-    drawOil(g, race.oil, camX, VIEW_W);
+    g.drawImage(trackCanvas(), camX, 0, view.w, view.h, 0, 0, view.w, view.h);
+    drawOil(g, race.oil, camX, view.w);
     this.particles.renderSmoke(g, camX);
 
-    drawCars(g, race.cars, camX, VIEW_W, ix, iy, ih);
+    drawCars(g, race.cars, camX, view.w, ix, iy, ih);
     this.particles.renderSparks(g, camX);
     const px = Math.round(ix(race.player)) - camX;
     const py = Math.round(iy(race.player)) - 26;
@@ -388,10 +386,8 @@ export class RaceState implements State {
     g.restore();
 
     drawHudTop(g, race, this.notice);
-    drawTower(g, race);
-    drawSpeedo(g, race.player.speed, 62, 396, 54);
-    drawFuelGauge(g, race.player.fuel, race.time, 62, 456, 34);
-    drawSkidLamp(g, this.phase === 'running' && race.started ? skidWarning(race.player) : 0, race.time, W - 6, TOP + 6);
+    drawHudPanel(g, race);
+    drawSkidLamp(g, this.phase === 'running' && race.started ? skidWarning(race.player) : 0, race.time, view.x + view.w - 6, view.y + 6);
     const msg = this.message();
     if (msg) drawRaceMessage(g, msg);
     if (this.lights && this.phase !== 'choose' && this.phase !== 'options') drawStartLights(g, this.lights);
@@ -410,7 +406,9 @@ export class RaceState implements State {
         break;
       }
       case 'results':
-        drawResults(g, resultRows(race), race.player.finished ? race.classification().indexOf(race.player) + 1 : 0);
+        g.fillStyle = 'rgba(8,6,18,0.55)';
+        g.fillRect(0, 0, layout.w, layout.h);
+        inFrame(g, () => drawResults(g, resultRows(race), race.player.finished ? race.classification().indexOf(race.player) + 1 : 0));
         break;
       default:
         break;
@@ -418,7 +416,7 @@ export class RaceState implements State {
 
     if (overlayImg?.complete && overlayImg.naturalWidth > 0) {
       g.globalAlpha = 0.5;
-      g.drawImage(overlayImg, 0, 0, W, CONFIG.SCREEN_H);
+      g.drawImage(overlayImg, 0, 0, layout.w, layout.h);
       g.globalAlpha = 1;
     }
     if (this.game.params.debug) drawDebug(g, this.debugLines());

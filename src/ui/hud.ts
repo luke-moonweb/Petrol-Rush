@@ -1,5 +1,6 @@
 import { CONFIG } from '../config';
 import { CAR_SCHEMES, driverName } from '../gfx/vehicles';
+import { type Box, layout } from '../layout';
 import { lapsCompleted, progress } from '../race/car';
 import type { Race } from '../race/race';
 import { TRACK_LEN } from '../track/track';
@@ -8,7 +9,6 @@ import { FONT_BLACK, PR } from './theme';
 
 const HUD_EDGE = '#2A2740';
 
-const W = CONFIG.SCREEN_W;
 const TOP_H = CONFIG.HUD_TOP_H;
 
 function label(g: CanvasRenderingContext2D, str: string, x: number, y: number, color: string = PR.muted): number {
@@ -50,9 +50,9 @@ function glowText(
 export function drawHudTop(g: CanvasRenderingContext2D, race: Race, notice: { text: string; age: number } | null = null): void {
   const p = race.player;
   g.fillStyle = PR.night;
-  g.fillRect(0, 0, W, TOP_H);
+  g.fillRect(0, 0, layout.w, TOP_H);
   g.fillStyle = HUD_EDGE;
-  g.fillRect(0, TOP_H - 1, W, 1);
+  g.fillRect(0, TOP_H - 1, layout.w, 1);
 
   g.fillStyle = PR.red;
   g.fillRect(0, 0, 66, TOP_H - 1);
@@ -84,7 +84,7 @@ export function drawHudTop(g: CanvasRenderingContext2D, race: Race, notice: { te
   g.font = `10px ${FONT_BLACK}`;
   const wOf = g.measureText(of).width;
   const blockW = 12 + 22 + 4 + wPos + 4 + wOf + 12;
-  const bx = W - blockW;
+  const bx = layout.w - blockW;
   let noticeEnd = bx - 12;
   if (p.penalty > 0 && !p.finished) {
     const proj = `→ P${race.projectedPosition(p)}`;
@@ -155,17 +155,36 @@ function gapLabel(race: Race, i: number, list: ReturnType<Race['standings']>): s
   return gap === null ? '—' : `+${gap.toFixed(2)}`;
 }
 
-export function drawTower(g: CanvasRenderingContext2D, race: Race): void {
-  const list = race.standings();
-  const colW = CONFIG.HUD_LEFT_W;
+export function drawHudPanel(g: CanvasRenderingContext2D, race: Race): void {
+  const b = layout.panel;
   g.fillStyle = PR.night;
-  g.fillRect(0, TOP_H, colW, CONFIG.SCREEN_H - TOP_H);
+  g.fillRect(b.x, b.y, b.w, b.h);
   g.fillStyle = HUD_EDGE;
-  g.fillRect(colW - 1, TOP_H, 1, CONFIG.SCREEN_H - TOP_H);
-  const x = 4;
-  const w = colW - 10;
+  const p = race.player;
+  if (layout.mode === 'wide') {
+    g.fillRect(b.x + b.w - 1, b.y, 1, b.h);
+    drawTower(g, race, { x: b.x, y: b.y, w: b.w, h: b.h }, 1);
+    drawSpeedo(g, p.speed, b.x + 62, b.y + 372, 54);
+    drawFuelGauge(g, p.fuel, race.time, b.x + 62, b.y + 432, 34);
+    return;
+  }
+  const gaugeW = 132;
+  g.fillRect(b.x, b.y, b.w, 1);
+  g.fillRect(b.x + gaugeW, b.y, 1, b.h);
+  drawSpeedo(g, p.speed, b.x + gaugeW / 2, b.y + 72, 54);
+  drawFuelGauge(g, p.fuel, race.time, b.x + gaugeW / 2, b.y + 146, 34);
+  drawTower(g, race, { x: b.x + gaugeW, y: b.y, w: b.w - gaugeW, h: b.h }, 2);
+}
+
+function drawTower(g: CanvasRenderingContext2D, race: Race, box: Box, cols: number): void {
+  const list = race.standings();
+  const x0 = box.x + 4;
+  const colGap = 6;
+  const w = (box.w - 10 - colGap * (cols - 1)) / cols;
   const rowH = 14;
-  let y = TOP_H + 6;
+  const perCol = Math.ceil(list.length / cols);
+  let x = x0;
+  let y = box.y + 6;
   const p = race.player;
   const lap = p.finished ? race.laps : Math.min(race.laps, lapsCompleted(p) + 1);
   g.fillStyle = 'rgba(14,12,28,0.88)';
@@ -180,9 +199,13 @@ export function drawTower(g: CanvasRenderingContext2D, race: Race): void {
   g.fillText(`${lap}/${race.laps}`, x + w - 6, y + 12);
   y += 18;
   g.fillStyle = 'rgba(14,12,28,0.82)';
-  g.fillRect(x, y, w, list.length * rowH + 2);
+  for (let c = 0; c < cols; c++) {
+    const n = Math.min(perCol, list.length - c * perCol);
+    if (n > 0) g.fillRect(x0 + c * (w + colGap), y, w, n * rowH + 2);
+  }
   list.forEach((car, i) => {
-    const ry = y + 1 + i * rowH;
+    x = x0 + Math.floor(i / perCol) * (w + colGap);
+    const ry = y + 1 + (i % perCol) * rowH;
     const me = car.isPlayer;
     if (me) {
       g.fillStyle = 'rgba(18,181,166,0.35)';
