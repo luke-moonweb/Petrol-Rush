@@ -135,6 +135,8 @@ export class SegmentTrack implements Track {
   /** Length of the main straight, and where on it the finish line is. */
   readonly mainLen: number;
   readonly finishAt: number;
+  /** s at the start of the main straight. */
+  readonly startS: number;
   private readonly arcStarts: number[];
   private readonly kerbL: Float32Array;
   private readonly kerbR: Float32Array;
@@ -189,7 +191,8 @@ export class SegmentTrack implements Track {
       }
     }
     const start = this.segments[0] as Line;
-    this.pit = new StraightPit(pitGeo(start.x0, start.y0, this.mainLen));
+    this.startS = this.wrapS(-this.finishAt);
+    this.pit = new StraightPit(pitGeo(start.x0, start.y0, this.mainLen), this);
     const firstArc = this.segments.find((g) => g.kind === 'arc') as Arc;
     this.gridSide = -firstArc.corner.dir;
   }
@@ -297,10 +300,11 @@ export class SegmentTrack implements Track {
   constrain(p: Constrainable): WallNormal | null {
     const { s, d } = this.project(p.x, p.y);
     const [kl, kr] = this.kerbs(s);
-    const lo = -(HALF_W + kl) + CAR_R;
+    let lo = -(HALF_W + kl) + CAR_R;
     if (this.mainU(s) >= 0) {
-      const pit = this.pit.constrain(p, lo);
+      const pit = this.pit.constrain(p);
       if (pit !== undefined) return pit;
+      lo = Math.min(lo, this.pit.taperEdge(p.x - this.pit.geo.x0) ?? lo);
     } else p.wasInPit = false;
     const hi = HALF_W + kr - CAR_R;
     if (d >= lo && d <= hi) return null;
