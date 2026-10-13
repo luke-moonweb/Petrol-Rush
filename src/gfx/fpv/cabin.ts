@@ -19,7 +19,7 @@ const SOIL_CLEAR_S = 2.5;
 const OIL_SPLASH_S = 0.4;
 const HIT_MIN = 6;
 const HIT_FULL = 36;
-const JOLT_GAP_S = 0.25;
+export const JOLT_GAP_S = 0.25;
 const GREEN_S = 0.4;
 const CASCADE_LED_S = 0.08;
 const CASCADE_LOOPS = 3;
@@ -165,7 +165,7 @@ function leds(s: CabinInput, mph: number): (string | null)[] {
   }
   if (s.spinTime > 0) {
     const age = CONFIG.SPIN_MAX_S - s.spinTime;
-    if (age < SPIN_FLASH_S) return all(on(t, 3) ? PR.red : null);
+    if (age < SPIN_FLASH_S) return all(on(age, 3) ? PR.red : null);
     const head = Math.floor(t / 0.06);
     for (let i = 0; i < CHASE_LEN; i++) out[(head + i) % LED_COUNT] = PR.red;
     return out;
@@ -219,8 +219,8 @@ export function cabinReadout(s: CabinInput): Readout {
     podBottom = 'FINAL';
     podColor = PR.amber;
   } else if (soon) {
-    podBottom = `PIT ${Math.floor(fuelLaps)}`;
-    podColor = PR.amber;
+    podBottom = fuelLaps < 1 ? 'PIT NOW' : `PIT ${Math.floor(fuelLaps)}`;
+    podColor = low ? PR.red : PR.amber;
   } else if (s.position === 1) podBottom = 'LEAD';
   else if (s.interval === null) podBottom = '—';
   else {
