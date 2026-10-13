@@ -255,7 +255,7 @@ export function buildScene(): Scene {
     const lx = x + fx * 1.6;
     const ly = y + fy * 1.6;
     solids.push(makePoly(wall(lx + fy * 6, ly - fx * 6, lx - fy * 6, ly + fx * 6, 78, 84), hexRgb('#FFF4D0'), true));
-    glows.push({ x: lx, y: ly, z: 81, r: 22, color: '255,214,140' });
+    glows.push({ x: lx, y: ly, z: 81, r: 22, color: '255,214,140', flood: true });
   };
   for (let x = CX_L; x <= CX_R; x += 200) {
     mast(x, CY - R_OUT - 12, 0, 1);

@@ -34,6 +34,7 @@ export interface Glow {
   z: number;
   r: number;
   color: string;
+  flood?: boolean;
 }
 
 export interface Pool {

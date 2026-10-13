@@ -8,7 +8,7 @@ import { glowSprite, hexRgb } from './engine';
 
 export interface Streak {
   x: number;
-  a: number;
+  k: number;
 }
 
 export interface CabinView {
@@ -30,6 +30,10 @@ const LCD = '#0E1A18';
 const PAD = 4;
 const RING_DEG = 240;
 const RING_FROM = 150;
+const WARM = '#FFD68C';
+export const ROOF_FLOOD = 0.2;
+export const PILLAR_FLOOD = 0.14;
+const NARROW_W = 520;
 
 const rad = (deg: number) => (deg * Math.PI) / 180;
 
@@ -85,6 +89,7 @@ interface Geom {
   captions: boolean;
   glass: Path2D;
   lip: Path2D;
+  bead: Path2D;
 }
 
 function geom(w: number, h: number, touch: boolean): Geom {
@@ -98,6 +103,11 @@ function geom(w: number, h: number, touch: boolean): Geom {
   glass.lineTo(w * 0.955, h * 0.68);
   glass.lineTo(w * 0.045, h * 0.68);
   glass.closePath();
+  const top = h * 0.078;
+  const dip = h * 0.145;
+  const bead = new Path2D();
+  bead.moveTo(w * 0.08, top * 0.72);
+  bead.quadraticCurveTo(w * 0.5, dip - h * 0.022, w * 0.92, top * 0.72);
   const lip = new Path2D();
   lip.moveTo(-PAD, h * 0.75);
   lip.bezierCurveTo(w * 0.25, h * 0.75, w * 0.36, h * 0.69, cx, h * 0.69);
@@ -126,10 +136,11 @@ function geom(w: number, h: number, touch: boolean): Geom {
     lampW: Math.max(26, 28 * u),
     lampH: 11,
     wheelR,
-    wheelCy: h + 0.36 * wheelR,
+    wheelCy: h + (w < NARROW_W ? 0.25 : 0.37) * wheelR,
     captions: !touch,
     glass,
     lip,
+    bead,
   };
 }
 
@@ -261,10 +272,7 @@ function drawRoof(g: CanvasRenderingContext2D, gm: Geom): void {
   g.fill();
   g.strokeStyle = rgba(PR.teal, 0.3);
   g.lineWidth = Math.max(1.2, w * 0.0022);
-  g.beginPath();
-  g.moveTo(w * 0.08, top * 0.72);
-  g.quadraticCurveTo(w * 0.5, dip - h * 0.022, w * 0.92, top * 0.72);
-  g.stroke();
+  g.stroke(gm.bead);
 }
 
 function drawPillars(g: CanvasRenderingContext2D, gm: Geom): void {
@@ -375,7 +383,13 @@ function caption(g: CanvasRenderingContext2D, text: string, x: number, y: number
 }
 
 const LAMPS = ['PIT', 'FUEL', 'SKID', 'PEN', 'REV'] as const;
+const LAMP_SHORT = ['P', 'F', 'S', '!', 'R'] as const;
 const LAMP_COLORS = [PR.teal, PR.amber, PR.red, PR.red, PR.amber];
+
+function lampCaption(g: CanvasRenderingContext2D, gm: Geom, i: number, color: string): void {
+  const text = gm.captions ? LAMPS[i]! : LAMP_SHORT[i]!;
+  caption(g, text, lampX(gm, i) + gm.lampW / 2, gm.lampY + 0.5, color, gm.captions ? 8 : 9);
+}
 
 function lampX(gm: Geom, i: number): number {
   return gm.cx + (i - 2) * (gm.lampW + 4) - gm.lampW / 2;
@@ -392,7 +406,7 @@ function drawBinnacle(g: CanvasRenderingContext2D, gm: Geom, colorIdx: number): 
   cowl.bezierCurveTo(L, h * 0.625, cx - binW * 0.3, gm.binTop, cx, gm.binTop);
   cowl.bezierCurveTo(cx + binW * 0.3, gm.binTop, R, h * 0.625, R, h * 0.7);
   cowl.lineTo(R, gm.binBot);
-  cowl.quadraticCurveTo(cx, gm.binBot + h * 0.015, L, gm.binBot);
+  cowl.quadraticCurveTo(cx, gm.binBot + h * 0.004, L, gm.binBot);
   cowl.closePath();
   g.fillStyle = INK;
   g.fill(cowl);
@@ -442,7 +456,7 @@ function drawBinnacle(g: CanvasRenderingContext2D, gm: Geom, colorIdx: number): 
     g.arc(gm.fuelCx, gm.podY, gm.fuelR - 3, a0, a1);
     g.stroke();
   }
-  if (gm.captions) caption(g, 'FUEL', gm.fuelCx, gm.podY + gm.fuelR * 0.68, PR.muted);
+  caption(g, 'LAPS', gm.fuelCx, gm.podY + gm.fuelR * 0.68, PR.muted, gm.captions ? 8 : 9);
 
   const lx = gm.podCx - gm.lcdW / 2;
   const ly = gm.podY - gm.lcdH / 2;
@@ -465,17 +479,20 @@ function drawBinnacle(g: CanvasRenderingContext2D, gm: Geom, colorIdx: number): 
     g.beginPath();
     g.roundRect(lampX(gm, i), gm.lampY - gm.lampH / 2, gm.lampW, gm.lampH, 3);
     g.fill();
-    if (gm.captions) caption(g, LAMPS[i]!, lampX(gm, i) + gm.lampW / 2, gm.lampY + 0.5, rgba(LAMP_COLORS[i]!, 0.35));
+    lampCaption(g, gm, i, rgba(LAMP_COLORS[i]!, 0.35));
   }
 }
 
 interface Layer {
   key: string;
-  canvas: HTMLCanvasElement;
+  gm: Geom;
+  shell: HTMLCanvasElement;
+  wheel: HTMLCanvasElement;
+  glove: HTMLCanvasElement;
 }
 
-let shell: (Layer & { gm: Geom }) | null = null;
-let wheel: Layer | null = null;
+let cache: Layer | null = null;
+let pending = '';
 
 function layer(w: number, h: number, scale: number): { canvas: HTMLCanvasElement; g: CanvasRenderingContext2D } {
   const canvas = document.createElement('canvas');
@@ -486,11 +503,8 @@ function layer(w: number, h: number, scale: number): { canvas: HTMLCanvasElement
   return { canvas, g };
 }
 
-function shellLayer(w: number, h: number, scale: number, colorIdx: number, touch: boolean): Layer & { gm: Geom } {
-  const key = `${w}|${h}|${scale}|${colorIdx}|${touch}`;
-  if (shell?.key === key) return shell;
-  const gm = geom(w, h, touch);
-  const { canvas, g } = layer(w + PAD * 2, h + PAD * 2, scale);
+function buildShell(gm: Geom, scale: number, colorIdx: number): HTMLCanvasElement {
+  const { canvas, g } = layer(gm.w + PAD * 2, gm.h + PAD * 2, scale);
   g.translate(PAD, PAD);
   drawGlassTint(g, gm);
   drawHood(g, gm, colorIdx);
@@ -498,13 +512,10 @@ function shellLayer(w: number, h: number, scale: number, colorIdx: number, touch
   drawPillars(g, gm);
   drawDash(g, gm);
   drawBinnacle(g, gm, colorIdx);
-  shell = { key, canvas, gm };
-  return shell;
+  return canvas;
 }
 
-function wheelLayer(r: number, scale: number, colorIdx: number): Layer {
-  const key = `${r}|${scale}|${colorIdx}`;
-  if (wheel?.key === key) return wheel;
+function buildWheel(r: number, scale: number, colorIdx: number): HTMLCanvasElement {
   const s = CAR_SCHEMES[colorIdx % CAR_SCHEMES.length]!;
   const size = r * 2.4;
   const { canvas, g } = layer(size, size, scale);
@@ -550,49 +561,75 @@ function wheelLayer(r: number, scale: number, colorIdx: number): Layer {
   g.arc(0, 0, r - r * 0.05, 0, Math.PI * 2);
   g.stroke();
   g.setLineDash([]);
-  g.save();
   g.rotate(-Math.PI / 2);
   g.fillStyle = s.body;
   g.fillRect(r * 0.885, -r * 0.035, r * 0.23, r * 0.07);
+  return canvas;
+}
+
+// Left glove gripping the rim; x points out of the rim, +y towards 12 o'clock.
+function buildGlove(r: number, scale: number, colorIdx: number): HTMLCanvasElement {
+  const s = CAR_SCHEMES[colorIdx % CAR_SCHEMES.length]!;
+  const size = r * 0.5;
+  const { canvas, g } = layer(size, size, scale);
+  g.translate(size / 2, size / 2);
+  g.fillStyle = mix(s.body, INK, 0.72);
+  g.beginPath();
+  g.ellipse(0, 0, r * 0.12, r * 0.15, 0, 0, Math.PI * 2);
+  g.fill();
+  g.save();
+  g.clip();
+  g.fillStyle = mix(s.body, INK, 0.58);
+  g.fillRect(r * 0.01, -r * 0.2, r * 0.2, r * 0.4);
   g.restore();
-  const glove = mix(s.body, INK, 0.7);
-  const knuckle = mix(s.body, INK, 0.82);
-  for (const side of [-1, 1]) {
-    g.save();
-    g.rotate(-Math.PI / 2 + side * rad(50));
-    g.translate(r, 0);
-    g.fillStyle = '#15121C';
+  g.fillStyle = mix(s.body, INK, 0.82);
+  for (let i = 0; i < 4; i++) {
     g.beginPath();
-    g.moveTo(-r * 0.1, -r * 0.1);
-    g.lineTo(-r * 0.36, -r * 0.13);
-    g.lineTo(-r * 0.36, r * 0.13);
-    g.lineTo(-r * 0.1, r * 0.1);
-    g.closePath();
+    g.arc(-r * 0.1, (i - 1.5) * r * 0.06, r * 0.035, 0, Math.PI * 2);
     g.fill();
-    g.fillStyle = glove;
-    g.beginPath();
-    g.ellipse(-r * 0.02, 0, r * 0.13, r * 0.16, 0, 0, Math.PI * 2);
-    g.fill();
-    g.fillStyle = knuckle;
-    for (let i = -1; i <= 2; i++) {
-      g.beginPath();
-      g.arc(r * 0.07, i * r * 0.065 - r * 0.03, r * 0.045, 0, Math.PI * 2);
-      g.fill();
-    }
-    g.fillStyle = glove;
-    g.beginPath();
-    g.ellipse(-r * 0.1, -side * r * 0.1, r * 0.08, r * 0.045, side * 0.6, 0, Math.PI * 2);
-    g.fill();
-    g.strokeStyle = PR.teal;
-    g.lineWidth = Math.max(1.5, r * 0.025);
-    g.beginPath();
-    g.moveTo(-r * 0.15, -r * 0.1);
-    g.lineTo(-r * 0.15, r * 0.1);
-    g.stroke();
-    g.restore();
   }
-  wheel = { key, canvas };
-  return wheel;
+  g.fillStyle = mix(s.body, INK, 0.58);
+  g.beginPath();
+  g.ellipse(r * 0.05, r * 0.12, r * 0.045, r * 0.07, -0.5, 0, Math.PI * 2);
+  g.fill();
+  return canvas;
+}
+
+function build(key: string, w: number, h: number, scale: number, colorIdx: number, touch: boolean): Layer {
+  const gm = geom(w, h, touch);
+  cache = {
+    key,
+    gm,
+    shell: buildShell(gm, scale, colorIdx),
+    wheel: buildWheel(gm.wheelR, scale, colorIdx),
+    glove: buildGlove(gm.wheelR, scale, colorIdx),
+  };
+  return cache;
+}
+
+function idle(fn: () => void): void {
+  if (typeof requestIdleCallback === 'function') requestIdleCallback(fn, { timeout: 250 });
+  else setTimeout(fn, 50);
+}
+
+// Layers are rebuilt off the draw path; until then the previous ones are stretched to the new width.
+function layers(w: number, h: number, scale: number, colorIdx: number, touch: boolean, drawing: boolean): Layer | null {
+  const key = `${w}|${h}|${scale}|${colorIdx}|${touch}`;
+  if (cache?.key === key) return cache;
+  if (drawing && !cache) return build(key, w, h, scale, colorIdx, touch);
+  if (pending !== key) {
+    pending = key;
+    idle(() => {
+      if (pending !== key) return;
+      pending = '';
+      build(key, w, h, scale, colorIdx, touch);
+    });
+  }
+  return cache;
+}
+
+export function prewarmCockpit(g: CanvasRenderingContext2D, w: number, h: number, colorIdx: number, touch: boolean): void {
+  layers(w, h, g.getTransform().a, colorIdx, touch, false);
 }
 
 interface Fleck {
@@ -603,19 +640,22 @@ interface Fleck {
   bias: number;
 }
 
-const FLECK_ZONES: [number, number, number, number][] = [
-  [0.76, 0.9, 0.2, 0.62],
-  [0.76, 0.9, 0.2, 0.62],
-  [0.1, 0.26, 0.16, 0.3],
-  [0.1, 0.24, 0.57, 0.64],
-  [0.26, 0.74, 0.58, 0.63],
-];
-
+// Dirt collects along the lower glass and the pillar edges, never across the sky or the racing line.
 const FLECKS: Fleck[] = (() => {
   const rng = createRng(44011);
   return Array.from({ length: 24 }, () => {
-    const [x0, x1, y0, y1] = FLECK_ZONES[Math.floor(rng() * FLECK_ZONES.length)]!;
-    return { x: x0 + rng() * (x1 - x0), y: y0 + rng() * (y1 - y0), size: 4 + rng() * 10, rot: rng() * Math.PI, bias: rng() };
+    const zone = rng();
+    let x: number;
+    let y: number;
+    if (zone < 0.6) {
+      x = 0.1 + rng() * 0.8;
+      y = 0.57 + rng() * 0.09;
+    } else {
+      y = 0.2 + rng() * 0.4;
+      const edge = 0.145 - (0.087 * y) / 0.695 + 0.008 + rng() * 0.025;
+      x = zone < 0.8 ? edge : 1 - edge;
+    }
+    return { x, y, size: 4 + rng() * 10, rot: (rng() - 0.5) * 0.3, bias: rng() };
   });
 })();
 
@@ -628,15 +668,26 @@ function drawFlecks(g: CanvasRenderingContext2D, gm: Geom, oil: number, grit: nu
   g.clip(gm.glass);
   g.globalAlpha = 0.25 + 0.4 * dirt;
   g.lineWidth = 1;
+  g.strokeStyle = rgba(PR.tealLight, 0.25);
   for (let i = 0; i < n; i++) {
     const f = FLECKS[i]!;
-    const isOil = f.bias < share;
-    g.fillStyle = isOil ? '#1C160A' : '#4A3C2C';
-    g.strokeStyle = isOil ? 'rgba(127,227,217,0.25)' : 'rgba(255,248,232,0.3)';
-    g.beginPath();
-    g.ellipse(f.x * gm.w, f.y * gm.h, f.size / 2, f.size * (isOil ? 0.22 : 0.34), f.rot, 0, Math.PI * 2);
-    g.fill();
-    g.stroke();
+    const x = f.x * gm.w;
+    const y = f.y * gm.h;
+    if (f.bias < share) {
+      g.fillStyle = '#1C160A';
+      g.beginPath();
+      g.ellipse(x, y, f.size / 2, f.size / 8, f.rot, 0, Math.PI * 2);
+      g.fill();
+      g.stroke();
+      g.beginPath();
+      g.ellipse(x + f.size * 0.55, y + f.rot * f.size * 0.5, f.size / 4, f.size / 14, f.rot, 0, Math.PI * 2);
+      g.fill();
+    } else {
+      g.fillStyle = '#4A3C2C';
+      g.beginPath();
+      g.ellipse(x, y, f.size / 3, f.size / 4, f.rot * 3, 0, Math.PI * 2);
+      g.fill();
+    }
   }
   g.restore();
 }
@@ -649,9 +700,9 @@ function streakSprite(): HTMLCanvasElement {
     streakImg.height = 64;
     const g = streakImg.getContext('2d')!;
     const across = g.createLinearGradient(0, 0, 32, 0);
-    across.addColorStop(0, 'rgba(255,214,140,0)');
-    across.addColorStop(0.5, 'rgba(255,214,140,1)');
-    across.addColorStop(1, 'rgba(255,214,140,0)');
+    across.addColorStop(0, rgba(WARM, 0));
+    across.addColorStop(0.5, rgba(WARM, 1));
+    across.addColorStop(1, rgba(WARM, 0));
     g.fillStyle = across;
     g.fillRect(0, 0, 32, 64);
     g.globalCompositeOperation = 'destination-in';
@@ -665,32 +716,54 @@ function streakSprite(): HTMLCanvasElement {
   return streakImg;
 }
 
+const smooth = (a: number, b: number, x: number) => {
+  const t = Math.max(0, Math.min(1, (x - a) / (b - a)));
+  return t * t * (3 - 2 * t);
+};
+
+// Floodlight masts passing overhead: a warm wash on the headliner that slides onto the pillar.
 function drawStreaks(g: CanvasRenderingContext2D, gm: Geom, streaks: Streak[]): number {
-  const { w, h } = gm;
+  const { w, h, cx } = gm;
   let peak = 0;
   g.globalCompositeOperation = 'lighter';
   for (const st of streaks) {
-    peak = Math.max(peak, st.a);
-    g.globalAlpha = st.a;
-    if (st.x > w * 0.16 && st.x < w * 0.84) {
-      const t = st.x / w;
+    peak = Math.max(peak, st.k);
+    const e = Math.abs(st.x - cx) / (w / 2);
+    const onPillar = smooth(0.6, 0.75, e);
+    const roof = st.k * (1 - onPillar);
+    if (roof > 0.005) {
+      const x = Math.max(w * 0.16, Math.min(w * 0.84, st.x));
+      const t = x / w;
       const roofY = h * (0.09 + 0.14 * t * (1 - t));
-      g.drawImage(streakSprite(), st.x - w * 0.02, 0, w * 0.04, roofY);
-      continue;
+      g.globalAlpha = ROOF_FLOOD * roof;
+      g.drawImage(streakSprite(), x - w * 0.03, 0, w * 0.06, roofY);
+      g.save();
+      g.beginPath();
+      g.rect(x - w * 0.04, 0, w * 0.08, roofY);
+      g.clip();
+      g.globalAlpha = 0.3 * roof;
+      g.strokeStyle = WARM;
+      g.lineWidth = 1;
+      g.stroke(gm.bead);
+      g.restore();
     }
-    const left = st.x <= w * 0.16;
-    const x0 = left ? w * 0.132 : w * 0.868;
-    const x1 = left ? w * 0.052 : w * 0.948;
-    const len = h * 0.69;
-    g.save();
-    g.translate(x0, 0);
-    g.transform(1, 0, (x1 - x0) / len, 1, 0, 0);
-    g.drawImage(streakSprite(), -w * 0.012, 0, w * 0.024, len);
-    g.restore();
+    const pillar = st.k * onPillar;
+    if (pillar > 0.005) {
+      const left = st.x < cx;
+      const x0 = left ? w * 0.132 : w * 0.868;
+      const x1 = left ? w * 0.052 : w * 0.948;
+      const len = h * 0.69;
+      g.globalAlpha = PILLAR_FLOOD * pillar;
+      g.save();
+      g.translate(x0, 0);
+      g.transform(1, 0, (x1 - x0) / len, 1, 0, 0);
+      g.drawImage(streakSprite(), -w * 0.012, 0, w * 0.024, len);
+      g.restore();
+    }
   }
   g.globalAlpha = 1;
   g.globalCompositeOperation = 'source-over';
-  return peak / 0.08;
+  return peak;
 }
 
 function drawLeds(g: CanvasRenderingContext2D, gm: Geom, leds: Readout['leds']): void {
@@ -737,7 +810,7 @@ function drawSpeed(g: CanvasRenderingContext2D, gm: Geom, r: Readout): void {
   caption(g, r.digits, gm.cx, gm.ringCy - 2, r.digitsColor, Math.max(20, Math.round(20 * gm.u)));
 }
 
-function drawFuel(g: CanvasRenderingContext2D, gm: Geom, r: Readout, touch: boolean): void {
+function drawFuel(g: CanvasRenderingContext2D, gm: Geom, r: Readout): void {
   const rr = gm.fuelR - 3;
   if (r.fuelOn) {
     g.lineWidth = 4;
@@ -762,7 +835,7 @@ function drawFuel(g: CanvasRenderingContext2D, gm: Geom, r: Readout, touch: bool
     g.stroke();
   }
   const text = r.fuelColor === PR.teal ? PR.tealLight : r.fuelColor;
-  caption(g, r.fuelLaps.toFixed(1), gm.fuelCx, gm.podY + (touch ? 4 : 1), text, 11);
+  caption(g, r.fuelLaps.toFixed(1), gm.fuelCx, gm.podY + 1, text, 11);
 }
 
 function drawPod(g: CanvasRenderingContext2D, gm: Geom, r: Readout): void {
@@ -780,25 +853,64 @@ function drawLamps(g: CanvasRenderingContext2D, gm: Geom, r: Readout): void {
     g.beginPath();
     g.roundRect(x, gm.lampY - gm.lampH / 2, gm.lampW, gm.lampH, 3);
     g.fill();
-    if (gm.captions) caption(g, LAMPS[i]!, x + gm.lampW / 2, gm.lampY + 0.5, INK);
+    lampCaption(g, gm, i, INK);
   }
 }
 
 let motion: MediaQueryList | null = null;
-function reducedMotion(): boolean {
+export function reducedMotion(): boolean {
   if (!motion && typeof matchMedia === 'function') motion = matchMedia('(prefers-reduced-motion: reduce)');
   return motion?.matches ?? false;
 }
 
-export function drawCockpit(g: CanvasRenderingContext2D, w: number, h: number, f: CabinView): void {
+const HAND_DEG = 50;
+
+function drawHands(g: CanvasRenderingContext2D, gm: Geom, glove: HTMLCanvasElement, rot: number): void {
+  const r = gm.wheelR;
+  const size = r * 0.5;
+  for (const side of [-1, 1]) {
+    const a = -Math.PI / 2 + side * rad(HAND_DEG) + rot;
+    const hx = Math.cos(a) * r;
+    const hy = Math.sin(a) * r;
+    const sx = side * r * 1.1;
+    const sy = -r * 0.2;
+    const len = Math.hypot(sx - hx, sy - hy) || 1;
+    const ux = (sx - hx) / len;
+    const uy = (sy - hy) / len;
+    const wx = hx + ux * r * 0.13;
+    const wy = hy + uy * r * 0.13;
+    g.fillStyle = '#15121C';
+    g.beginPath();
+    g.moveTo(wx - uy * r * 0.09, wy + ux * r * 0.09);
+    g.lineTo(sx - uy * r * 0.16, sy + ux * r * 0.16);
+    g.lineTo(sx + uy * r * 0.16, sy - ux * r * 0.16);
+    g.lineTo(wx + uy * r * 0.09, wy - ux * r * 0.09);
+    g.closePath();
+    g.fill();
+    g.strokeStyle = PR.teal;
+    g.lineWidth = Math.max(1.5, r * 0.03);
+    g.beginPath();
+    g.moveTo(wx - uy * r * 0.09, wy + ux * r * 0.09);
+    g.lineTo(wx + uy * r * 0.09, wy - ux * r * 0.09);
+    g.stroke();
+    g.save();
+    g.translate(hx, hy);
+    g.rotate(a);
+    if (side > 0) g.scale(1, -1);
+    g.drawImage(glove, -size / 2, -size / 2, size, size);
+    g.restore();
+  }
+}
+
+export function drawCockpit(g: CanvasRenderingContext2D, w: number, h: number, f: CabinView): { x: number; y: number } {
   const race = f.race;
   const p = race.player;
   const cabin = cabinFor(race);
   const scale = g.getTransform().a;
-  const sh = shellLayer(w, h, scale, p.colorIdx, f.touch);
-  const gm = sh.gm;
-  const pos = f.standings.indexOf(p) + 1;
-  const ahead = f.standings[pos - 2];
+  const lay = layers(w, h, scale, p.colorIdx, f.touch, true)!;
+  const gm = lay.gm;
+  const pos = p.finished ? race.classification().indexOf(p) + 1 : f.standings.indexOf(p) + 1;
+  const ahead = p.finished ? undefined : f.standings[pos - 2];
   const r = cabinReadout({
     time: f.time,
     speed: p.speed,
@@ -826,35 +938,40 @@ export function drawCockpit(g: CanvasRenderingContext2D, w: number, h: number, f
   g.save();
   g.imageSmoothingEnabled = true;
   g.translate(jx, jy);
-  g.drawImage(sh.canvas, -PAD, -PAD, sh.canvas.width / scale, sh.canvas.height / scale);
+  if (gm.w !== w) g.scale(w / gm.w, 1);
+  g.drawImage(lay.shell, -PAD, -PAD, lay.shell.width / scale, lay.shell.height / scale);
   const flood = drawStreaks(g, gm, f.streaks);
   const lipA = 0.1 * flood + (race.pitAuto ? 0.06 : 0);
   if (lipA > 0.005) {
     g.globalCompositeOperation = 'lighter';
-    g.strokeStyle = race.pitAuto ? `rgba(220,240,255,${lipA})` : `rgba(255,214,140,${lipA})`;
+    g.globalAlpha = lipA;
+    g.strokeStyle = race.pitAuto ? PR.cream : WARM;
     g.lineWidth = 2;
     g.stroke(gm.lip);
+    g.globalAlpha = 1;
     g.globalCompositeOperation = 'source-over';
   }
   drawFlecks(g, gm, cabin.oil, cabin.grit);
   drawLeds(g, gm, r.leds);
   drawSpeed(g, gm, r);
-  drawFuel(g, gm, r, f.touch);
+  drawFuel(g, gm, r);
   drawPod(g, gm, r);
   drawLamps(g, gm, r);
 
   const wr = gm.wheelR;
-  const wl = wheelLayer(wr, scale, p.colorIdx);
-  const size = wl.canvas.width / scale;
+  const size = lay.wheel.width / scale;
+  const rot = f.steer * 1.4 + j.kick;
   g.translate(gm.cx, gm.wheelCy);
   g.save();
-  g.rotate(f.steer * 1.4 + j.kick);
-  g.drawImage(wl.canvas, -size / 2, -size / 2, size, size);
+  g.rotate(rot);
+  g.drawImage(lay.wheel, -size / 2, -size / 2, size, size);
   g.restore();
   g.strokeStyle = rgba(PR.cream, 0.1);
   g.lineWidth = wr * 0.035;
   g.beginPath();
   g.arc(0, 0, wr - wr * 0.04, Math.PI * 1.25, Math.PI * 1.75);
   g.stroke();
+  drawHands(g, gm, lay.glove, rot);
   g.restore();
+  return { x: jx, y: jy };
 }

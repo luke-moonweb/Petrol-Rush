@@ -301,3 +301,16 @@ describe('cockpit glass and jolt', () => {
     expect(cabinFor(r).grit).toBe(0);
   });
 });
+
+describe('floodlight streaks', () => {
+  it('projects only floodlight masts that are just ahead', async () => {
+    const { floodStreaks } = await import('../src/gfx/fpv/view');
+    const c = camera();
+    const mast = { x: 40, y: 30, z: 81, r: 22, color: '255,214,140', flood: true };
+    const out = floodStreaks(c, [mast, { ...mast, flood: false }, { ...mast, x: -40 }, { ...mast, x: 300 }]);
+    expect(out).toHaveLength(1);
+    expect(out[0]!.x).toBeCloseTo(c.ox + (c.focal * 30) / 40);
+    expect(out[0]!.k).toBeGreaterThan(0);
+    expect(out[0]!.k).toBeLessThanOrEqual(1);
+  });
+});
