@@ -614,7 +614,7 @@ function build(key: string, w: number, h: number, scale: number, colorIdx: numbe
   return cache;
 }
 
-export function idle(fn: () => void): void {
+function idle(fn: () => void): void {
   if (typeof requestIdleCallback === 'function') requestIdleCallback(fn, { timeout: 250 });
   else setTimeout(fn, 50);
 }

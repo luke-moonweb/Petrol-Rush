@@ -9,7 +9,7 @@ import { PR } from '../../ui/theme';
 import type { Particles } from '../particles';
 import { CAR_SCHEMES, carFaces, driverName, MODEL_SCALE } from '../vehicles';
 import { trackCanvas } from '../world';
-import { type CabinView, cockpitUsed, drawCockpit, idle, prewarmCockpit, reducedMotion, type Streak, wheelRadius } from './cockpit';
+import { type CabinView, cockpitUsed, drawCockpit, prewarmCockpit, reducedMotion, type Streak, wheelRadius } from './cockpit';
 import {
   Camera,
   clipProject,
@@ -372,10 +372,7 @@ function drawPuff(g: CanvasRenderingContext2D, c: Camera, p: NonNullable<Item['p
 }
 
 function renderWorld(g: CanvasRenderingContext2D, c: Camera, f: CockpitFrame, cheap: boolean): void {
-  if (!scene) {
-    trackCanvas();
-    scene = buildScene();
-  }
+  const scene = prewarmScene();
   for (const p of scene.ground) {
     const d = visible(p, c);
     if (d >= 0) drawPoly(g, c, p, d);
@@ -635,18 +632,18 @@ export function cockpitOverlayMs(): { cabin: number; mirror: number } {
   return { cabin: median(cabinMs), mirror: median(mirrorMs) };
 }
 
-let scenePending = false;
-
-// Builds the cockpit layers and the 3D scene on idle once the cockpit has been used this session.
-export function prewarmCockpitView(g: CanvasRenderingContext2D, view: Box, colorIdx: number, touch: boolean): void {
-  if (!cockpitUsed()) return;
-  prewarmCockpit(g, view.w, view.h, colorIdx, touch);
-  if (scene || scenePending) return;
-  scenePending = true;
-  idle(() => {
+// The 3D scene takes a few hundred ms to build; the race state calls this during the start lights.
+export function prewarmScene(): Scene {
+  if (!scene) {
     trackCanvas();
-    scene ??= buildScene();
-  });
+    scene = buildScene();
+  }
+  return scene;
+}
+
+// Builds the cockpit layers on idle once the cockpit has been used this session.
+export function prewarmCockpitView(g: CanvasRenderingContext2D, view: Box, colorIdx: number, touch: boolean): void {
+  if (cockpitUsed()) prewarmCockpit(g, view.w, view.h, colorIdx, touch);
 }
 
 export function drawCockpitView(g: CanvasRenderingContext2D, f: CockpitFrame): void {
