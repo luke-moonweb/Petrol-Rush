@@ -621,42 +621,56 @@ function drawWindshieldGlass(g: CanvasRenderingContext2D, w: number, h: number, 
   const gh = glassBot - gy0;
 
   const glass = g.createLinearGradient(0, gy0, 0, glassBot);
-  glass.addColorStop(0, 'rgba(120,150,220,0.07)');
-  glass.addColorStop(0.28, 'rgba(180,200,255,0.035)');
-  glass.addColorStop(0.55, 'rgba(255,255,255,0.015)');
-  glass.addColorStop(0.78, 'rgba(40,28,18,0.045)');
-  glass.addColorStop(1, 'rgba(8,6,14,0.14)');
+  glass.addColorStop(0, 'rgba(130,160,230,0.08)');
+  glass.addColorStop(0.22, 'rgba(180,200,255,0.04)');
+  glass.addColorStop(0.48, 'rgba(255,255,255,0.012)');
+  glass.addColorStop(0.72, 'rgba(40,28,18,0.04)');
+  glass.addColorStop(1, 'rgba(8,6,14,0.15)');
   g.fillStyle = glass;
   g.fillRect(gx0, gy0, gw, gh);
 
   // Cool night sky band (upper third, soft diagonal).
-  const skySheen = g.createLinearGradient(w * 0.1, h * 0.08, w * 0.9, h * 0.32);
+  const skySheen = g.createLinearGradient(w * 0.08, h * 0.06, w * 0.92, h * 0.34);
   skySheen.addColorStop(0, 'rgba(140,170,255,0)');
-  skySheen.addColorStop(0.4, 'rgba(160,190,255,0.055)');
-  skySheen.addColorStop(0.65, 'rgba(255,248,232,0.04)');
+  skySheen.addColorStop(0.35, 'rgba(160,190,255,0.06)');
+  skySheen.addColorStop(0.58, 'rgba(255,248,232,0.045)');
   skySheen.addColorStop(1, 'rgba(255,255,255,0)');
   g.fillStyle = skySheen;
-  g.fillRect(w * 0.12, h * 0.08, w * 0.76, h * 0.22);
+  g.fillRect(w * 0.12, h * 0.07, w * 0.76, h * 0.24);
+
+  // Thin specular streak under the roof lip (glass presence without muddying the lane).
+  const specular = g.createLinearGradient(w * 0.18, h * 0.1, w * 0.62, h * 0.22);
+  specular.addColorStop(0, 'rgba(220,235,255,0)');
+  specular.addColorStop(0.4, 'rgba(220,235,255,0.07)');
+  specular.addColorStop(0.7, 'rgba(255,248,232,0.035)');
+  specular.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = specular;
+  g.beginPath();
+  g.moveTo(w * 0.2, h * 0.1);
+  g.quadraticCurveTo(w * 0.42, h * 0.08, w * 0.58, h * 0.16);
+  g.quadraticCurveTo(w * 0.4, h * 0.14, w * 0.22, h * 0.18);
+  g.closePath();
+  g.fill();
 
   // Warm instrument bounce off lower glass (teal–amber night palette).
   const dashBounce = g.createLinearGradient(w * 0.25, glassBot - h * 0.14, w * 0.75, glassBot);
   dashBounce.addColorStop(0, 'rgba(18,181,166,0)');
-  dashBounce.addColorStop(0.45, 'rgba(18,181,166,0.04)');
-  dashBounce.addColorStop(0.72, 'rgba(255,200,90,0.05)');
+  dashBounce.addColorStop(0.45, 'rgba(18,181,166,0.045)');
+  dashBounce.addColorStop(0.72, 'rgba(255,200,90,0.055)');
   dashBounce.addColorStop(1, 'rgba(255,182,39,0.03)');
   g.fillStyle = dashBounce;
   g.fillRect(w * 0.18, glassBot - h * 0.16, w * 0.64, h * 0.16);
 
   // Soft A-pillar wash — edges only so the track stays readable.
   const leftWash = g.createLinearGradient(gx0, gy0, w * 0.28, gy0 + gh * 0.7);
-  leftWash.addColorStop(0, 'rgba(0,0,0,0.16)');
-  leftWash.addColorStop(0.55, 'rgba(0,0,0,0.04)');
+  leftWash.addColorStop(0, 'rgba(0,0,0,0.18)');
+  leftWash.addColorStop(0.55, 'rgba(0,0,0,0.045)');
   leftWash.addColorStop(1, 'rgba(0,0,0,0)');
   g.fillStyle = leftWash;
   g.fillRect(gx0, gy0, w * 0.22, gh);
   const rightWash = g.createLinearGradient(w - gx0, gy0, w * 0.72, gy0 + gh * 0.65);
-  rightWash.addColorStop(0, 'rgba(0,0,0,0.16)');
-  rightWash.addColorStop(0.55, 'rgba(0,0,0,0.04)');
+  rightWash.addColorStop(0, 'rgba(0,0,0,0.18)');
+  rightWash.addColorStop(0.55, 'rgba(0,0,0,0.045)');
   rightWash.addColorStop(1, 'rgba(0,0,0,0)');
   g.fillStyle = rightWash;
   g.fillRect(w * 0.7, gy0, w * 0.22, gh);
@@ -665,18 +679,24 @@ function drawWindshieldGlass(g: CanvasRenderingContext2D, w: number, h: number, 
   g.save();
   g.beginPath();
   g.ellipse(w * 0.5, h * 0.08, w * 0.42, h * 0.55, 0, 0, Math.PI * 2);
-  g.strokeStyle = 'rgba(8,6,12,0.07)';
+  g.strokeStyle = 'rgba(8,6,12,0.075)';
   g.lineWidth = Math.max(8, w * 0.012);
+  g.stroke();
+  g.beginPath();
+  g.ellipse(w * 0.42, h * 0.1, w * 0.28, h * 0.42, -0.12, 0.15, Math.PI * 0.85);
+  g.strokeStyle = 'rgba(8,6,12,0.05)';
+  g.lineWidth = Math.max(4, w * 0.006);
   g.stroke();
   g.restore();
 
   const { oil, scrape } = glassSoil(f);
   const dirt = Math.min(1, oil * 0.9 + scrape * 0.75);
-  if (dirt > 0.04) {
-    // Seeded flecks biased to lower corners / edges — never a muddy center strip.
-    const rng = createRng(901 + Math.floor(f.time * 0.28) * 19 + Math.floor(dirt * 10));
-    const n = Math.floor(4 + oil * 10 + scrape * 12);
-    for (let i = 0; i < n; i++) {
+  if (dirt > 0.03) {
+    // Fixed seed + fixed slots: flecks appear/fade with soil, never reshuffle each frame.
+    const rng = createRng(44011);
+    const slots = 24;
+    const visible = Math.floor(slots * (0.12 + dirt * 0.88));
+    for (let i = 0; i < slots; i++) {
       const edge = rng();
       let fx: number;
       let fy: number;
@@ -690,228 +710,249 @@ function drawWindshieldGlass(g: CanvasRenderingContext2D, w: number, h: number, 
         fx = w * (0.22 + rng() * 0.56);
         fy = h * (0.42 + rng() * 0.2);
       }
-      const isOil = rng() < oil / (oil + scrape + 0.001);
+      const oilBias = rng();
+      const rx = 1.2 + rng() * 3.8;
+      const ry = 0.5 + rng() * 1.6;
+      const rot = rng() * Math.PI;
+      const s = 0.7 + rng() * 2.0;
+      if (i >= visible) continue;
+      const isOil = oilBias < oil / (oil + scrape + 0.001);
       if (isOil) {
-        g.fillStyle = `rgba(28,22,10,${0.1 + oil * 0.18})`;
+        g.fillStyle = `rgba(28,22,10,${0.09 + dirt * 0.14 + oil * 0.06})`;
         g.beginPath();
-        g.ellipse(fx, fy, 2 + rng() * 4.5 * oil, 0.6 + rng() * 1.4, rng() * Math.PI, 0, Math.PI * 2);
+        g.ellipse(fx, fy, rx * (0.6 + oil), ry, rot, 0, Math.PI * 2);
         g.fill();
       } else {
-        g.fillStyle = `rgba(48,36,22,${0.1 + scrape * 0.2})`;
-        const s = 0.8 + rng() * 2.2 * scrape;
+        g.fillStyle = `rgba(48,36,22,${0.09 + dirt * 0.14 + scrape * 0.08})`;
         g.beginPath();
-        g.ellipse(fx, fy, s, s * (0.35 + rng() * 0.55), rng() * Math.PI, 0, Math.PI * 2);
+        g.ellipse(fx, fy, s * (0.7 + scrape * 0.5), s * (0.35 + scrape * 0.35), rot, 0, Math.PI * 2);
         g.fill();
       }
     }
   }
 }
 
-function drawCockpit(g: CanvasRenderingContext2D, w: number, h: number, f: CockpitFrame): void {
-  const p = f.race.player;
-  const dashTop = h * 0.74;
-  const glassBot = dashTop - h * 0.08;
 
-  drawWindshieldGlass(g, w, h, glassBot, f);
-
-  // Structure draw order: hood mass (behind glass lip) → roof/A-pillar solids →
-  // pillar thickness + roof underside → hood nose lip. Keeps cabin from reading paper-thin.
-  const roofDeep = h * 0.072;
-  const roofDip = h * 0.138;
-  const pilL0 = 0;
-  const pilL1 = w * 0.128;
-  const pilL2 = w * 0.055;
-  const pilL3 = w * 0.022;
-  const pilR0 = w;
-  const pilR1 = w * 0.872;
-  const pilR2 = w * 0.945;
-  const pilR3 = w * 0.978;
-  const pilBot = h * 0.72;
-  const hoodY0 = glassBot - h * 0.01;
-  const hoodY1 = dashTop - h * 0.015;
-
-  // Hood / nose body first — sits under the glass opening, darker than dash.
-  const hoodBody = g.createLinearGradient(0, hoodY0, 0, hoodY1);
-  hoodBody.addColorStop(0, '#0A0912');
-  hoodBody.addColorStop(0.45, '#07060C');
-  hoodBody.addColorStop(1, '#05040A');
-  g.fillStyle = hoodBody;
-  g.beginPath();
-  g.moveTo(w * 0.1, glassBot + h * 0.028);
-  g.quadraticCurveTo(w * 0.5, glassBot - h * 0.055, w * 0.9, glassBot + h * 0.028);
-  g.lineTo(w * 0.94, hoodY1);
-  g.quadraticCurveTo(w * 0.5, dashTop - h * 0.135, w * 0.06, hoodY1);
-  g.closePath();
-  g.fill();
-
-  // Roof header solid — opaque band so sky never leaks through the header.
-  g.fillStyle = '#08070E';
+/** Roof canopy header: opaque shell + soffit thickness + teal glass bead. */
+function drawRoofCanopy(g: CanvasRenderingContext2D, w: number, h: number): void {
+  const top = h * 0.078;
+  const dip = h * 0.145;
+  g.fillStyle = '#07060E';
   g.beginPath();
   g.moveTo(0, 0);
   g.lineTo(w, 0);
-  g.lineTo(w, roofDeep);
-  g.quadraticCurveTo(w * 0.5, roofDip, 0, roofDeep);
+  g.lineTo(w, top);
+  g.quadraticCurveTo(w * 0.5, dip, 0, top);
   g.closePath();
   g.fill();
-  // Roof underside lip (thickness facing the cabin).
-  const roofLip = g.createLinearGradient(0, roofDeep * 0.55, 0, roofDip);
-  roofLip.addColorStop(0, 'rgba(28,24,40,0.95)');
-  roofLip.addColorStop(0.55, 'rgba(14,12,22,0.9)');
-  roofLip.addColorStop(1, 'rgba(5,4,10,0)');
-  g.fillStyle = roofLip;
+  const soffit = g.createLinearGradient(0, top * 0.4, 0, dip);
+  soffit.addColorStop(0, '#1A1726');
+  soffit.addColorStop(0.5, '#0E0C16');
+  soffit.addColorStop(1, '#08070F');
+  g.fillStyle = soffit;
   g.beginPath();
-  g.moveTo(w * 0.12, roofDeep * 0.85);
-  g.quadraticCurveTo(w * 0.5, roofDip - h * 0.012, w * 0.88, roofDeep * 0.85);
-  g.lineTo(w * 0.86, roofDip - h * 0.028);
-  g.quadraticCurveTo(w * 0.5, roofDip + h * 0.01, w * 0.14, roofDip - h * 0.028);
+  g.moveTo(w * 0.05, top * 0.55);
+  g.quadraticCurveTo(w * 0.5, dip - h * 0.01, w * 0.95, top * 0.55);
+  g.lineTo(w * 0.97, top + h * 0.012);
+  g.quadraticCurveTo(w * 0.5, dip + h * 0.016, w * 0.03, top + h * 0.012);
   g.closePath();
   g.fill();
+  g.strokeStyle = 'rgba(18,181,166,0.3)';
+  g.lineWidth = Math.max(1.2, w * 0.0022);
+  g.beginPath();
+  g.moveTo(w * 0.08, top * 0.72);
+  g.quadraticCurveTo(w * 0.5, dip - h * 0.022, w * 0.92, top * 0.72);
+  g.stroke();
   g.strokeStyle = 'rgba(255,248,232,0.08)';
+  g.lineWidth = Math.max(1, w * 0.0015);
+  g.beginPath();
+  g.moveTo(w * 0.06, top + h * 0.008);
+  g.quadraticCurveTo(w * 0.5, dip + h * 0.012, w * 0.94, top + h * 0.008);
+  g.stroke();
+}
+
+/** A-pillars: outer dark shell, thickness face, inner glass highlight, soft glass shadow. */
+function drawAPillars(g: CanvasRenderingContext2D, w: number, h: number, glassBot: number): void {
+  const bot = glassBot + h * 0.055;
+  g.fillStyle = '#05040A';
+  g.beginPath();
+  g.moveTo(0, 0);
+  g.lineTo(w * 0.145, 0);
+  g.lineTo(w * 0.058, bot);
+  g.lineTo(0, bot + h * 0.035);
+  g.closePath();
+  g.moveTo(w, 0);
+  g.lineTo(w * 0.855, 0);
+  g.lineTo(w * 0.942, bot - h * 0.02);
+  g.lineTo(w, bot + h * 0.015);
+  g.closePath();
+  g.fill();
+  const leftFace = g.createLinearGradient(w * 0.02, 0, w * 0.12, bot);
+  leftFace.addColorStop(0, '#18151F');
+  leftFace.addColorStop(1, '#0A0912');
+  g.fillStyle = leftFace;
+  g.beginPath();
+  g.moveTo(w * 0.118, h * 0.008);
+  g.lineTo(w * 0.145, 0);
+  g.lineTo(w * 0.058, bot);
+  g.lineTo(w * 0.042, bot - h * 0.012);
+  g.closePath();
+  g.fill();
+  const rightFace = g.createLinearGradient(w * 0.98, 0, w * 0.88, bot);
+  rightFace.addColorStop(0, '#18151F');
+  rightFace.addColorStop(1, '#0A0912');
+  g.fillStyle = rightFace;
+  g.beginPath();
+  g.moveTo(w * 0.882, h * 0.008);
+  g.lineTo(w * 0.855, 0);
+  g.lineTo(w * 0.942, bot - h * 0.02);
+  g.lineTo(w * 0.958, bot - h * 0.032);
+  g.closePath();
+  g.fill();
+  g.fillStyle = 'rgba(0,0,0,0.3)';
+  g.beginPath();
+  g.moveTo(w * 0.12, h * 0.04);
+  g.lineTo(w * 0.165, h * 0.05);
+  g.lineTo(w * 0.08, bot - h * 0.025);
+  g.lineTo(w * 0.05, bot - h * 0.035);
+  g.closePath();
+  g.fill();
+  g.beginPath();
+  g.moveTo(w * 0.88, h * 0.04);
+  g.lineTo(w * 0.835, h * 0.05);
+  g.lineTo(w * 0.92, bot - h * 0.045);
+  g.lineTo(w * 0.95, bot - h * 0.055);
+  g.closePath();
+  g.fill();
+  g.strokeStyle = 'rgba(255,248,232,0.15)';
+  g.lineWidth = Math.max(2, w * 0.0032);
+  g.beginPath();
+  g.moveTo(w * 0.128, h * 0.016);
+  g.lineTo(w * 0.048, bot - h * 0.018);
+  g.moveTo(w * 0.872, h * 0.016);
+  g.lineTo(w * 0.952, bot - h * 0.038);
+  g.stroke();
+  g.strokeStyle = 'rgba(18,181,166,0.18)';
   g.lineWidth = Math.max(1, w * 0.0018);
   g.beginPath();
-  g.moveTo(w * 0.14, roofDeep * 0.92);
-  g.quadraticCurveTo(w * 0.5, roofDip - h * 0.018, w * 0.86, roofDeep * 0.92);
+  g.moveTo(w * 0.134, h * 0.02);
+  g.lineTo(w * 0.054, bot - h * 0.022);
+  g.moveTo(w * 0.866, h * 0.02);
+  g.lineTo(w * 0.946, bot - h * 0.042);
   g.stroke();
+  g.fillStyle = '#0B0A12';
+  g.beginPath();
+  g.moveTo(0, glassBot);
+  g.lineTo(w * 0.055, glassBot + h * 0.01);
+  g.lineTo(w * 0.12, glassBot + h * 0.03);
+  g.lineTo(0, bot + h * 0.02);
+  g.closePath();
+  g.fill();
+  g.beginPath();
+  g.moveTo(w, glassBot - h * 0.02);
+  g.lineTo(w * 0.945, glassBot - h * 0.01);
+  g.lineTo(w * 0.88, glassBot + h * 0.03);
+  g.lineTo(w, bot);
+  g.closePath();
+  g.fill();
+}
 
-  // A-pillars: outer shade wedge + body + inner highlight face (readable thickness).
-  const pillarOuter = '#05040A';
-  const pillarBody = '#0B0A12';
-  // Left outer shade (against the world edge).
-  g.fillStyle = pillarOuter;
+/** Hood / nose lip through the glass — center crease, fenders, raised lip, seal. */
+function drawHoodNose(g: CanvasRenderingContext2D, w: number, h: number, glassBot: number, dashTop: number): void {
+  const lipY = glassBot - h * 0.008;
+  const deckY = dashTop - h * 0.012;
+  const body = g.createLinearGradient(0, lipY - h * 0.07, 0, deckY);
+  body.addColorStop(0, '#12101A');
+  body.addColorStop(0.4, '#0A0912');
+  body.addColorStop(1, '#05040A');
+  g.fillStyle = body;
   g.beginPath();
-  g.moveTo(pilL0, 0);
-  g.lineTo(pilL1 * 0.72, 0);
-  g.lineTo(pilL3, pilBot);
-  g.lineTo(pilL0, pilBot + h * 0.02);
+  g.moveTo(w * 0.09, lipY + h * 0.038);
+  g.quadraticCurveTo(w * 0.26, lipY - h * 0.005, w * 0.4, lipY - h * 0.052);
+  g.quadraticCurveTo(w * 0.5, lipY - h * 0.068, w * 0.6, lipY - h * 0.052);
+  g.quadraticCurveTo(w * 0.74, lipY - h * 0.005, w * 0.91, lipY + h * 0.038);
+  g.lineTo(w * 0.95, deckY);
+  g.quadraticCurveTo(w * 0.72, dashTop - h * 0.095, w * 0.5, dashTop - h * 0.12);
+  g.quadraticCurveTo(w * 0.28, dashTop - h * 0.095, w * 0.05, deckY);
   g.closePath();
   g.fill();
-  // Left body.
-  g.fillStyle = pillarBody;
+  g.strokeStyle = 'rgba(255,248,232,0.07)';
+  g.lineWidth = Math.max(1, w * 0.0016);
   g.beginPath();
-  g.moveTo(pilL1 * 0.55, 0);
-  g.lineTo(pilL1, 0);
-  g.lineTo(pilL2, h * 0.66);
-  g.lineTo(pilL3 + w * 0.012, pilBot);
-  g.lineTo(pilL3, pilBot);
-  g.closePath();
-  g.fill();
-  // Left inner face (cooler highlight toward glass).
-  const leftInner = g.createLinearGradient(pilL1, 0, pilL2, h * 0.6);
-  leftInner.addColorStop(0, 'rgba(255,248,232,0.14)');
-  leftInner.addColorStop(0.35, 'rgba(127,227,217,0.1)');
-  leftInner.addColorStop(1, 'rgba(18,181,166,0.04)');
-  g.fillStyle = leftInner;
+  g.moveTo(w * 0.5, lipY - h * 0.06);
+  g.lineTo(w * 0.5, dashTop - h * 0.1);
+  g.stroke();
+  g.fillStyle = 'rgba(255,255,255,0.035)';
   g.beginPath();
-  g.moveTo(pilL1 * 0.9, h * 0.015);
-  g.lineTo(pilL1, h * 0.01);
-  g.lineTo(pilL2 + w * 0.01, h * 0.64);
-  g.lineTo(pilL2 - w * 0.004, h * 0.655);
-  g.closePath();
-  g.fill();
-  // Left outer recess shadow.
-  g.fillStyle = 'rgba(0,0,0,0.45)';
-  g.beginPath();
-  g.moveTo(0, h * 0.02);
-  g.lineTo(pilL1 * 0.35, h * 0.01);
-  g.lineTo(pilL3 * 0.6, pilBot);
-  g.lineTo(0, pilBot);
-  g.closePath();
-  g.fill();
-
-  // Right outer shade.
-  g.fillStyle = pillarOuter;
-  g.beginPath();
-  g.moveTo(pilR0, 0);
-  g.lineTo(pilR1 + (w - pilR1) * 0.28, 0);
-  g.lineTo(pilR3, pilBot);
-  g.lineTo(pilR0, pilBot + h * 0.02);
-  g.closePath();
-  g.fill();
-  // Right body.
-  g.fillStyle = pillarBody;
-  g.beginPath();
-  g.moveTo(pilR1 + (w - pilR1) * 0.45, 0);
-  g.lineTo(pilR1, 0);
-  g.lineTo(pilR2, h * 0.62);
-  g.lineTo(pilR3 - w * 0.012, pilBot);
-  g.lineTo(pilR3, pilBot);
-  g.closePath();
-  g.fill();
-  // Right inner face.
-  const rightInner = g.createLinearGradient(pilR1, 0, pilR2, h * 0.58);
-  rightInner.addColorStop(0, 'rgba(255,248,232,0.14)');
-  rightInner.addColorStop(0.35, 'rgba(127,227,217,0.1)');
-  rightInner.addColorStop(1, 'rgba(18,181,166,0.04)');
-  g.fillStyle = rightInner;
-  g.beginPath();
-  g.moveTo(pilR1 + (w - pilR1) * 0.1, h * 0.015);
-  g.lineTo(pilR1, h * 0.01);
-  g.lineTo(pilR2 - w * 0.01, h * 0.6);
-  g.lineTo(pilR2 + w * 0.004, h * 0.615);
-  g.closePath();
-  g.fill();
-  // Right outer recess shadow.
-  g.fillStyle = 'rgba(0,0,0,0.45)';
-  g.beginPath();
-  g.moveTo(w, h * 0.02);
-  g.lineTo(pilR1 + (w - pilR1) * 0.65, h * 0.01);
-  g.lineTo(pilR3 + (w - pilR3) * 0.4, pilBot);
-  g.lineTo(w, pilBot);
-  g.closePath();
-  g.fill();
-
-  // Seal pillar→hood corners so the aperture reads as one windshield opening.
-  g.fillStyle = pillarBody;
-  g.beginPath();
-  g.moveTo(0, h * 0.62);
-  g.lineTo(pilL2, h * 0.64);
-  g.lineTo(w * 0.12, glassBot + h * 0.02);
-  g.lineTo(0, pilBot);
+  g.moveTo(w * 0.13, lipY + h * 0.022);
+  g.quadraticCurveTo(w * 0.22, lipY - h * 0.008, w * 0.3, lipY + h * 0.012);
+  g.quadraticCurveTo(w * 0.21, lipY + h * 0.045, w * 0.13, lipY + h * 0.022);
   g.closePath();
   g.fill();
   g.beginPath();
-  g.moveTo(w, h * 0.58);
-  g.lineTo(pilR2, h * 0.6);
-  g.lineTo(w * 0.88, glassBot + h * 0.02);
-  g.lineTo(w, pilBot);
+  g.moveTo(w * 0.87, lipY + h * 0.022);
+  g.quadraticCurveTo(w * 0.78, lipY - h * 0.008, w * 0.7, lipY + h * 0.012);
+  g.quadraticCurveTo(w * 0.79, lipY + h * 0.045, w * 0.87, lipY + h * 0.022);
   g.closePath();
   g.fill();
-
-  // Hood / nose lip on top of the hood body — raised edge between glass bottom and dash.
   g.fillStyle = '#06050B';
   g.beginPath();
-  g.moveTo(w * 0.13, glassBot + h * 0.018);
-  g.quadraticCurveTo(w * 0.5, glassBot - h * 0.048, w * 0.87, glassBot + h * 0.018);
-  g.lineTo(w * 0.89, glassBot + h * 0.048);
-  g.quadraticCurveTo(w * 0.5, glassBot - h * 0.012, w * 0.11, glassBot + h * 0.048);
+  g.moveTo(w * 0.14, lipY + h * 0.02);
+  g.quadraticCurveTo(w * 0.5, lipY - h * 0.05, w * 0.86, lipY + h * 0.02);
+  g.lineTo(w * 0.88, lipY + h * 0.05);
+  g.quadraticCurveTo(w * 0.5, lipY - h * 0.014, w * 0.12, lipY + h * 0.05);
   g.closePath();
   g.fill();
-  const hoodEdge = g.createLinearGradient(0, glassBot - h * 0.055, 0, glassBot + h * 0.05);
-  hoodEdge.addColorStop(0, 'rgba(18,181,166,0.22)');
-  hoodEdge.addColorStop(0.35, 'rgba(255,248,232,0.08)');
-  hoodEdge.addColorStop(0.7, 'rgba(20,16,30,0.35)');
+  const hoodEdge = g.createLinearGradient(0, lipY - h * 0.07, 0, lipY + h * 0.055);
+  hoodEdge.addColorStop(0, 'rgba(18,181,166,0.24)');
+  hoodEdge.addColorStop(0.3, 'rgba(255,248,232,0.09)');
+  hoodEdge.addColorStop(0.65, 'rgba(18,181,166,0.07)');
   hoodEdge.addColorStop(1, 'rgba(0,0,0,0)');
   g.fillStyle = hoodEdge;
   g.beginPath();
-  g.moveTo(w * 0.15, glassBot + h * 0.008);
-  g.quadraticCurveTo(w * 0.5, glassBot - h * 0.042, w * 0.85, glassBot + h * 0.008);
-  g.lineTo(w * 0.83, glassBot + h * 0.032);
-  g.quadraticCurveTo(w * 0.5, glassBot - h * 0.008, w * 0.17, glassBot + h * 0.032);
+  g.moveTo(w * 0.16, lipY + h * 0.012);
+  g.quadraticCurveTo(w * 0.35, lipY - h * 0.038, w * 0.5, lipY - h * 0.055);
+  g.quadraticCurveTo(w * 0.65, lipY - h * 0.038, w * 0.84, lipY + h * 0.012);
+  g.lineTo(w * 0.8, lipY + h * 0.04);
+  g.quadraticCurveTo(w * 0.5, lipY - h * 0.015, w * 0.2, lipY + h * 0.04);
   g.closePath();
   g.fill();
-  // Soft shadow from lip onto the hood deck (depth cue before dash).
-  const hoodDeckShade = g.createLinearGradient(0, glassBot + h * 0.02, 0, dashTop);
-  hoodDeckShade.addColorStop(0, 'rgba(0,0,0,0.35)');
-  hoodDeckShade.addColorStop(0.55, 'rgba(0,0,0,0.12)');
-  hoodDeckShade.addColorStop(1, 'rgba(0,0,0,0)');
-  g.fillStyle = hoodDeckShade;
+  g.strokeStyle = 'rgba(0,0,0,0.55)';
+  g.lineWidth = Math.max(2, w * 0.0035);
   g.beginPath();
-  g.moveTo(w * 0.14, glassBot + h * 0.03);
-  g.quadraticCurveTo(w * 0.5, glassBot - h * 0.02, w * 0.86, glassBot + h * 0.03);
-  g.lineTo(w * 0.9, dashTop - h * 0.03);
-  g.quadraticCurveTo(w * 0.5, dashTop - h * 0.11, w * 0.1, dashTop - h * 0.03);
+  g.moveTo(w * 0.125, lipY + h * 0.03);
+  g.quadraticCurveTo(w * 0.5, lipY - h * 0.045, w * 0.875, lipY + h * 0.03);
+  g.stroke();
+  const hoodShade = g.createLinearGradient(0, lipY + h * 0.025, 0, dashTop);
+  hoodShade.addColorStop(0, 'rgba(0,0,0,0.38)');
+  hoodShade.addColorStop(0.5, 'rgba(0,0,0,0.14)');
+  hoodShade.addColorStop(1, 'rgba(0,0,0,0)');
+  g.fillStyle = hoodShade;
+  g.beginPath();
+  g.moveTo(w * 0.14, lipY + h * 0.035);
+  g.quadraticCurveTo(w * 0.5, lipY - h * 0.018, w * 0.86, lipY + h * 0.035);
+  g.lineTo(w * 0.9, dashTop - h * 0.028);
+  g.quadraticCurveTo(w * 0.5, dashTop - h * 0.1, w * 0.1, dashTop - h * 0.028);
   g.closePath();
   g.fill();
+}
+
+function drawCockpit(g: CanvasRenderingContext2D, w: number, h: number, f: CockpitFrame): void {
+  const p = f.race.player;
+  const dashTop = h * 0.74;
+  const glassBot = dashTop - h * 0.1;
+
+  drawWindshieldGlass(g, w, h, glassBot, f);
+
+  // Structure: hood under aperture, then canopy + thicker A-pillars framing glass.
+  drawHoodNose(g, w, h, glassBot, dashTop);
+  drawRoofCanopy(g, w, h);
+  drawAPillars(g, w, h, glassBot);
+
+  // Gentle dash parallax vs fixed pillars (embodiment cue while steering).
+  const steerPx = f.steer * w * 0.01;
+  g.save();
+  g.translate(steerPx, 0);
 
   // Matte dash plastic under the hood lip (instrument binnacle sits in the center recess).
   const dash = g.createLinearGradient(0, dashTop - h * 0.08, 0, h);
@@ -1126,6 +1167,7 @@ function drawCockpit(g: CanvasRenderingContext2D, w: number, h: number, f: Cockp
     g.fillStyle = 'rgba(18,181,166,0.35)';
     g.fillText('— — —', mphCx, lcdY + lcdH / 2);
   }
+  g.restore();
 
   // Steering wheel: leather rim thickness, tapered spokes, hub; rotates with steer; sits low for mirror/minimap.
   const r = wheelRadius(w, h);
