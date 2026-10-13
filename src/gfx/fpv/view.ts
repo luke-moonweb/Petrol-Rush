@@ -9,7 +9,7 @@ import { PR } from '../../ui/theme';
 import type { Particles } from '../particles';
 import { CAR_SCHEMES, carFaces, driverName, MODEL_SCALE } from '../vehicles';
 import { trackCanvas } from '../world';
-import { type CabinView, drawCockpit, reducedMotion, type Streak, wheelRadius } from './cockpit';
+import { type CabinView, cockpitUsed, drawCockpit, idle, prewarmCockpit, reducedMotion, type Streak, wheelRadius } from './cockpit';
 import {
   Camera,
   clipProject,
@@ -618,12 +618,35 @@ export function floodStreaks(c: Camera, glows: Glow[]): Streak[] {
   return out.sort((a, b) => b.k - a.k).slice(0, MAX_STREAKS);
 }
 
-const overlayMs: number[] = [];
+const cabinMs: number[] = [];
+const mirrorMs: number[] = [];
 
-export function cockpitOverlayMs(): number {
-  if (overlayMs.length === 0) return 0;
-  const sorted = [...overlayMs].sort((a, b) => a - b);
-  return sorted[Math.floor(sorted.length / 2)]!;
+function sample(list: number[], ms: number): void {
+  list.push(ms);
+  if (list.length > OVERLAY_SAMPLES) list.shift();
+}
+
+function median(list: number[]): number {
+  const sorted = [...list].sort((a, b) => a - b);
+  return sorted[Math.floor(sorted.length / 2)] ?? 0;
+}
+
+export function cockpitOverlayMs(): { cabin: number; mirror: number } {
+  return { cabin: median(cabinMs), mirror: median(mirrorMs) };
+}
+
+let scenePending = false;
+
+// Builds the cockpit layers and the 3D scene on idle once the cockpit has been used this session.
+export function prewarmCockpitView(g: CanvasRenderingContext2D, view: Box, colorIdx: number, touch: boolean): void {
+  if (!cockpitUsed()) return;
+  prewarmCockpit(g, view.w, view.h, colorIdx, touch);
+  if (scene || scenePending) return;
+  scenePending = true;
+  idle(() => {
+    trackCanvas();
+    scene ??= buildScene();
+  });
 }
 
 export function drawCockpitView(g: CanvasRenderingContext2D, f: CockpitFrame): void {
@@ -658,10 +681,11 @@ export function drawCockpitView(g: CanvasRenderingContext2D, f: CockpitFrame): v
   renderWorld(g, cam, f, false);
   const t0 = performance.now();
   const jolt = drawCockpit(g, v.w, v.h, { ...f, standings, streaks: floodStreaks(cam, scene!.glows) });
+  const t1 = performance.now();
   g.translate(jolt.x, jolt.y);
   drawMirror(g, v.w, v.h, f, ex, ey, yaw);
   drawMinimap(g, v.w, v.h, wheelRadius(v.w), f);
-  overlayMs.push(performance.now() - t0);
-  if (overlayMs.length > OVERLAY_SAMPLES) overlayMs.shift();
+  sample(cabinMs, t1 - t0);
+  sample(mirrorMs, performance.now() - t1);
   g.restore();
 }
