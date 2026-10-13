@@ -10,6 +10,7 @@ import type { Hit } from '../ui/hit';
 import { drawTitle, TITLE_ITEMS } from '../ui/menus/title';
 import { CreditsState } from './credits';
 import { type Game, loadOptions, type State } from './game';
+import { GrandPrixState } from './gp';
 import { HelpState } from './info';
 import { RaceState } from './race/state';
 import { SettingsState } from './settings';
@@ -80,8 +81,11 @@ export class TitleState implements State {
     if (!input.pressed('enter')) return;
     audio.ui('ok');
     switch (TITLE_ITEMS[this.sel]) {
-      case 'NEW GAME':
+      case 'QUICK RACE':
         this.game.set(new RaceState(this.game, loadOptions(this.game.params), 'choose'));
+        break;
+      case 'GRAND PRIX':
+        this.game.set(new GrandPrixState(this.game));
         break;
       case 'CONTROLS':
         this.game.set(new HelpState(this.game, this));

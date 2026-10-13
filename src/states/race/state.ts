@@ -4,6 +4,7 @@ import { type Cam, clampCamera, drawCars, drawOil, drawTrack, trackCanvas } from
 import { keyLabel } from '../../input';
 import { inFrame, layout } from '../../layout';
 import { type Car, lapsCompleted } from '../../race/car';
+import { type GrandPrix, gridOrder, raceResult, raceSeed, round, saveGp, standings } from '../../race/grandprix';
 import { cornerAssist, type DriveInput, SteerRamp, skidWarning } from '../../race/physics';
 import { NUM_COLORS, Race } from '../../race/race';
 import type { TouchLayout } from '../../touch';
@@ -28,7 +29,18 @@ import {
   type StartLights,
 } from './view';
 
-type Phase = 'choose' | 'options' | 'running' | 'paused' | 'results';
+type Phase = 'choose' | 'options' | 'running' | 'paused' | 'finishing' | 'results';
+
+/** A Grand Prix round: the championship so far and where to go when the race is over. */
+export interface GpContext {
+  gp: GrandPrix;
+  done(gp: GrandPrix): void;
+}
+
+/** Simulated seconds per frame while the rest of the field finishes a Grand Prix race. */
+const FINISH_SIM_S = 40;
+/** After the winner, the field gets this long to finish before the rest are classified DNF. */
+const FINISH_LIMIT_S = 180;
 
 const CRASH_WARN_PX = 1100;
 const NOTICE_S = 4;
@@ -72,6 +84,7 @@ export class RaceState implements State {
     private readonly game: Game,
     private opts: RaceOptions,
     phase: Phase,
+    private readonly gpc: GpContext | null = null,
   ) {
     trackCanvas(getTrack(opts.track));
     if (game.params.overlayUrl && !overlayImg) {
@@ -94,7 +107,14 @@ export class RaceState implements State {
     const prefs = this.game.prefs;
     this.notice = null;
     this.penaltyMsg = 0;
-    return new Race(this.opts, this.seed++, false, { penalties: prefs.penalties, collisions: prefs.collisions }, getTrack(this.opts.track));
+    const rules = { penalties: prefs.penalties, collisions: prefs.collisions };
+    const gp = this.gpc?.gp;
+    if (gp) {
+      const skills = new Map(gp.entries.flatMap((e) => (e.skill ? [[e.colorIdx, e.skill] as const] : [])));
+      const lineup = { colors: gridOrder(gp), skills };
+      return new Race(this.opts, raceSeed(gp, round(gp)), false, rules, getTrack(this.opts.track), lineup);
+    }
+    return new Race(this.opts, this.seed++, false, rules, getTrack(this.opts.track));
   }
 
   touchLayout(): TouchLayout {
@@ -120,6 +140,26 @@ export class RaceState implements State {
       default:
         break;
     }
+  }
+
+  private finishInBackground(): void {
+    const race = this.race;
+    race.autoPlayer = true;
+    race.pitAuto = false;
+    const dt = 1 / CONFIG.STEP_HZ;
+    const limit = (race.finishTime(race.classification()[0]!) ?? race.time) + FINISH_LIMIT_S;
+    for (let t = 0; t < FINISH_SIM_S && !race.allFinished() && race.time < limit; t += dt) race.step(dt, null);
+    if (race.allFinished() || race.time >= limit) {
+      this.particles.clear();
+      this.phase = 'results';
+    }
+  }
+
+  private retire(): void {
+    this.race.playerRetired = true;
+    this.lights = null;
+    if (!this.race.started) this.race.start();
+    this.phase = 'finishing';
   }
 
   hover(hit: Hit): void {
@@ -151,14 +191,24 @@ export class RaceState implements State {
         else if (input.pressed('menu') || input.pressed('back')) this.openMenu();
         else if (input.pressed('help')) this.game.set(new HelpState(this.game, this));
         break;
+      case 'finishing':
+        this.finishInBackground();
+        break;
       case 'results':
-        if (input.pressed('enter') || input.pressed('back')) this.game.toTitle();
+        if (input.pressed('enter') || input.pressed('back')) {
+          if (this.gpc) this.gpc.done({ ...this.gpc.gp, results: [...this.gpc.gp.results, raceResult(this.race)] });
+          else this.game.toTitle();
+        }
         break;
     }
     if (this.phase !== 'running') this.game.audio.silence();
   }
 
   private chooseItems(): string[] {
+    if (this.gpc) {
+      if (this.midRace && (this.race.started || this.lights)) return ['RESUME RACE', 'RESTART RACE', 'RETIRE', 'QUIT TO MAIN MENU'];
+      return ['START RACE', 'BACK TO GRAND PRIX'];
+    }
     if (this.midRace && (this.race.started || this.lights)) {
       return ['RESUME RACE', 'RESTART RACE', 'RACE SETTINGS', 'QUIT TO MAIN MENU'];
     }
@@ -182,6 +232,7 @@ export class RaceState implements State {
     if (input.pressed('back') || input.pressed('menu')) {
       audio.ui('back');
       if (this.midRace && (this.race.started || this.lights)) this.phase = 'running';
+      else if (this.gpc) this.gpc.done(this.gpc.gp);
       else this.game.toTitle();
       return;
     }
@@ -195,8 +246,20 @@ export class RaceState implements State {
         this.phase = 'options';
         this.sel = 0;
         break;
-      case 'START RACE':
       case 'RESTART RACE':
+        if (this.gpc) {
+          this.gpc.gp = { ...this.gpc.gp, restarts: this.gpc.gp.restarts + 1 };
+          saveGp(this.gpc.gp);
+        }
+        this.startRace();
+        break;
+      case 'RETIRE':
+        this.retire();
+        break;
+      case 'BACK TO GRAND PRIX':
+        this.gpc!.done(this.gpc!.gp);
+        break;
+      case 'START RACE':
         this.startRace();
         break;
       case 'RESUME RACE':
@@ -268,7 +331,7 @@ export class RaceState implements State {
   }
 
   private startRace(): void {
-    saveOptions(this.opts);
+    if (!this.gpc) saveOptions(this.opts);
     this.savedRace = null;
     if (this.race.started) this.race = this.newRace();
     this.beginLights();
@@ -340,7 +403,7 @@ export class RaceState implements State {
 
     if (p.finished) {
       this.finishTimer += dt;
-      if (this.finishTimer > 3) this.phase = 'results';
+      if (this.finishTimer > 3) this.phase = this.gpc ? 'finishing' : 'results';
     }
   }
 
@@ -432,6 +495,7 @@ export class RaceState implements State {
         drawPause(g, { pause, help: keyLabel(b.help[0] ?? b.help[1]) });
         break;
       }
+      case 'finishing':
       case 'results':
         g.fillStyle = 'rgba(8,6,18,0.55)';
         g.fillRect(0, 0, layout.w, layout.h);
@@ -484,6 +548,17 @@ export class RaceState implements State {
         { label: 'FUEL', value: `${Math.round(Math.max(0, p.fuel) * 100)}%` },
         { label: 'TO LEADER', value: list[0] === p ? 'LEADING' : gap === null ? '—' : `+${gap.toFixed(2)}` },
       ];
+    } else if (this.gpc) {
+      const gp = this.gpc.gp;
+      const table = standings(gp);
+      const mine = table.findIndex((s) => s.colorIdx === gp.playerColor);
+      const o = this.opts;
+      stats = [
+        { label: 'TRACK', value: getTrack(o.track).name },
+        { label: 'LAPS', value: `${o.laps}  ·  ${o.cars} CARS` },
+        { label: 'YOUR CAR', carColor: o.playerColor },
+        { label: 'POINTS', value: round(gp) === 0 ? '—' : `${table[mine]!.points}  ·  P${mine + 1}` },
+      ];
     } else {
       const o = this.opts;
       stats = [
@@ -493,13 +568,14 @@ export class RaceState implements State {
         { label: 'GRID', value: QUALIFYING_LABELS[o.qualifying]!.replace(' OF GRID', '').replace(' POSITION', '') },
       ];
     }
+    const gp = this.gpc?.gp;
     drawRaceMenu(g, {
-      tag: live ? 'RACE MENU' : 'PRE-RACE',
+      tag: gp ? `GRAND PRIX  ·  ROUND ${round(gp) + 1} / ${gp.tracks.length}` : live ? 'RACE MENU' : 'PRE-RACE',
       title: live ? 'RACE PAUSED' : 'READY TO RACE?',
       stats,
       items,
       sel: this.sel,
-      danger: ['QUIT TO MAIN MENU'],
+      danger: ['QUIT TO MAIN MENU', 'RETIRE'],
     });
   }
 

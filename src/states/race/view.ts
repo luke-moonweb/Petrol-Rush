@@ -88,7 +88,9 @@ export function resultRows(race: Race): ResultRow[] {
     let time: string;
     const t = race.resultTime(car);
     const lapsDown = lapsCompleted(winner) - lapsCompleted(car);
-    if (i === 0 && t !== null) {
+    const dnf = car.isPlayer && race.playerRetired;
+    if (dnf || (!car.finished && race.autoPlayer)) time = 'DNF';
+    else if (i === 0 && t !== null) {
       const m = Math.floor(t / 60);
       time = `${m}:${(t - m * 60).toFixed(2).padStart(5, '0')}`;
     } else if (t !== null && tWin !== null && lapsDown === 0) time = `+${(t - tWin).toFixed(2)}`;

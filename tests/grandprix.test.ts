@@ -1,0 +1,192 @@
+import { describe, expect, it } from 'vitest';
+import { CONFIG, DEFAULT_OPTIONS } from '../src/config';
+import {
+  GP_POINTS,
+  type GpSetup,
+  type GrandPrix,
+  gridOrder,
+  isOver,
+  newGrandPrix,
+  parseGp,
+  raceResult,
+  raceSeed,
+  round,
+  serializeGp,
+  standings,
+  withResult,
+} from '../src/race/grandprix';
+import { Race } from '../src/race/race';
+import { GP_DEFS } from '../src/track/gp';
+import { getTrack, trackIds } from '../src/track/tracks';
+
+const TRACKS = GP_DEFS.map((d) => d.id);
+const SETUP: GpSetup = { cars: 20, laps: 3, playerColor: 4, qualifying: 'last' };
+
+function gp(setup = SETUP): GrandPrix {
+  return newGrandPrix(setup, 1234, TRACKS);
+}
+
+/** colorIdx order with the player at the given position, other cars in entry order. */
+function orderWithPlayerAt(g: GrandPrix, pos: number): number[] {
+  const others = g.entries.map((e) => e.colorIdx).filter((c) => c !== g.playerColor);
+  others.splice(pos - 1, 0, g.playerColor);
+  return others;
+}
+
+function lineupFor(g: GrandPrix) {
+  const skills = new Map(g.entries.flatMap((e) => (e.skill ? [[e.colorIdx, e.skill] as const] : [])));
+  return { colors: gridOrder(g), skills };
+}
+
+describe('championship', () => {
+  it('starts with one entry per car, the player first and without AI skill', () => {
+    const g = gp();
+    expect(g.entries.length).toBe(20);
+    expect(new Set(g.entries.map((e) => e.colorIdx)).size).toBe(20);
+    expect(g.entries.find((e) => e.colorIdx === 4)!.skill).toBeUndefined();
+    expect(g.entries.filter((e) => e.skill).length).toBe(19);
+    expect(round(g)).toBe(0);
+    expect(isOver(g)).toBe(false);
+  });
+
+  it('scores 25-18-15-12-10-8-6-4-2-1 and nothing for a DNF', () => {
+    let g = gp();
+    const order = orderWithPlayerAt(g, 1);
+    g = withResult(g, { order, dnf: [order[19]!] });
+    const table = standings(g);
+    expect(table.map((s) => s.points).slice(0, 11)).toEqual([...GP_POINTS, 0]);
+    expect(table.reduce((a, s) => a + s.points, 0)).toBe(101);
+    expect(table[0]!.colorIdx).toBe(4);
+    expect(table[0]!.wins).toBe(1);
+  });
+
+  it('a DNF in the points scores nothing', () => {
+    let g = gp();
+    const order = orderWithPlayerAt(g, 2);
+    g = withResult(g, { order, dnf: [g.playerColor] });
+    expect(standings(g).find((s) => s.colorIdx === g.playerColor)!.points).toBe(0);
+  });
+
+  it('ties are broken by count-back: more wins, then more 2nd places …', () => {
+    let g = gp({ ...SETUP, cars: 3 });
+    const [a, b, c] = g.entries.map((e) => e.colorIdx) as [number, number, number];
+    // a: 25 + 15 = 40, b: 15 + 25 = 40 → equal points and wins; c: 18 + 18 = 36.
+    g = withResult(g, { order: [a, c, b], dnf: [] });
+    g = withResult(g, { order: [b, c, a], dnf: [] });
+    const t1 = standings(g);
+    expect(t1.map((s) => s.points)).toEqual([40, 40, 36]);
+    // Same points, same wins and same 3rd places: the lower colour index is listed first.
+    expect(t1[0]!.colorIdx).toBe(Math.min(a, b));
+    g = withResult(g, { order: [c, a, b], dnf: [] });
+    // a: 58, b: 55, c: 61.
+    expect(standings(g).map((s) => s.colorIdx)).toEqual([c, a, b]);
+  });
+
+  it('works with a single car', () => {
+    let g = gp({ ...SETUP, cars: 1 });
+    expect(g.entries.length).toBe(1);
+    expect(gridOrder(g)).toEqual([4]);
+    for (let i = 0; i < 5; i++) g = withResult(g, { order: [4], dnf: [] });
+    expect(isOver(g)).toBe(true);
+    expect(standings(g)[0]!.points).toBe(125);
+  });
+
+  it('grid: the player starts from the chosen position, AI by standings after round 1', () => {
+    for (const [q, slot] of [
+      ['pole', 0],
+      ['middle', 10],
+      ['last', 19],
+    ] as const) {
+      const g = gp({ ...SETUP, qualifying: q });
+      expect(gridOrder(g).indexOf(4)).toBe(slot);
+      expect(gridOrder(g)).toEqual(gridOrder(g));
+    }
+    let g = gp({ ...SETUP, qualifying: 'pole' });
+    const order = orderWithPlayerAt(g, 20);
+    g = withResult(g, { order, dnf: [] });
+    const grid = gridOrder(g);
+    expect(grid[0]).toBe(4);
+    expect(grid.slice(1)).toEqual(order.slice(0, 19));
+  });
+
+  it('race seeds differ per round and repeat for the same championship', () => {
+    const g = gp();
+    const seeds = [0, 1, 2, 3, 4].map((r) => raceSeed(g, r));
+    expect(new Set(seeds).size).toBe(5);
+    expect(raceSeed(gp(), 2)).toBe(seeds[2]);
+  });
+
+  it('the same AI driver keeps the same skill in every race', () => {
+    const g = gp();
+    const lineup = lineupFor(g);
+    const color = g.entries[5]!.colorIdx;
+    const speeds = TRACKS.map((id, r) => {
+      const race = new Race({ ...DEFAULT_OPTIONS, track: id, cars: 20 }, raceSeed(g, r), false, undefined, getTrack(id), lineup);
+      return race.cars.find((c) => c.colorIdx === color)!.ai.topMph;
+    });
+    expect(new Set(speeds).size).toBe(1);
+    expect(speeds[0]).toBe(g.entries[5]!.skill!.topMph);
+  });
+
+  it('a retired player is classified last and does not score', () => {
+    const g = gp({ ...SETUP, cars: 4 });
+    const race = new Race({ ...DEFAULT_OPTIONS, cars: 4, playerColor: 4 }, 1, false, undefined, getTrack(TRACKS[0]!), lineupFor(g));
+    race.playerRetired = true;
+    const res = raceResult(race);
+    expect(res.order[3]).toBe(4);
+    expect(res.dnf).toContain(4);
+  });
+});
+
+describe('saved championship', () => {
+  const ids = trackIds();
+
+  it('round-trips', () => {
+    let g = gp();
+    g = withResult(g, { order: orderWithPlayerAt(g, 3), dnf: [] });
+    expect(parseGp(serializeGp(g), ids)).toEqual(g);
+  });
+
+  it('rejects missing, corrupt, foreign and inconsistent data', () => {
+    const g = gp();
+    const bad = (patch: Partial<GrandPrix> | Record<string, unknown>) => parseGp(JSON.stringify({ ...g, ...patch }), ids);
+    expect(parseGp(null, ids)).toBeNull();
+    expect(parseGp('{', ids)).toBeNull();
+    expect(parseGp('[]', ids)).toBeNull();
+    expect(bad({ version: 2 })).toBeNull();
+    expect(bad({ tracks: ['nowhere'] })).toBeNull();
+    expect(bad({ cars: 19 })).toBeNull();
+    expect(bad({ playerColor: 25 })).toBeNull();
+    expect(bad({ qualifying: 'front' })).toBeNull();
+    expect(bad({ entries: g.entries.map((e) => ({ ...e, colorIdx: 0 })) })).toBeNull();
+    expect(bad({ entries: g.entries.map((e) => (e.skill ? { ...e, skill: { ...e.skill, topMph: 'fast' } } : e)) })).toBeNull();
+    expect(bad({ results: [{ order: [1, 2], dnf: [] }] })).toBeNull();
+    expect(bad({ results: new Array(6).fill({ order: orderWithPlayerAt(g, 1), dnf: [] }) })).toBeNull();
+  });
+});
+
+describe('a whole Grand Prix season, headless', () => {
+  it('five races on five circuits, every car classified, points add up', () => {
+    let g = gp({ ...SETUP, laps: 2 });
+    while (!isOver(g)) {
+      const id = g.tracks[round(g)]!;
+      const race = new Race(
+        { ...DEFAULT_OPTIONS, track: id, cars: g.cars, laps: g.laps, playerColor: g.playerColor },
+        raceSeed(g, round(g)),
+        true,
+        undefined,
+        getTrack(id),
+        lineupFor(g),
+      );
+      race.start();
+      while (!race.allFinished() && race.time < 300) race.step(1 / CONFIG.STEP_HZ, null);
+      const res = raceResult(race);
+      expect(res.dnf).toEqual([]);
+      expect(new Set(res.order).size).toBe(20);
+      g = withResult(g, res);
+    }
+    const table = standings(g);
+    expect(table.reduce((a, s) => a + s.points, 0)).toBe(5 * 101);
+    expect(table[0]!.points).toBeGreaterThan(table[19]!.points);
+  }, 60000);
+});

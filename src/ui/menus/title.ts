@@ -4,7 +4,7 @@ import { FONT_UI } from '../text';
 import { FONT_BLACK, PR } from '../theme';
 import { circle, footerHints, H, logoText, tag } from './common';
 
-export const TITLE_ITEMS = ['NEW GAME', 'CONTROLS', 'SETTINGS', 'CREDITS'];
+export const TITLE_ITEMS = ['QUICK RACE', 'GRAND PRIX', 'CONTROLS', 'SETTINGS', 'CREDITS'];
 
 export interface TitleView {
   sel: number;
@@ -62,7 +62,7 @@ export function drawTitle(g: CanvasRenderingContext2D, v: TitleView): void {
   g.font = `bold 9px ${FONT_UI}`;
   g.textAlign = 'left';
   g.fillText('S T A R T I N G   G R I D', x + 10, y - 11.5);
-  const stripes = [PR.red, PR.ultra, PR.mango];
+  const stripes = [PR.red, PR.ultra, PR.mango, PR.teal];
   TITLE_ITEMS.forEach((item, i) => {
     const ry = y + i * (rowH + 3);
     const sel = i === v.sel;
