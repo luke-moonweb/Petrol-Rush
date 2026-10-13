@@ -4,8 +4,10 @@ import type { Car } from '../src/race/car';
 import { collideCars, cornerAssist, SteerRamp, skidWarning, stepCar } from '../src/race/physics';
 import { Race } from '../src/race/race';
 import { wrapAngle } from '../src/track/common';
+import { gpTracks } from '../src/track/gp';
 import { pointAt, project, S_BOTTOM, S_TURN1, trackHeadingAt } from '../src/track/oval';
 import { OVAL } from '../src/track/ovalTrack';
+import type { SegmentTrack } from '../src/track/segment';
 
 function carAt(s: number, mph: number): Car {
   const race = new Race({ ...DEFAULT_OPTIONS, cars: 1 }, 3);
@@ -255,5 +257,51 @@ describe('crashes', () => {
     collideCars([a, b], OVAL, 'realistic');
     expect(a.spinTime).toBe(0);
     expect(b.spinTime).toBe(0);
+  });
+});
+
+describe('driving model on Grand Prix circuits', () => {
+  const tracks = gpTracks();
+
+  function carOn(track: SegmentTrack, s: number, d: number, mph: number): Car {
+    const race = new Race({ ...DEFAULT_OPTIONS, cars: 1 }, 3, false, undefined, track);
+    const car = race.player;
+    const p = track.pointAt(s, d);
+    Object.assign(car, { x: p.x, y: p.y, heading: p.heading, moveAngle: p.heading, speed: mph, s, d });
+    return car;
+  }
+
+  /** Follows the inside lane through the corner with the given cruise speed; true if the car spun. */
+  function followLane(track: SegmentTrack, car: Car, lane: number): boolean {
+    let spun = false;
+    for (let i = 0; i < 60 * 3; i++) {
+      const st = track.project(car.x, car.y);
+      const t = track.pointAt(st.s + 60, lane);
+      const diff = wrapAngle(Math.atan2(t.y - car.y, t.x - car.x) - car.heading);
+      stepCar(car, { steer: Math.max(-1, Math.min(1, diff * 5)), gas: false, brake: false, toggleReverse: false }, 1 / 60, track);
+      if (car.spinTime > 0) spun = true;
+    }
+    return spun;
+  }
+
+  it('corner assist turns the way the corner turns', () => {
+    for (const track of tracks) {
+      for (const g of track.segments) {
+        if (g.kind !== 'arc') continue;
+        const car = carOn(track, g.s0 + g.len / 2, 0, 145);
+        expect(Math.sign(cornerAssist(car, track))).toBe(g.corner.dir);
+      }
+    }
+  });
+
+  it('every corner can be taken at 150 mph on its inside lane, and 165 mph spins', () => {
+    for (const track of tracks) {
+      for (const g of track.segments) {
+        if (g.kind !== 'arc' || g.len < 120) continue;
+        const inside = -28.5 * -g.corner.dir;
+        expect(followLane(track, carOn(track, g.s0 - 150, inside, 150), inside)).toBe(false);
+        expect(followLane(track, carOn(track, g.s0 - 150, inside, 165), inside)).toBe(true);
+      }
+    }
   });
 });
