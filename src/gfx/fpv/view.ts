@@ -539,16 +539,172 @@ function wheelRadius(w: number, h: number): number {
   return Math.min(w * 0.19, h * 0.3);
 }
 
+/** Metal bezel + night instrument glow around a cluster dial. */
+function clusterBezel(
+  g: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  r: number,
+  glow: string,
+): void {
+  g.save();
+  g.shadowColor = glow;
+  g.shadowBlur = r * 0.65;
+  g.fillStyle = '#1A1824';
+  g.beginPath();
+  g.arc(cx, cy, r + 3, 0, Math.PI * 2);
+  g.fill();
+  g.shadowBlur = 0;
+  const bezel = g.createRadialGradient(cx - r * 0.28, cy - r * 0.35, r * 0.08, cx, cy, r + 3);
+  bezel.addColorStop(0, '#7A7688');
+  bezel.addColorStop(0.4, '#3E3A4C');
+  bezel.addColorStop(1, '#121018');
+  g.fillStyle = bezel;
+  g.beginPath();
+  g.arc(cx, cy, r + 2.5, 0, Math.PI * 2);
+  g.fill();
+  g.fillStyle = '#0A0910';
+  g.beginPath();
+  g.arc(cx, cy, r - 1, 0, Math.PI * 2);
+  g.fill();
+  g.strokeStyle = 'rgba(18,181,166,0.2)';
+  g.lineWidth = Math.max(1, r * 0.035);
+  g.beginPath();
+  g.arc(cx, cy, r - 1, 0, Math.PI * 2);
+  g.stroke();
+  g.restore();
+}
+
+function clusterNeedle(
+  g: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  ang: number,
+  len: number,
+  color: string,
+): void {
+  g.strokeStyle = color;
+  g.lineWidth = Math.max(1.6, len * 0.07);
+  g.lineCap = 'round';
+  g.beginPath();
+  g.moveTo(cx - Math.cos(ang) * len * 0.12, cy - Math.sin(ang) * len * 0.12);
+  g.lineTo(cx + Math.cos(ang) * len, cy + Math.sin(ang) * len);
+  g.stroke();
+  g.lineCap = 'butt';
+  g.fillStyle = PR.steel;
+  g.beginPath();
+  g.arc(cx, cy, Math.max(2.2, len * 0.09), 0, Math.PI * 2);
+  g.fill();
+  g.fillStyle = '#0A0910';
+  g.beginPath();
+  g.arc(cx, cy, Math.max(1.2, len * 0.04), 0, Math.PI * 2);
+  g.fill();
+}
+
 // Cabin PoC demo: race with cockpit cam (KeyC / prefs), watch hood lip + dash gauges + glass flecks near oil/after scrapes.
-function glassDirt(f: CockpitFrame): number {
+function glassSoil(f: CockpitFrame): { oil: number; scrape: number } {
   const p = f.race.player;
-  let near = 0;
+  let oil = 0;
   for (const o of f.race.oil) {
     const d = Math.hypot(o.x - p.x, o.y - p.y);
-    if (d < 90) near = Math.max(near, 1 - d / 90);
+    if (d < 100) oil = Math.max(oil, 1 - d / 100);
   }
-  const scrape = Math.min(1, (p.wallImpact + p.contactStrength) / 40 + (p.spinTime > 0 ? 0.45 : 0));
-  return Math.min(1, near * 0.85 + scrape * 0.7);
+  const scrape = Math.min(1, (p.wallImpact + p.contactStrength) / 36 + (p.spinTime > 0 ? 0.5 : 0));
+  return { oil, scrape };
+}
+
+/** Night windshield: cool sky sheen, warm dash bounce, pillar wash; flecks stay off the race lane. */
+function drawWindshieldGlass(g: CanvasRenderingContext2D, w: number, h: number, glassBot: number, f: CockpitFrame): void {
+  const gx0 = w * 0.08;
+  const gy0 = h * 0.06;
+  const gw = w * 0.84;
+  const gh = glassBot - gy0;
+
+  const glass = g.createLinearGradient(0, gy0, 0, glassBot);
+  glass.addColorStop(0, 'rgba(120,150,220,0.07)');
+  glass.addColorStop(0.28, 'rgba(180,200,255,0.035)');
+  glass.addColorStop(0.55, 'rgba(255,255,255,0.015)');
+  glass.addColorStop(0.78, 'rgba(40,28,18,0.045)');
+  glass.addColorStop(1, 'rgba(8,6,14,0.14)');
+  g.fillStyle = glass;
+  g.fillRect(gx0, gy0, gw, gh);
+
+  // Cool night sky band (upper third, soft diagonal).
+  const skySheen = g.createLinearGradient(w * 0.1, h * 0.08, w * 0.9, h * 0.32);
+  skySheen.addColorStop(0, 'rgba(140,170,255,0)');
+  skySheen.addColorStop(0.4, 'rgba(160,190,255,0.055)');
+  skySheen.addColorStop(0.65, 'rgba(255,248,232,0.04)');
+  skySheen.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = skySheen;
+  g.fillRect(w * 0.12, h * 0.08, w * 0.76, h * 0.22);
+
+  // Warm instrument bounce off lower glass (teal–amber night palette).
+  const dashBounce = g.createLinearGradient(w * 0.25, glassBot - h * 0.14, w * 0.75, glassBot);
+  dashBounce.addColorStop(0, 'rgba(18,181,166,0)');
+  dashBounce.addColorStop(0.45, 'rgba(18,181,166,0.04)');
+  dashBounce.addColorStop(0.72, 'rgba(255,200,90,0.05)');
+  dashBounce.addColorStop(1, 'rgba(255,182,39,0.03)');
+  g.fillStyle = dashBounce;
+  g.fillRect(w * 0.18, glassBot - h * 0.16, w * 0.64, h * 0.16);
+
+  // Soft A-pillar wash — edges only so the track stays readable.
+  const leftWash = g.createLinearGradient(gx0, gy0, w * 0.28, gy0 + gh * 0.7);
+  leftWash.addColorStop(0, 'rgba(0,0,0,0.16)');
+  leftWash.addColorStop(0.55, 'rgba(0,0,0,0.04)');
+  leftWash.addColorStop(1, 'rgba(0,0,0,0)');
+  g.fillStyle = leftWash;
+  g.fillRect(gx0, gy0, w * 0.22, gh);
+  const rightWash = g.createLinearGradient(w - gx0, gy0, w * 0.72, gy0 + gh * 0.65);
+  rightWash.addColorStop(0, 'rgba(0,0,0,0.16)');
+  rightWash.addColorStop(0.55, 'rgba(0,0,0,0.04)');
+  rightWash.addColorStop(1, 'rgba(0,0,0,0)');
+  g.fillStyle = rightWash;
+  g.fillRect(w * 0.7, gy0, w * 0.22, gh);
+
+  // Faint wiper-arc hint (very soft, does not muddy the view).
+  g.save();
+  g.beginPath();
+  g.ellipse(w * 0.5, h * 0.08, w * 0.42, h * 0.55, 0, 0, Math.PI * 2);
+  g.strokeStyle = 'rgba(8,6,12,0.07)';
+  g.lineWidth = Math.max(8, w * 0.012);
+  g.stroke();
+  g.restore();
+
+  const { oil, scrape } = glassSoil(f);
+  const dirt = Math.min(1, oil * 0.9 + scrape * 0.75);
+  if (dirt > 0.04) {
+    // Seeded flecks biased to lower corners / edges — never a muddy center strip.
+    const rng = createRng(901 + Math.floor(f.time * 0.28) * 19 + Math.floor(dirt * 10));
+    const n = Math.floor(4 + oil * 10 + scrape * 12);
+    for (let i = 0; i < n; i++) {
+      const edge = rng();
+      let fx: number;
+      let fy: number;
+      if (edge < 0.35) {
+        fx = w * (0.12 + rng() * 0.18);
+        fy = h * (0.18 + rng() * 0.42);
+      } else if (edge < 0.7) {
+        fx = w * (0.7 + rng() * 0.18);
+        fy = h * (0.18 + rng() * 0.42);
+      } else {
+        fx = w * (0.22 + rng() * 0.56);
+        fy = h * (0.42 + rng() * 0.2);
+      }
+      const isOil = rng() < oil / (oil + scrape + 0.001);
+      if (isOil) {
+        g.fillStyle = `rgba(28,22,10,${0.1 + oil * 0.18})`;
+        g.beginPath();
+        g.ellipse(fx, fy, 2 + rng() * 4.5 * oil, 0.6 + rng() * 1.4, rng() * Math.PI, 0, Math.PI * 2);
+        g.fill();
+      } else {
+        g.fillStyle = `rgba(48,36,22,${0.1 + scrape * 0.2})`;
+        const s = 0.8 + rng() * 2.2 * scrape;
+        g.beginPath();
+        g.ellipse(fx, fy, s, s * (0.35 + rng() * 0.55), rng() * Math.PI, 0, Math.PI * 2);
+        g.fill();
+      }
+    }
+  }
 }
 
 function drawCockpit(g: CanvasRenderingContext2D, w: number, h: number, f: CockpitFrame): void {
@@ -556,229 +712,504 @@ function drawCockpit(g: CanvasRenderingContext2D, w: number, h: number, f: Cockp
   const dashTop = h * 0.74;
   const glassBot = dashTop - h * 0.08;
 
-  // Soft windshield glass: night reflection band + sparse dirt when near oil / after scrapes.
-  const glass = g.createLinearGradient(0, h * 0.08, 0, glassBot);
-  glass.addColorStop(0, 'rgba(180,200,255,0.06)');
-  glass.addColorStop(0.35, 'rgba(255,255,255,0.03)');
-  glass.addColorStop(0.72, 'rgba(40,30,20,0.04)');
-  glass.addColorStop(1, 'rgba(10,8,14,0.12)');
-  g.fillStyle = glass;
-  g.fillRect(w * 0.08, h * 0.06, w * 0.84, glassBot - h * 0.06);
-  const sheen = g.createLinearGradient(w * 0.15, h * 0.12, w * 0.85, h * 0.28);
-  sheen.addColorStop(0, 'rgba(255,255,255,0)');
-  sheen.addColorStop(0.45, 'rgba(255,248,232,0.07)');
-  sheen.addColorStop(1, 'rgba(255,255,255,0)');
-  g.fillStyle = sheen;
-  g.fillRect(w * 0.12, h * 0.1, w * 0.76, h * 0.16);
-  const dirt = glassDirt(f);
-  if (dirt > 0.05) {
-    const rng = createRng(901 + Math.floor(f.time * 0.35) * 17 + Math.floor(dirt * 8));
-    g.fillStyle = `rgba(40,28,12,${0.12 + dirt * 0.28})`;
-    for (let i = 0; i < Math.floor(6 + dirt * 18); i++) {
-      const fx = w * (0.14 + rng() * 0.72);
-      const fy = h * (0.12 + rng() * 0.48);
-      const s = 1 + rng() * 2.2 * dirt;
-      g.beginPath();
-      g.ellipse(fx, fy, s, s * (0.4 + rng() * 0.6), rng() * Math.PI, 0, Math.PI * 2);
-      g.fill();
-    }
-  }
+  drawWindshieldGlass(g, w, h, glassBot, f);
 
-  // Roof header + thicker A-pillars with inner edge highlight.
-  g.fillStyle = '#0B0A12';
+  // Structure draw order: hood mass (behind glass lip) → roof/A-pillar solids →
+  // pillar thickness + roof underside → hood nose lip. Keeps cabin from reading paper-thin.
+  const roofDeep = h * 0.072;
+  const roofDip = h * 0.138;
+  const pilL0 = 0;
+  const pilL1 = w * 0.128;
+  const pilL2 = w * 0.055;
+  const pilL3 = w * 0.022;
+  const pilR0 = w;
+  const pilR1 = w * 0.872;
+  const pilR2 = w * 0.945;
+  const pilR3 = w * 0.978;
+  const pilBot = h * 0.72;
+  const hoodY0 = glassBot - h * 0.01;
+  const hoodY1 = dashTop - h * 0.015;
+
+  // Hood / nose body first — sits under the glass opening, darker than dash.
+  const hoodBody = g.createLinearGradient(0, hoodY0, 0, hoodY1);
+  hoodBody.addColorStop(0, '#0A0912');
+  hoodBody.addColorStop(0.45, '#07060C');
+  hoodBody.addColorStop(1, '#05040A');
+  g.fillStyle = hoodBody;
+  g.beginPath();
+  g.moveTo(w * 0.1, glassBot + h * 0.028);
+  g.quadraticCurveTo(w * 0.5, glassBot - h * 0.055, w * 0.9, glassBot + h * 0.028);
+  g.lineTo(w * 0.94, hoodY1);
+  g.quadraticCurveTo(w * 0.5, dashTop - h * 0.135, w * 0.06, hoodY1);
+  g.closePath();
+  g.fill();
+
+  // Roof header solid — opaque band so sky never leaks through the header.
+  g.fillStyle = '#08070E';
   g.beginPath();
   g.moveTo(0, 0);
   g.lineTo(w, 0);
-  g.lineTo(w, h * 0.055);
-  g.quadraticCurveTo(w * 0.5, h * 0.115, 0, h * 0.055);
+  g.lineTo(w, roofDeep);
+  g.quadraticCurveTo(w * 0.5, roofDip, 0, roofDeep);
   g.closePath();
   g.fill();
+  // Roof underside lip (thickness facing the cabin).
+  const roofLip = g.createLinearGradient(0, roofDeep * 0.55, 0, roofDip);
+  roofLip.addColorStop(0, 'rgba(28,24,40,0.95)');
+  roofLip.addColorStop(0.55, 'rgba(14,12,22,0.9)');
+  roofLip.addColorStop(1, 'rgba(5,4,10,0)');
+  g.fillStyle = roofLip;
   g.beginPath();
-  g.moveTo(0, 0);
-  g.lineTo(w * 0.115, 0);
-  g.lineTo(w * 0.048, h * 0.66);
-  g.lineTo(0, h * 0.7);
-  g.closePath();
-  g.moveTo(w, 0);
-  g.lineTo(w * 0.885, 0);
-  g.lineTo(w * 0.952, h * 0.62);
-  g.lineTo(w, h * 0.66);
+  g.moveTo(w * 0.12, roofDeep * 0.85);
+  g.quadraticCurveTo(w * 0.5, roofDip - h * 0.012, w * 0.88, roofDeep * 0.85);
+  g.lineTo(w * 0.86, roofDip - h * 0.028);
+  g.quadraticCurveTo(w * 0.5, roofDip + h * 0.01, w * 0.14, roofDip - h * 0.028);
   g.closePath();
   g.fill();
-  g.strokeStyle = 'rgba(255,248,232,0.1)';
-  g.lineWidth = Math.max(1.5, w * 0.0025);
+  g.strokeStyle = 'rgba(255,248,232,0.08)';
+  g.lineWidth = Math.max(1, w * 0.0018);
   g.beginPath();
-  g.moveTo(w * 0.112, h * 0.02);
-  g.lineTo(w * 0.05, h * 0.62);
-  g.moveTo(w * 0.888, h * 0.02);
-  g.lineTo(w * 0.95, h * 0.58);
+  g.moveTo(w * 0.14, roofDeep * 0.92);
+  g.quadraticCurveTo(w * 0.5, roofDip - h * 0.018, w * 0.86, roofDeep * 0.92);
   g.stroke();
 
-  // Hood / nose lip: dark silhouette above the dash so the world reads through glass over a car nose.
-  g.fillStyle = '#08070E';
+  // A-pillars: outer shade wedge + body + inner highlight face (readable thickness).
+  const pillarOuter = '#05040A';
+  const pillarBody = '#0B0A12';
+  // Left outer shade (against the world edge).
+  g.fillStyle = pillarOuter;
   g.beginPath();
-  g.moveTo(w * 0.12, glassBot + h * 0.02);
-  g.quadraticCurveTo(w * 0.5, glassBot - h * 0.045, w * 0.88, glassBot + h * 0.02);
-  g.lineTo(w * 0.9, dashTop - h * 0.02);
-  g.quadraticCurveTo(w * 0.5, dashTop - h * 0.12, w * 0.1, dashTop - h * 0.02);
+  g.moveTo(pilL0, 0);
+  g.lineTo(pilL1 * 0.72, 0);
+  g.lineTo(pilL3, pilBot);
+  g.lineTo(pilL0, pilBot + h * 0.02);
   g.closePath();
   g.fill();
-  const hoodEdge = g.createLinearGradient(0, glassBot - h * 0.05, 0, dashTop);
-  hoodEdge.addColorStop(0, 'rgba(18,181,166,0.18)');
-  hoodEdge.addColorStop(0.4, 'rgba(255,255,255,0.04)');
+  // Left body.
+  g.fillStyle = pillarBody;
+  g.beginPath();
+  g.moveTo(pilL1 * 0.55, 0);
+  g.lineTo(pilL1, 0);
+  g.lineTo(pilL2, h * 0.66);
+  g.lineTo(pilL3 + w * 0.012, pilBot);
+  g.lineTo(pilL3, pilBot);
+  g.closePath();
+  g.fill();
+  // Left inner face (cooler highlight toward glass).
+  const leftInner = g.createLinearGradient(pilL1, 0, pilL2, h * 0.6);
+  leftInner.addColorStop(0, 'rgba(255,248,232,0.14)');
+  leftInner.addColorStop(0.35, 'rgba(127,227,217,0.1)');
+  leftInner.addColorStop(1, 'rgba(18,181,166,0.04)');
+  g.fillStyle = leftInner;
+  g.beginPath();
+  g.moveTo(pilL1 * 0.9, h * 0.015);
+  g.lineTo(pilL1, h * 0.01);
+  g.lineTo(pilL2 + w * 0.01, h * 0.64);
+  g.lineTo(pilL2 - w * 0.004, h * 0.655);
+  g.closePath();
+  g.fill();
+  // Left outer recess shadow.
+  g.fillStyle = 'rgba(0,0,0,0.45)';
+  g.beginPath();
+  g.moveTo(0, h * 0.02);
+  g.lineTo(pilL1 * 0.35, h * 0.01);
+  g.lineTo(pilL3 * 0.6, pilBot);
+  g.lineTo(0, pilBot);
+  g.closePath();
+  g.fill();
+
+  // Right outer shade.
+  g.fillStyle = pillarOuter;
+  g.beginPath();
+  g.moveTo(pilR0, 0);
+  g.lineTo(pilR1 + (w - pilR1) * 0.28, 0);
+  g.lineTo(pilR3, pilBot);
+  g.lineTo(pilR0, pilBot + h * 0.02);
+  g.closePath();
+  g.fill();
+  // Right body.
+  g.fillStyle = pillarBody;
+  g.beginPath();
+  g.moveTo(pilR1 + (w - pilR1) * 0.45, 0);
+  g.lineTo(pilR1, 0);
+  g.lineTo(pilR2, h * 0.62);
+  g.lineTo(pilR3 - w * 0.012, pilBot);
+  g.lineTo(pilR3, pilBot);
+  g.closePath();
+  g.fill();
+  // Right inner face.
+  const rightInner = g.createLinearGradient(pilR1, 0, pilR2, h * 0.58);
+  rightInner.addColorStop(0, 'rgba(255,248,232,0.14)');
+  rightInner.addColorStop(0.35, 'rgba(127,227,217,0.1)');
+  rightInner.addColorStop(1, 'rgba(18,181,166,0.04)');
+  g.fillStyle = rightInner;
+  g.beginPath();
+  g.moveTo(pilR1 + (w - pilR1) * 0.1, h * 0.015);
+  g.lineTo(pilR1, h * 0.01);
+  g.lineTo(pilR2 - w * 0.01, h * 0.6);
+  g.lineTo(pilR2 + w * 0.004, h * 0.615);
+  g.closePath();
+  g.fill();
+  // Right outer recess shadow.
+  g.fillStyle = 'rgba(0,0,0,0.45)';
+  g.beginPath();
+  g.moveTo(w, h * 0.02);
+  g.lineTo(pilR1 + (w - pilR1) * 0.65, h * 0.01);
+  g.lineTo(pilR3 + (w - pilR3) * 0.4, pilBot);
+  g.lineTo(w, pilBot);
+  g.closePath();
+  g.fill();
+
+  // Seal pillar→hood corners so the aperture reads as one windshield opening.
+  g.fillStyle = pillarBody;
+  g.beginPath();
+  g.moveTo(0, h * 0.62);
+  g.lineTo(pilL2, h * 0.64);
+  g.lineTo(w * 0.12, glassBot + h * 0.02);
+  g.lineTo(0, pilBot);
+  g.closePath();
+  g.fill();
+  g.beginPath();
+  g.moveTo(w, h * 0.58);
+  g.lineTo(pilR2, h * 0.6);
+  g.lineTo(w * 0.88, glassBot + h * 0.02);
+  g.lineTo(w, pilBot);
+  g.closePath();
+  g.fill();
+
+  // Hood / nose lip on top of the hood body — raised edge between glass bottom and dash.
+  g.fillStyle = '#06050B';
+  g.beginPath();
+  g.moveTo(w * 0.13, glassBot + h * 0.018);
+  g.quadraticCurveTo(w * 0.5, glassBot - h * 0.048, w * 0.87, glassBot + h * 0.018);
+  g.lineTo(w * 0.89, glassBot + h * 0.048);
+  g.quadraticCurveTo(w * 0.5, glassBot - h * 0.012, w * 0.11, glassBot + h * 0.048);
+  g.closePath();
+  g.fill();
+  const hoodEdge = g.createLinearGradient(0, glassBot - h * 0.055, 0, glassBot + h * 0.05);
+  hoodEdge.addColorStop(0, 'rgba(18,181,166,0.22)');
+  hoodEdge.addColorStop(0.35, 'rgba(255,248,232,0.08)');
+  hoodEdge.addColorStop(0.7, 'rgba(20,16,30,0.35)');
   hoodEdge.addColorStop(1, 'rgba(0,0,0,0)');
   g.fillStyle = hoodEdge;
   g.beginPath();
-  g.moveTo(w * 0.14, glassBot + h * 0.01);
-  g.quadraticCurveTo(w * 0.5, glassBot - h * 0.04, w * 0.86, glassBot + h * 0.01);
-  g.lineTo(w * 0.84, glassBot + h * 0.035);
-  g.quadraticCurveTo(w * 0.5, glassBot - h * 0.01, w * 0.16, glassBot + h * 0.035);
+  g.moveTo(w * 0.15, glassBot + h * 0.008);
+  g.quadraticCurveTo(w * 0.5, glassBot - h * 0.042, w * 0.85, glassBot + h * 0.008);
+  g.lineTo(w * 0.83, glassBot + h * 0.032);
+  g.quadraticCurveTo(w * 0.5, glassBot - h * 0.008, w * 0.17, glassBot + h * 0.032);
+  g.closePath();
+  g.fill();
+  // Soft shadow from lip onto the hood deck (depth cue before dash).
+  const hoodDeckShade = g.createLinearGradient(0, glassBot + h * 0.02, 0, dashTop);
+  hoodDeckShade.addColorStop(0, 'rgba(0,0,0,0.35)');
+  hoodDeckShade.addColorStop(0.55, 'rgba(0,0,0,0.12)');
+  hoodDeckShade.addColorStop(1, 'rgba(0,0,0,0)');
+  g.fillStyle = hoodDeckShade;
+  g.beginPath();
+  g.moveTo(w * 0.14, glassBot + h * 0.03);
+  g.quadraticCurveTo(w * 0.5, glassBot - h * 0.02, w * 0.86, glassBot + h * 0.03);
+  g.lineTo(w * 0.9, dashTop - h * 0.03);
+  g.quadraticCurveTo(w * 0.5, dashTop - h * 0.11, w * 0.1, dashTop - h * 0.03);
   g.closePath();
   g.fill();
 
-  const dash = g.createLinearGradient(0, dashTop - h * 0.06, 0, h);
-  dash.addColorStop(0, '#24212F');
-  dash.addColorStop(0.35, '#16131F');
-  dash.addColorStop(1, '#0A0910');
+  // Matte dash plastic under the hood lip (instrument binnacle sits in the center recess).
+  const dash = g.createLinearGradient(0, dashTop - h * 0.08, 0, h);
+  dash.addColorStop(0, '#2A2736');
+  dash.addColorStop(0.18, '#1C1A28');
+  dash.addColorStop(0.55, '#12101A');
+  dash.addColorStop(1, '#08070E');
   g.fillStyle = dash;
   g.beginPath();
   g.moveTo(0, dashTop + h * 0.02);
-  g.quadraticCurveTo(w * 0.25, dashTop - h * 0.015, w * 0.33, dashTop - h * 0.01);
-  g.quadraticCurveTo(w * 0.5, dashTop - h * 0.1, w * 0.67, dashTop - h * 0.01);
-  g.quadraticCurveTo(w * 0.85, dashTop, w, dashTop + h * 0.03);
+  g.quadraticCurveTo(w * 0.22, dashTop - h * 0.01, w * 0.32, dashTop - h * 0.008);
+  g.quadraticCurveTo(w * 0.5, dashTop - h * 0.095, w * 0.68, dashTop - h * 0.008);
+  g.quadraticCurveTo(w * 0.82, dashTop + h * 0.005, w, dashTop + h * 0.03);
   g.lineTo(w, h);
   g.lineTo(0, h);
   g.closePath();
   g.fill();
-  g.strokeStyle = 'rgba(18,181,166,0.4)';
-  g.lineWidth = 1.2;
+  // Soft teal rim light along the dash lip (night instrument wash).
+  const lipGlow = g.createLinearGradient(0, dashTop - h * 0.1, 0, dashTop + h * 0.04);
+  lipGlow.addColorStop(0, 'rgba(18,181,166,0)');
+  lipGlow.addColorStop(0.55, 'rgba(18,181,166,0.22)');
+  lipGlow.addColorStop(0.85, 'rgba(255,200,90,0.08)');
+  lipGlow.addColorStop(1, 'rgba(18,181,166,0)');
+  g.fillStyle = lipGlow;
+  g.beginPath();
+  g.moveTo(w * 0.08, dashTop + h * 0.01);
+  g.quadraticCurveTo(w * 0.5, dashTop - h * 0.1, w * 0.92, dashTop + h * 0.01);
+  g.lineTo(w * 0.9, dashTop + h * 0.035);
+  g.quadraticCurveTo(w * 0.5, dashTop - h * 0.055, w * 0.1, dashTop + h * 0.035);
+  g.closePath();
+  g.fill();
+  g.strokeStyle = 'rgba(18,181,166,0.35)';
+  g.lineWidth = 1.1;
+  g.beginPath();
+  g.moveTo(0, dashTop + h * 0.02);
+  g.quadraticCurveTo(w * 0.22, dashTop - h * 0.01, w * 0.32, dashTop - h * 0.008);
+  g.quadraticCurveTo(w * 0.5, dashTop - h * 0.095, w * 0.68, dashTop - h * 0.008);
+  g.quadraticCurveTo(w * 0.82, dashTop + h * 0.005, w, dashTop + h * 0.03);
   g.stroke();
 
-  // Living gauges: MPH + fuel + RPM needle + lap hint.
-  const mph = Math.round(Math.abs(p.speed));
-  const big = Math.max(22, Math.round(h * 0.045));
-  const gy = dashTop - h * 0.035;
-  g.font = `bold ${big}px ${FONT_BLACK}`;
+  // Recessed instrument binnacle — gauges read as bolted in-car cluster, not HUD.
+  const binCx = w * 0.5;
+  const binCy = dashTop + h * 0.018;
+  const binW = w * 0.52;
+  const binH = h * 0.115;
+  g.fillStyle = '#0A0912';
+  g.beginPath();
+  g.moveTo(binCx - binW * 0.5, binCy + binH * 0.15);
+  g.quadraticCurveTo(binCx - binW * 0.48, binCy - binH * 0.55, binCx - binW * 0.22, binCy - binH * 0.72);
+  g.quadraticCurveTo(binCx, binCy - binH * 0.95, binCx + binW * 0.22, binCy - binH * 0.72);
+  g.quadraticCurveTo(binCx + binW * 0.48, binCy - binH * 0.55, binCx + binW * 0.5, binCy + binH * 0.15);
+  g.quadraticCurveTo(binCx, binCy + binH * 0.55, binCx - binW * 0.5, binCy + binH * 0.15);
+  g.closePath();
+  g.fill();
+  const binShade = g.createLinearGradient(binCx, binCy - binH, binCx, binCy + binH * 0.2);
+  binShade.addColorStop(0, 'rgba(0,0,0,0.55)');
+  binShade.addColorStop(0.45, 'rgba(18,181,166,0.06)');
+  binShade.addColorStop(1, 'rgba(0,0,0,0.35)');
+  g.fillStyle = binShade;
+  g.fill();
+  g.strokeStyle = 'rgba(74,72,96,0.7)';
+  g.lineWidth = 1.4;
+  g.stroke();
+  g.strokeStyle = 'rgba(255,200,90,0.12)';
+  g.lineWidth = 1;
+  g.beginPath();
+  g.moveTo(binCx - binW * 0.42, binCy - binH * 0.35);
+  g.quadraticCurveTo(binCx, binCy - binH * 0.78, binCx + binW * 0.42, binCy - binH * 0.35);
+  g.stroke();
+
+  const mphVal = Math.round(Math.abs(p.speed));
+  const fuel = Math.max(0, Math.min(1, p.fuel));
+  const rpmT = Math.min(1, Math.abs(p.speed) / CONFIG.MAX_MPH);
+  const labelPx = Math.max(7, Math.round(h * 0.012));
+  const tickPx = Math.max(6, Math.round(h * 0.01));
+
+  // FUEL dial (left secondary).
+  const fuelCx = binCx - binW * 0.28;
+  const fuelCy = binCy - binH * 0.05;
+  const fuelR = Math.max(16, h * 0.034);
+  const fuelGlow = fuel < 0.2 ? 'rgba(230,59,46,0.55)' : 'rgba(18,181,166,0.45)';
+  clusterBezel(g, fuelCx, fuelCy, fuelR, fuelGlow);
+  g.strokeStyle = PR.red;
+  g.lineWidth = 2.5;
+  g.beginPath();
+  g.arc(fuelCx, fuelCy, fuelR - 5, Math.PI, Math.PI + Math.PI * 0.12, false);
+  g.stroke();
+  g.strokeStyle = PR.amber;
+  g.lineWidth = 1.2;
+  for (let k = 0; k <= 4; k++) {
+    const a = Math.PI + (k / 4) * Math.PI;
+    const major = k % 2 === 0;
+    g.beginPath();
+    g.moveTo(fuelCx + Math.cos(a) * (fuelR - (major ? 11 : 9)), fuelCy + Math.sin(a) * (fuelR - (major ? 11 : 9)));
+    g.lineTo(fuelCx + Math.cos(a) * (fuelR - 4), fuelCy + Math.sin(a) * (fuelR - 4));
+    g.stroke();
+  }
+  g.fillStyle = PR.amber;
+  g.font = `${tickPx}px ${FONT_BLACK}`;
   g.textAlign = 'center';
   g.textBaseline = 'middle';
-  g.fillStyle = PR.amber;
-  g.shadowColor = 'rgba(255,182,39,0.8)';
-  g.shadowBlur = 6;
-  g.fillText(p.reverse ? `R ${mph}` : String(mph), w * 0.5, gy);
+  g.fillText('E', fuelCx - fuelR + 9, fuelCy - 2);
+  g.fillText('F', fuelCx + fuelR - 9, fuelCy - 2);
+  clusterNeedle(g, fuelCx, fuelCy, Math.PI + fuel * Math.PI, fuelR - 6, fuel < 0.2 ? PR.red : PR.amber);
+  g.font = `bold ${labelPx}px ${FONT_BLACK}`;
+  g.fillStyle = fuel < 0.12 && Math.floor(f.time * 3) % 2 === 0 ? PR.amber : PR.tealLight;
+  if (fuel < 0.12) {
+    g.shadowColor = PR.amber;
+    g.shadowBlur = 6;
+  }
+  g.fillText('FUEL', fuelCx, fuelCy + fuelR * 0.42);
   g.shadowBlur = 0;
-  g.font = `bold ${Math.max(10, Math.round(h * 0.018))}px ${FONT_BLACK}`;
-  g.fillStyle = PR.muted;
-  g.fillText('MPH', w * 0.5, gy + big * 0.75);
 
-  const panelY = dashTop + h * 0.02;
-  const fuelW = Math.max(48, w * 0.09);
-  const fuelH = Math.max(6, h * 0.012);
-  const fuelX = w * 0.28 - fuelW / 2;
-  g.fillStyle = 'rgba(10,9,16,0.85)';
-  g.fillRect(fuelX - 4, panelY - 2, fuelW + 8, fuelH + 14);
-  g.font = `bold ${Math.max(8, Math.round(h * 0.014))}px ${FONT_BLACK}`;
-  g.textAlign = 'left';
-  g.fillStyle = PR.tealLight;
-  g.fillText('FUEL', fuelX, panelY + 4);
-  g.fillStyle = '#1A1824';
-  g.fillRect(fuelX, panelY + 8, fuelW, fuelH);
-  const fuel = Math.max(0, Math.min(1, p.fuel));
-  g.fillStyle = fuel < 0.2 ? PR.red : fuel < 0.4 ? PR.mango : PR.teal;
-  g.fillRect(fuelX, panelY + 8, fuelW * fuel, fuelH);
-
-  const rpmX = w * 0.72;
-  const rpmR = Math.max(18, h * 0.038);
-  g.fillStyle = 'rgba(10,9,16,0.85)';
+  // MPH dial (center primary) — digital + arc ticks.
+  const mphCx = binCx;
+  const mphCy = binCy - binH * 0.18;
+  const mphR = Math.max(24, h * 0.048);
+  clusterBezel(g, mphCx, mphCy, mphR, 'rgba(255,200,90,0.5)');
+  const mphAng = (val: number) => Math.PI + (Math.min(200, val) / 200) * Math.PI;
+  g.strokeStyle = PR.red;
+  g.lineWidth = 2.8;
   g.beginPath();
-  g.arc(rpmX, panelY + rpmR * 0.15, rpmR + 4, 0, Math.PI * 2);
-  g.fill();
-  g.strokeStyle = 'rgba(138,134,160,0.45)';
-  g.lineWidth = 2;
-  g.beginPath();
-  g.arc(rpmX, panelY + rpmR * 0.15, rpmR, Math.PI * 0.85, Math.PI * 0.15, false);
+  g.arc(mphCx, mphCy, mphR - 6, mphAng(CONFIG.SPIN_MPH), mphAng(200), false);
   g.stroke();
-  g.strokeStyle = 'rgba(230,59,46,0.55)';
-  g.beginPath();
-  g.arc(rpmX, panelY + rpmR * 0.15, rpmR, Math.PI * 0.05, Math.PI * 0.15, false);
-  g.stroke();
-  const rpmT = Math.min(1, Math.abs(p.speed) / CONFIG.MAX_MPH);
-  const ang = Math.PI * 0.85 + rpmT * Math.PI * 1.3;
   g.strokeStyle = PR.amber;
+  for (let val = 0; val <= 200; val += 20) {
+    if (val > CONFIG.SPIN_MPH) continue;
+    const a = mphAng(val);
+    const major = val % 40 === 0;
+    g.lineWidth = major ? 2 : 1;
+    g.beginPath();
+    g.moveTo(mphCx + Math.cos(a) * (mphR - (major ? 13 : 10)), mphCy + Math.sin(a) * (mphR - (major ? 13 : 10)));
+    g.lineTo(mphCx + Math.cos(a) * (mphR - 5), mphCy + Math.sin(a) * (mphR - 5));
+    g.stroke();
+  }
+  g.fillStyle = PR.amber;
+  g.font = `${tickPx}px ${FONT_BLACK}`;
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  for (const val of [0, 80, 160]) {
+    const a = mphAng(val);
+    g.fillText(String(val), mphCx + Math.cos(a) * (mphR - 17), mphCy + Math.sin(a) * (mphR - 17));
+  }
+  const mphHot = mphVal > CONFIG.SPIN_MPH;
+  g.font = `bold ${Math.max(14, Math.round(h * 0.032))}px ${FONT_BLACK}`;
+  g.fillStyle = mphHot ? PR.red : PR.amber;
+  g.shadowColor = mphHot ? 'rgba(230,59,46,0.85)' : 'rgba(255,200,90,0.75)';
+  g.shadowBlur = 7;
+  g.fillText(p.reverse ? `R${mphVal}` : String(mphVal), mphCx, mphCy - mphR * 0.12);
+  g.shadowBlur = 0;
+  clusterNeedle(g, mphCx, mphCy, mphAng(mphVal), mphR - 7, mphHot ? PR.red : '#FF5A3A');
+  g.font = `bold ${labelPx}px ${FONT_BLACK}`;
+  g.fillStyle = PR.muted;
+  g.fillText('MPH', mphCx, mphCy + mphR * 0.38);
+
+  // RPM dial (right secondary).
+  const rpmCx = binCx + binW * 0.28;
+  const rpmCy = binCy - binH * 0.05;
+  const rpmR = Math.max(16, h * 0.034);
+  clusterBezel(g, rpmCx, rpmCy, rpmR, 'rgba(18,181,166,0.5)');
+  g.strokeStyle = 'rgba(138,134,160,0.55)';
   g.lineWidth = 2;
   g.beginPath();
-  g.moveTo(rpmX, panelY + rpmR * 0.15);
-  g.lineTo(rpmX + Math.cos(ang) * rpmR * 0.82, panelY + rpmR * 0.15 + Math.sin(ang) * rpmR * 0.82);
+  g.arc(rpmCx, rpmCy, rpmR - 5, Math.PI * 0.85, Math.PI * 0.15, false);
   g.stroke();
-  g.fillStyle = PR.teal;
+  g.strokeStyle = 'rgba(230,59,46,0.65)';
   g.beginPath();
-  g.arc(rpmX, panelY + rpmR * 0.15, 3, 0, Math.PI * 2);
-  g.fill();
-  g.font = `bold ${Math.max(8, Math.round(h * 0.012))}px ${FONT_BLACK}`;
+  g.arc(rpmCx, rpmCy, rpmR - 5, Math.PI * 0.05, Math.PI * 0.15, false);
+  g.stroke();
+  g.strokeStyle = PR.tealLight;
+  g.lineWidth = 1.2;
+  for (let k = 0; k <= 5; k++) {
+    const a = Math.PI * 0.85 + (k / 5) * Math.PI * 1.3;
+    g.beginPath();
+    g.moveTo(rpmCx + Math.cos(a) * (rpmR - 10), rpmCy + Math.sin(a) * (rpmR - 10));
+    g.lineTo(rpmCx + Math.cos(a) * (rpmR - 4), rpmCy + Math.sin(a) * (rpmR - 4));
+    g.stroke();
+  }
+  const rpmAng = Math.PI * 0.85 + rpmT * Math.PI * 1.3;
+  clusterNeedle(g, rpmCx, rpmCy, rpmAng, rpmR - 6, PR.amber);
+  g.font = `bold ${labelPx}px ${FONT_BLACK}`;
   g.textAlign = 'center';
-  g.fillStyle = PR.muted;
-  g.fillText('RPM', rpmX, panelY + rpmR * 0.95);
+  g.fillStyle = PR.tealLight;
+  g.fillText('RPM', rpmCx, rpmCy + rpmR * 0.42);
 
+  // Lap / TO GO — small LCD window under the MPH bezel (tertiary race cue).
+  const lcdW = Math.max(56, w * 0.11);
+  const lcdH = Math.max(12, h * 0.022);
+  const lcdX = mphCx - lcdW / 2;
+  const lcdY = mphCy + mphR * 0.55;
+  g.fillStyle = '#05040C';
+  g.beginPath();
+  g.roundRect(lcdX - 2, lcdY - 2, lcdW + 4, lcdH + 4, 3);
+  g.fill();
+  g.strokeStyle = 'rgba(74,72,96,0.8)';
+  g.lineWidth = 1;
+  g.stroke();
+  g.fillStyle = '#0E1A18';
+  g.fillRect(lcdX, lcdY, lcdW, lcdH);
+  g.font = `bold ${Math.max(8, Math.round(h * 0.014))}px ${FONT_BLACK}`;
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
   if (f.race.started && !p.finished) {
     const left = f.race.lapsToGo(p);
-    g.font = `bold ${Math.max(10, Math.round(h * 0.016))}px ${FONT_BLACK}`;
-    g.fillStyle = PR.cream;
-    g.fillText(left <= 1 ? 'FINAL' : `${left} TO GO`, w * 0.5, panelY + h * 0.028);
+    const finalLap = left <= 1;
+    g.fillStyle = finalLap ? PR.amber : PR.tealLight;
+    g.shadowColor = finalLap ? 'rgba(255,200,90,0.7)' : 'rgba(18,181,166,0.55)';
+    g.shadowBlur = 4;
+    g.fillText(finalLap ? 'FINAL' : `${left} TO GO`, mphCx, lcdY + lcdH / 2);
+    g.shadowBlur = 0;
+  } else {
+    g.fillStyle = 'rgba(18,181,166,0.35)';
+    g.fillText('— — —', mphCx, lcdY + lcdH / 2);
   }
 
-  // Wheel: thicker rim, spoke grip, subtle hand silhouette suggestion; still rotates with steer.
+  // Steering wheel: leather rim thickness, tapered spokes, hub; rotates with steer; sits low for mirror/minimap.
   const r = wheelRadius(w, h);
   const cx = w * 0.5;
-  const cy = h + r * 0.38;
+  const cy = h + r * 0.42;
   g.save();
   g.translate(cx, cy);
   g.rotate(f.steer * 1.4);
-  g.strokeStyle = '#0E0C14';
-  g.lineWidth = r * 0.2;
+  // Outer carcass + matte leather + inner highlight = readable rim thickness.
+  g.strokeStyle = '#07060B';
+  g.lineWidth = r * 0.24;
+  g.lineCap = 'butt';
   g.beginPath();
   g.arc(0, 0, r, 0, Math.PI * 2);
   g.stroke();
-  g.strokeStyle = '#1A1724';
-  g.lineWidth = r * 0.14;
+  g.strokeStyle = '#1A1520';
+  g.lineWidth = r * 0.16;
   g.beginPath();
   g.arc(0, 0, r, 0, Math.PI * 2);
   g.stroke();
-  g.strokeStyle = 'rgba(255,248,232,0.1)';
-  g.lineWidth = r * 0.035;
+  g.strokeStyle = '#2A2432';
+  g.lineWidth = r * 0.07;
   g.beginPath();
-  g.arc(0, 0, r - r * 0.06, Math.PI * 1.05, Math.PI * 1.95);
+  g.arc(0, 0, r - r * 0.02, 0, Math.PI * 2);
   g.stroke();
-  g.fillStyle = '#1C1A26';
-  for (const a of [0, (Math.PI * 2) / 3, (Math.PI * 4) / 3]) {
+  g.strokeStyle = 'rgba(255,248,232,0.12)';
+  g.lineWidth = r * 0.03;
+  g.beginPath();
+  g.arc(0, 0, r - r * 0.07, Math.PI * 1.05, Math.PI * 1.95);
+  g.stroke();
+  // Grip pads at 9 / 3.
+  g.strokeStyle = '#14101A';
+  g.lineWidth = r * 0.13;
+  g.beginPath();
+  g.arc(0, 0, r, Math.PI * 0.88, Math.PI * 1.12);
+  g.stroke();
+  g.beginPath();
+  g.arc(0, 0, r, -Math.PI * 0.12, Math.PI * 0.12);
+  g.stroke();
+  // Three tapered spokes into the hub (one at 6 o'clock).
+  for (const a of [Math.PI * 0.5, Math.PI * 0.5 + (Math.PI * 2) / 3, Math.PI * 0.5 + (Math.PI * 4) / 3]) {
     g.save();
     g.rotate(a);
+    const spoke = g.createLinearGradient(r * 0.2, 0, r * 0.9, 0);
+    spoke.addColorStop(0, '#2A2736');
+    spoke.addColorStop(1, '#16131E');
+    g.fillStyle = spoke;
     g.beginPath();
-    g.moveTo(r * 0.18, -r * 0.06);
-    g.lineTo(r * 0.92, -r * 0.08);
-    g.lineTo(r * 0.92, r * 0.08);
-    g.lineTo(r * 0.18, r * 0.06);
+    g.moveTo(r * 0.2, -r * 0.055);
+    g.lineTo(r * 0.88, -r * 0.085);
+    g.lineTo(r * 0.88, r * 0.085);
+    g.lineTo(r * 0.2, r * 0.055);
     g.closePath();
     g.fill();
+    g.strokeStyle = 'rgba(201,204,214,0.18)';
+    g.lineWidth = 1;
+    g.stroke();
     g.restore();
   }
-  // Soft hand silhouettes at 9 and 3 o'clock.
-  g.fillStyle = 'rgba(35,28,40,0.55)';
+  // Soft hand suggestion (does not climb into mirror band).
+  g.fillStyle = 'rgba(32,26,36,0.5)';
   for (const side of [-1, 1]) {
     g.beginPath();
-    g.ellipse(side * r * 0.78, r * 0.08, r * 0.16, r * 0.11, side * 0.35, 0, Math.PI * 2);
+    g.ellipse(side * r * 0.82, r * 0.06, r * 0.14, r * 0.1, side * 0.3, 0, Math.PI * 2);
     g.fill();
   }
   g.fillStyle = PR.red;
-  g.fillRect(-r * 0.045, -r * 1.1, r * 0.09, r * 0.18);
-  g.fillStyle = '#211E2C';
+  g.fillRect(-r * 0.04, -r * 1.08, r * 0.08, r * 0.16);
+  // Hub + small team cue.
+  const hub = g.createRadialGradient(-r * 0.06, -r * 0.08, r * 0.02, 0, 0, r * 0.32);
+  hub.addColorStop(0, '#2E2A3A');
+  hub.addColorStop(1, '#16131E');
+  g.fillStyle = hub;
   g.beginPath();
-  g.arc(0, 0, r * 0.28, 0, Math.PI * 2);
+  g.arc(0, 0, r * 0.3, 0, Math.PI * 2);
   g.fill();
-  g.strokeStyle = 'rgba(18,181,166,0.35)';
+  g.strokeStyle = 'rgba(201,204,214,0.35)';
   g.lineWidth = 1.5;
   g.stroke();
   g.fillStyle = PR.teal;
+  g.fillRect(-r * 0.12, -r * 0.035, r * 0.24, r * 0.07);
+  g.fillStyle = PR.amber;
   g.beginPath();
-  g.arc(0, 0, r * 0.1, 0, Math.PI * 2);
+  g.arc(0, 0, r * 0.08, 0, Math.PI * 2);
   g.fill();
   g.restore();
 }
