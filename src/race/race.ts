@@ -4,12 +4,19 @@ import { NUM_SECTORS, type Track } from '../track/common';
 import { OVAL } from '../track/ovalTrack';
 import { aiInput } from './ai';
 import { type Car, initProgress, lapsCompleted, progress, updateProgress } from './car';
+import type { DriverSkill } from './grandprix';
 import { type OilSlick, oilRadius } from './oil';
 import { collideCars, type DriveInput, NO_INPUT, startSpin, stepCar } from './physics';
 import { updatePit } from './pit';
 
 export const NUM_COLORS = 20;
 const TYPICAL_MPH = 155;
+
+/** A fixed starting grid: colorIdx per slot and the AI drivers' skills (Grand Prix). */
+export interface Lineup {
+  colors: number[];
+  skills: Map<number, DriverSkill>;
+}
 
 export type RaceEvent = { type: 'spin'; car: Car } | { type: 'penalty'; car: Car; seconds: number };
 
@@ -24,6 +31,10 @@ export class Race {
   time = 0;
   leaderFinished = false;
   pitAuto = false;
+  /** The AI drives the player's car (finishing a Grand Prix race in the background). */
+  autoPlayer = false;
+  /** The player retired: classified last and scores nothing. */
+  playerRetired = false;
   playerDrive: DriveInput = NO_INPUT;
   readonly oil: OilSlick[] = [];
   readonly events: RaceEvent[] = [];
@@ -37,9 +48,18 @@ export class Race {
     readonly playerAI = false,
     readonly rules: RaceRules = DEFAULT_RULES,
     readonly track: Track = OVAL,
+    lineup?: Lineup,
   ) {
     this.rng = createRng(seed);
     this.laps = opts.laps;
+    if (lineup) {
+      lineup.colors.forEach((colorIdx, slot) => {
+        const isPlayer = colorIdx === opts.playerColor;
+        this.cars.push(this.makeCar(slot, colorIdx, isPlayer, lineup.skills.get(colorIdx) ?? this.drawSkill()));
+      });
+      this.player = this.cars.find((c) => c.isPlayer) ?? this.cars[0]!;
+      return;
+    }
     const n = Math.max(1, Math.min(NUM_COLORS, opts.cars));
 
     const playerSlot = this.playerSlot(n);
@@ -50,9 +70,18 @@ export class Race {
     for (let slot = 0; slot < n; slot++) {
       const isPlayer = slot === playerSlot;
       const colorIdx = isPlayer ? opts.playerColor : otherColors[aiIdx++]!;
-      this.cars.push(this.makeCar(slot, colorIdx, isPlayer));
+      this.cars.push(this.makeCar(slot, colorIdx, isPlayer, this.drawSkill()));
     }
     this.player = this.cars[playerSlot]!;
+  }
+
+  private drawSkill(): DriverSkill {
+    return {
+      topMph: lerp(CONFIG.AI_TOP_MPH[0], CONFIG.AI_TOP_MPH[1], this.rng()),
+      turnMph: lerp(CONFIG.AI_TURN_MPH[0], CONFIG.AI_TURN_MPH[1], this.rng()),
+      pitFuelLaps: lerp(CONFIG.AI_PIT_FUEL_LAPS[0], CONFIG.AI_PIT_FUEL_LAPS[1], this.rng()),
+      reaction: lerp(CONFIG.AI_REACTION_S[0], CONFIG.AI_REACTION_S[1], this.rng()),
+    };
   }
 
   private playerSlot(n: number): number {
@@ -68,7 +97,7 @@ export class Race {
     }
   }
 
-  private makeCar(slot: number, colorIdx: number, isPlayer: boolean): Car {
+  private makeCar(slot: number, colorIdx: number, isPlayer: boolean, skill: DriverSkill): Car {
     const { s, d } = this.track.gridSlot(slot);
     const p = this.track.pointAt(s, d);
     const car: Car = {
@@ -113,15 +142,15 @@ export class Race {
       contactStrength: 0,
       contactPrev: 0,
       ai: {
-        topMph: lerp(CONFIG.AI_TOP_MPH[0], CONFIG.AI_TOP_MPH[1], this.rng()),
-        turnMph: lerp(CONFIG.AI_TURN_MPH[0], CONFIG.AI_TURN_MPH[1], this.rng()),
+        topMph: skill.topMph,
+        turnMph: skill.turnMph,
         lane: d,
         laneCooldown: 0,
         pitPhase: 'none',
         box: slot,
-        pitFuelLaps: lerp(CONFIG.AI_PIT_FUEL_LAPS[0], CONFIG.AI_PIT_FUEL_LAPS[1], this.rng()),
+        pitFuelLaps: skill.pitFuelLaps,
         stuckTime: 0,
-        reaction: lerp(CONFIG.AI_REACTION_S[0], CONFIG.AI_REACTION_S[1], this.rng()),
+        reaction: skill.reaction,
         hazardTime: 0,
         recoverTime: 0,
         creepTime: 0,
@@ -154,7 +183,7 @@ export class Race {
     const track = this.track;
     const view = { track, cars: this.cars, started: this.started, laps: this.laps, time: this.time, oil: this.oil };
     for (const car of this.cars) {
-      const own = car.isPlayer && !this.playerAI && !this.pitAuto;
+      const own = car.isPlayer && !this.playerAI && !this.pitAuto && !this.autoPlayer;
       const input = own ? (playerInput ?? NO_INPUT) : aiInput(car, view, dt);
       if (car.isPlayer) this.playerDrive = input;
       car.brakeHold = input.brake && Math.abs(car.speed) > 1 ? CONFIG.BRAKE_LIGHT_HOLD_S : Math.max(0, car.brakeHold - dt);
