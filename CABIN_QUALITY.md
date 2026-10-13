@@ -35,3 +35,7 @@ Work in rounds until those three are yes. Prefer iterative polish in `src/gfx/fp
 ## Status — Structure
 
 Windshield aperture now reads as a sealed canopy: deeper roof header with underside lip, A-pillars with outer shade + body + teal/cream inner face, hood deck under the glass with a raised nose lip and deck shadow before the dash. Draw order is hood mass → roof/pillars → thickness → lip so cabin solids no longer look paper-thin. Cluster gauges / glass dirt / KeyC / mirror / minimap / `cameraYaw` left intact. `npm test` + `npm run typecheck` pass.
+
+## Status — Cluster
+
+Dash under the hood lip is matte plastic with a soft teal/amber lip wash. Gauges sit in a recessed binnacle (not floating HUD): primary MPH dial (digital + needle + spin-zone arc), secondary FUEL and RPM dials with metal bezels and night glow, tertiary lap LCD (`TO GO` / `FINAL`). Instrument hierarchy and warm teal–amber glow match the night cabin bar. Structure pillars/hood left intact; KeyC, mirror, minimap, `cameraYaw` unchanged. `npm test` + `npm run typecheck` pass.
