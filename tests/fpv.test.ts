@@ -1,9 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
+import { CONFIG, DEFAULT_OPTIONS } from '../src/config';
+import { type CabinInput, cabinFor, cabinReadout, joltOffset, LED_COUNT, RING_SEGS, ringColor, stepCabin } from '../src/gfx/fpv/cabin';
 import { Camera, clipProject, outX, outY } from '../src/gfx/fpv/engine';
 import { upright } from '../src/gfx/fpv/geom';
 import { buildScene } from '../src/gfx/fpv/scene';
 import { texFacing, texQuad } from '../src/gfx/fpv/texture';
 import type { Car } from '../src/race/car';
+import { Race } from '../src/race/race';
+import { PR } from '../src/ui/theme';
 
 function camera(): Camera {
   const c = new Camera();
@@ -115,5 +119,117 @@ describe('cockpit camera', () => {
     }
     clock.mockRestore();
     expect(yaw).toBe(heading);
+  });
+});
+
+describe('cockpit readout', () => {
+  const base: CabinInput = {
+    time: 10,
+    speed: 0,
+    reverse: false,
+    fuel: 1,
+    lapsToGo: 5,
+    started: true,
+    finished: false,
+    finishAge: 0,
+    skid: 0,
+    slideTime: 0,
+    spinTime: 0,
+    pitAuto: false,
+    refueling: false,
+    penalty: 0,
+    penaltyAge: 99,
+    position: 4,
+    interval: 0.42,
+  };
+  const lit = (s: Partial<CabinInput>) => cabinReadout({ ...base, ...s }).leds.filter(Boolean).length;
+
+  it('lights the LED strip from 114 mph to 146 mph', () => {
+    expect(lit({ speed: 113 })).toBe(0);
+    expect(lit({ speed: 130 })).toBe(5);
+    expect(lit({ speed: 147 })).toBe(LED_COUNT);
+    expect(cabinReadout({ ...base, speed: 147 }).leds.slice(0, 4)).toEqual([PR.teal, PR.teal, PR.teal, PR.teal]);
+  });
+
+  it('turns the strip red for a skid and blinks it in a turn in step with the SKID lamp', () => {
+    expect(cabinReadout({ ...base, speed: 151, skid: 1 }).leds.every((c) => c === PR.red)).toBe(true);
+    for (const time of [10, 10.1, 10.2, 10.3]) {
+      const r = cabinReadout({ ...base, speed: 151, skid: 2, time });
+      expect(lit({ speed: 151, skid: 2, time }) > 0).toBe(r.lamps.skid);
+    }
+  });
+
+  it('mirrors the start lights and flashes green at lights out', () => {
+    expect(cabinReadout({ ...base, started: false, lights: { lit: 3, out: false, since: -1 } }).leds).toEqual([
+      null,
+      null,
+      PR.red,
+      PR.red,
+      PR.red,
+      null,
+      null,
+      null,
+      null,
+    ]);
+    expect(lit({ lights: { lit: 0, out: true, since: 0.2 } })).toBe(LED_COUNT);
+    expect(lit({ lights: { lit: 0, out: true, since: 0.5 } })).toBe(0);
+  });
+
+  it('shows the speed on an 18 segment ring with reverse marked', () => {
+    expect(cabinReadout({ ...base, speed: 95 }).ring).toBe(9);
+    expect(cabinReadout({ ...base, speed: 180 }).ring).toBe(RING_SEGS);
+    expect(cabinReadout({ ...base, speed: -12, reverse: true }).digits).toBe('R12');
+    expect(ringColor(10)).toBe(PR.teal);
+    expect(ringColor(14)).toBe(PR.amber);
+    expect(ringColor(15)).toBe(PR.red);
+  });
+
+  it('counts fuel in laps and warns at the shared low fuel threshold', () => {
+    const half = cabinReadout({ ...base, fuel: 0.5 });
+    expect(half.fuelLaps).toBeCloseTo(6);
+    expect(half.fuelColor).toBe(PR.teal);
+    expect(cabinReadout({ ...base, fuel: 0.5, lapsToGo: 8 }).fuelColor).toBe(PR.amber);
+    expect(cabinReadout({ ...base, fuel: 0.15 }).fuelColor).not.toBe(PR.red);
+    const low = cabinReadout({ ...base, fuel: CONFIG.LOW_FUEL - 0.01, time: 0.1 });
+    expect(low.fuelColor).toBe(PR.red);
+    expect(low.lamps.fuel).toBe(true);
+    expect(cabinReadout({ ...base, fuel: CONFIG.LOW_FUEL - 0.01, time: 0.4 }).lamps.fuel).toBe(false);
+  });
+
+  it('shows position with the interval to the car ahead', () => {
+    expect(cabinReadout(base)).toMatchObject({ podTop: 'P4', podBottom: '+0.42', podColor: PR.amber });
+    expect(cabinReadout({ ...base, interval: 1.5 }).podColor).toBe(PR.tealLight);
+    expect(cabinReadout({ ...base, position: 1 }).podBottom).toBe('LEAD');
+    expect(cabinReadout({ ...base, lapsToGo: 1 }).podBottom).toBe('FINAL');
+    expect(cabinReadout({ ...base, started: false }).podBottom).toBe('— —');
+  });
+
+  it('lights the tell-tales for pit, penalty and reverse and darkens them at the finish', () => {
+    const r = cabinReadout({ ...base, pitAuto: true, penalty: 2, penaltyAge: 5, reverse: true });
+    expect(r.lamps).toMatchObject({ pit: true, pen: true, rev: true });
+    expect(Object.values(cabinReadout({ ...base, finished: true, pitAuto: true, reverse: true }).lamps).some(Boolean)).toBe(false);
+  });
+});
+
+describe('cockpit glass and jolt', () => {
+  it('soils the glass in oil and on impacts, clears it over time, and keeps it per race', () => {
+    const race = new Race({ ...DEFAULT_OPTIONS, cars: 1 }, 1);
+    const p = race.player;
+    p.speed = 120;
+    race.oil.push({ x: p.x, y: p.y, s: 0, d: 0, age: 5 });
+    for (let i = 0; i < 30; i++) stepCabin(race, 1 / 60);
+    expect(cabinFor(race).oil).toBeGreaterThan(0.5);
+    race.oil.length = 0;
+    p.wallImpact = 30;
+    stepCabin(race, 1 / 60);
+    expect(cabinFor(race).grit).toBeGreaterThan(0.3);
+    expect(joltOffset(cabinFor(race), race.time).y).toBeGreaterThan(0);
+    expect(Math.hypot(joltOffset(cabinFor(race), race.time).x, joltOffset(cabinFor(race), race.time).y)).toBeLessThanOrEqual(3);
+    expect(joltOffset(cabinFor(race), race.time + 0.4)).toEqual({ x: 0, y: 0, kick: 0 });
+    p.wallImpact = 0;
+    const before = cabinFor(race).oil;
+    for (let i = 0; i < 600; i++) stepCabin(race, 1 / 60);
+    expect(cabinFor(race).oil).toBeLessThan(before * 0.5);
+    expect(cabinFor(new Race({ ...DEFAULT_OPTIONS, cars: 1 }, 2)).oil).toBe(0);
   });
 });
