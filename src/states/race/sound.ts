@@ -112,7 +112,7 @@ export class RaceSound {
       audio.finishFanfare();
     } else if (laps > this.laps && !p.finished && laps > 0) audio.lapChime();
     this.laps = laps;
-    if (p.fuel < 0.12 && !this.lowFuel && !p.finished) audio.lowFuel();
-    this.lowFuel = p.fuel < 0.12;
+    if (p.fuel < CONFIG.LOW_FUEL && !this.lowFuel && !p.finished) audio.lowFuel();
+    this.lowFuel = p.fuel < CONFIG.LOW_FUEL;
   }
 }

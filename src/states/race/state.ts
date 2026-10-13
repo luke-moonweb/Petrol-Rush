@@ -539,7 +539,7 @@ export class RaceState implements State {
     if (p.fuel <= 0 && Math.abs(p.speed) < 1) return this.game.touch ? 'OUT OF FUEL  –  open MENU' : 'OUT OF FUEL  –  press ESC';
     if (p.refueling) return 'REFUELING...';
     if (this.race.pitAuto) return 'PIT LANE  –  AUTO';
-    if (p.fuel < 0.12 && Math.floor(this.race.time * 2) % 2 === 0) return 'LOW FUEL';
+    if (p.fuel < CONFIG.LOW_FUEL && Math.floor(this.race.time * 2) % 2 === 0) return 'LOW FUEL';
     if (this.penaltyMsg > 0) return `PENALTY +${CONFIG.PENALTY_S} S  –  YOU CAUSED A CRASH`;
     if (this.reverseHint > 0) return 'STOP TO ENGAGE REVERSE';
     if (p.reverse) return 'REVERSE';
