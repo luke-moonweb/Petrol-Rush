@@ -2,7 +2,7 @@ import { CONFIG } from '../../../config';
 import { createRng, type Rng } from '../../../sim/rng';
 import { HALF_W } from '../../../track/common';
 import type { SegmentTrack } from '../../../track/segment';
-import { NUM_BOXES, PIT_D } from '../../../track/straightPit';
+import { NOSE, NUM_BOXES, PIT_D, SEP_MID } from '../../../track/straightPit';
 import { makeCanvas } from '../../sprites';
 import { drawCenter, drawCenterLights, PADDOCK_ORIGIN } from '../oval/paddock';
 import { drawPitLabels, drawPitRoad, drawPitSigns, type PitPaint } from '../oval/pit';
@@ -59,13 +59,13 @@ function pitPaint(track: SegmentTrack): PitPaint {
   const p = track.pit;
   const g = p.geo;
   return {
-    x0: g.x0 + g.wall0,
-    x1: g.x0 + g.wall1,
+    x0: g.x0 + g.wall0 + NOSE,
+    x1: g.x0 + g.wall1 - NOSE,
     numBoxes: NUM_BOXES,
     boxX: (i) => p.boxX(i),
     boxW: g.boxPitch - 14,
-    wallX0: g.x0 + g.wall0,
-    wallX1: g.x0 + g.wall1,
+    wallX0: g.x0 + g.wall0 + NOSE,
+    wallX1: g.x0 + g.wall1 - NOSE,
     lineInX: g.x0 + g.lineIn,
     lineOutX: g.x0 + g.lineOut,
   };
@@ -321,22 +321,26 @@ function drawPitComplex(ctx: Ctx): void {
   const geo = track.pit.geo;
   const x = (u: number) => geo.x0 + u;
   const y = (d: number) => geo.y0 + d;
-  // Entry and exit roads: tarmac between the straight and the diagonal pit wall.
-  for (const [a, b] of [
-    [geo.entry0, geo.wall0],
-    [geo.exit1, geo.wall1],
+  // Entry and exit roads: tarmac between the straight and the diagonal pit wall, up to where the
+  // pit wall's pointed end has grown to full thickness.
+  for (const [a, b, c] of [
+    [geo.entry0, geo.wall0, geo.wall0 + NOSE],
+    [geo.exit1, geo.wall1, geo.wall1 - NOSE],
   ] as const) {
     g.fillStyle = COL.pitSurface;
     g.beginPath();
     g.moveTo(x(a), y(PIT_D.SEP));
     g.lineTo(x(b), y(PIT_D.BOX_TOP));
-    g.lineTo(x(b), y(PIT_D.SEP));
+    g.lineTo(x(c), y(PIT_D.BOX_TOP));
+    g.lineTo(x(c), y(PIT_D.SEP));
     g.closePath();
     g.fill();
     g.fillStyle = COL.curbFace;
     g.beginPath();
     g.moveTo(x(a), y(PIT_D.SEP));
     g.lineTo(x(b), y(PIT_D.BOX_TOP));
+    g.lineTo(x(c), y(PIT_D.BOX_TOP));
+    g.lineTo(x(c), y(PIT_D.LABEL_TOP));
     g.lineTo(x(b), y(PIT_D.LABEL_TOP));
     g.lineTo(x(a) + (a < b ? -14 : 14), y(PIT_D.SEP - 6));
     g.closePath();
@@ -346,6 +350,18 @@ function drawPitComplex(ctx: Ctx): void {
     g.beginPath();
     g.moveTo(x(a), y(PIT_D.SEP - 1));
     g.lineTo(x(b), y(PIT_D.BOX_TOP - 1));
+    g.lineTo(x(c), y(PIT_D.BOX_TOP - 1));
+    g.stroke();
+    // Pointed end of the pit wall.
+    g.fillStyle = COL.sep;
+    g.beginPath();
+    g.moveTo(x(b), y(SEP_MID));
+    g.lineTo(x(c), y(PIT_D.WALL_TOP));
+    g.lineTo(x(c), y(PIT_D.SEP));
+    g.closePath();
+    g.fill();
+    g.strokeStyle = '#FFC21A';
+    g.lineWidth = 1.5;
     g.stroke();
   }
   const L = pitPaint(track);
