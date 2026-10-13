@@ -206,17 +206,17 @@ function inPitS(ctx: Ctx, s: number): boolean {
 function runs(ctx: Ctx, keep: (s: number) => boolean): [number, number][] {
   const out: [number, number][] = [];
   const len = ctx.track.len;
-  let start: number | null = null;
   const base = ctx.pitS1;
-  for (let k = 0; k <= len; k += STEP) {
+  let start: number | null = null;
+  for (let k = 0; k < len; k += STEP) {
     const s = base + k;
-    const ok = keep(s) && k < len;
-    if (ok && start === null) start = s;
-    if (!ok && start !== null) {
+    if (keep(s)) start ??= s;
+    else if (start !== null) {
       out.push([start, s]);
       start = null;
     }
   }
+  if (start !== null) out.push([start, base + len]);
   return out;
 }
 
