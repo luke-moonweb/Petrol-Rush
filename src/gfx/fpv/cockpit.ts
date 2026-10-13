@@ -485,6 +485,9 @@ function drawBinnacle(g: CanvasRenderingContext2D, gm: Geom, colorIdx: number): 
 
 interface Layer {
   key: string;
+  scale: number;
+  colorIdx: number;
+  touch: boolean;
   gm: Geom;
   shell: HTMLCanvasElement;
   wheel: HTMLCanvasElement;
@@ -493,6 +496,7 @@ interface Layer {
 
 let cache: Layer | null = null;
 let pending = '';
+let used = false;
 
 function layer(w: number, h: number, scale: number): { canvas: HTMLCanvasElement; g: CanvasRenderingContext2D } {
   const canvas = document.createElement('canvas');
@@ -599,6 +603,9 @@ function build(key: string, w: number, h: number, scale: number, colorIdx: numbe
   const gm = geom(w, h, touch);
   cache = {
     key,
+    scale,
+    colorIdx,
+    touch,
     gm,
     shell: buildShell(gm, scale, colorIdx),
     wheel: buildWheel(gm.wheelR, scale, colorIdx),
@@ -607,16 +614,24 @@ function build(key: string, w: number, h: number, scale: number, colorIdx: numbe
   return cache;
 }
 
-function idle(fn: () => void): void {
+export function idle(fn: () => void): void {
   if (typeof requestIdleCallback === 'function') requestIdleCallback(fn, { timeout: 250 });
   else setTimeout(fn, 50);
 }
 
-// Layers are rebuilt off the draw path; until then the previous ones are stretched to the new width.
+// A width-only change keeps drawing the previous layers stretched while they are rebuilt off the draw
+// path; anything else (scale, height, livery, touch) rebuilds at once.
 function layers(w: number, h: number, scale: number, colorIdx: number, touch: boolean, drawing: boolean): Layer | null {
   const key = `${w}|${h}|${scale}|${colorIdx}|${touch}`;
-  if (cache?.key === key) return cache;
-  if (drawing && !cache) return build(key, w, h, scale, colorIdx, touch);
+  if (cache?.key === key) {
+    pending = '';
+    return cache;
+  }
+  const widthOnly = cache && cache.scale === scale && cache.gm.h === h && cache.colorIdx === colorIdx && cache.touch === touch;
+  if (drawing && !widthOnly) {
+    pending = '';
+    return build(key, w, h, scale, colorIdx, touch);
+  }
   if (pending !== key) {
     pending = key;
     idle(() => {
@@ -628,8 +643,12 @@ function layers(w: number, h: number, scale: number, colorIdx: number, touch: bo
   return cache;
 }
 
+export function cockpitUsed(): boolean {
+  return used;
+}
+
 export function prewarmCockpit(g: CanvasRenderingContext2D, w: number, h: number, colorIdx: number, touch: boolean): void {
-  layers(w, h, g.getTransform().a, colorIdx, touch, false);
+  if (used) layers(w, h, g.getTransform().a, colorIdx, touch, false);
 }
 
 interface Fleck {
@@ -865,9 +884,8 @@ export function reducedMotion(): boolean {
 
 const HAND_DEG = 50;
 
-function drawHands(g: CanvasRenderingContext2D, gm: Geom, glove: HTMLCanvasElement, rot: number): void {
+function drawHands(g: CanvasRenderingContext2D, gm: Geom, glove: HTMLCanvasElement, size: number, rot: number): void {
   const r = gm.wheelR;
-  const size = r * 0.5;
   for (const side of [-1, 1]) {
     const a = -Math.PI / 2 + side * rad(HAND_DEG) + rot;
     const hx = Math.cos(a) * r;
@@ -907,9 +925,10 @@ export function drawCockpit(g: CanvasRenderingContext2D, w: number, h: number, f
   const p = race.player;
   const cabin = cabinFor(race);
   const scale = g.getTransform().a;
+  used = true;
   const lay = layers(w, h, scale, p.colorIdx, f.touch, true)!;
   const gm = lay.gm;
-  const pos = p.finished ? race.classification().indexOf(p) + 1 : f.standings.indexOf(p) + 1;
+  const pos = p.finished ? race.shownPosition(p) : f.standings.indexOf(p) + 1;
   const ahead = p.finished ? undefined : f.standings[pos - 2];
   const r = cabinReadout({
     time: f.time,
@@ -938,8 +957,8 @@ export function drawCockpit(g: CanvasRenderingContext2D, w: number, h: number, f
   g.save();
   g.imageSmoothingEnabled = true;
   g.translate(jx, jy);
-  if (gm.w !== w) g.scale(w / gm.w, 1);
-  g.drawImage(lay.shell, -PAD, -PAD, lay.shell.width / scale, lay.shell.height / scale);
+  if (gm.w !== w || gm.h !== h) g.scale(w / gm.w, h / gm.h);
+  g.drawImage(lay.shell, -PAD, -PAD, lay.shell.width / lay.scale, lay.shell.height / lay.scale);
   const flood = drawStreaks(g, gm, f.streaks);
   const lipA = 0.1 * flood + (race.pitAuto ? 0.06 : 0);
   if (lipA > 0.005) {
@@ -959,7 +978,7 @@ export function drawCockpit(g: CanvasRenderingContext2D, w: number, h: number, f
   drawLamps(g, gm, r);
 
   const wr = gm.wheelR;
-  const size = lay.wheel.width / scale;
+  const size = lay.wheel.width / lay.scale;
   const rot = f.steer * 1.4 + j.kick;
   g.translate(gm.cx, gm.wheelCy);
   g.save();
@@ -971,7 +990,7 @@ export function drawCockpit(g: CanvasRenderingContext2D, w: number, h: number, f
   g.beginPath();
   g.arc(0, 0, wr - wr * 0.04, Math.PI * 1.25, Math.PI * 1.75);
   g.stroke();
-  drawHands(g, gm, lay.glove, rot);
+  drawHands(g, gm, lay.glove, lay.glove.width / lay.scale, rot);
   g.restore();
   return { x: jx, y: jy };
 }
