@@ -142,25 +142,56 @@ describe('cockpit readout', () => {
     position: 4,
     interval: 0.42,
   };
-  const lit = (s: Partial<CabinInput>) => cabinReadout({ ...base, ...s }).leds.filter(Boolean).length;
+  const read = (s: Partial<CabinInput>) => cabinReadout({ ...base, ...s });
+  const lit = (s: Partial<CabinInput>) => read(s).leds.filter(Boolean).length;
+  const hudSkidOn = (time: number) => Math.floor(time * 6) % 2 === 0;
 
   it('lights the LED strip from 114 mph to 146 mph', () => {
     expect(lit({ speed: 113 })).toBe(0);
     expect(lit({ speed: 130 })).toBe(5);
     expect(lit({ speed: 147 })).toBe(LED_COUNT);
-    expect(cabinReadout({ ...base, speed: 147 }).leds.slice(0, 4)).toEqual([PR.teal, PR.teal, PR.teal, PR.teal]);
+    expect(read({ speed: 147 }).leds.slice(0, 4)).toEqual([PR.teal, PR.teal, PR.teal, PR.teal]);
   });
 
-  it('turns the strip red for a skid and blinks it in a turn in step with the SKID lamp', () => {
-    expect(cabinReadout({ ...base, speed: 151, skid: 1 }).leds.every((c) => c === PR.red)).toBe(true);
-    for (const time of [10, 10.1, 10.2, 10.3]) {
-      const r = cabinReadout({ ...base, speed: 151, skid: 2, time });
-      expect(lit({ speed: 151, skid: 2, time }) > 0).toBe(r.lamps.skid);
+  it('turns the strip red for a skid and blinks it in a turn in step with the HUD SKID lamp', () => {
+    expect(read({ speed: 151, skid: 1 }).leds.every((c) => c === PR.red)).toBe(true);
+    for (let time = 10; time < 11; time += 0.037) {
+      const r = read({ speed: 151, skid: 2, time });
+      expect(r.leds.every((c) => c === (hudSkidOn(time) ? PR.red : null))).toBe(true);
+      expect(r.lamps.skid).toBe(hudSkidOn(time));
     }
   });
 
+  it('flashes the whole strip when a spin starts, then chases three red LEDs', () => {
+    const start = CONFIG.SPIN_MAX_S;
+    expect(lit({ spinTime: start - 0.1, time: 10 })).toBe(LED_COUNT);
+    expect(lit({ spinTime: start - 0.1, time: 10.2 })).toBe(0);
+    for (const time of [11, 11.06, 11.5]) {
+      const leds = read({ spinTime: 1, time }).leds;
+      expect(leds.filter(Boolean).length).toBe(3);
+      const head = leds.findIndex((c, i) => c && !leds[(i + LED_COUNT - 1) % LED_COUNT]);
+      expect(leds[(head + 1) % LED_COUNT]).toBe(PR.red);
+      expect(leds[(head + 2) % LED_COUNT]).toBe(PR.red);
+    }
+    expect(read({ spinTime: 1 }).lamps.skid).toBe(true);
+  });
+
+  it('alternates even and odd LEDs in the pit lane', () => {
+    const a = read({ pitAuto: true, time: 10 }).leds;
+    const b = read({ pitAuto: true, time: 10.25 }).leds;
+    expect(a.filter(Boolean).length + b.filter(Boolean).length).toBe(LED_COUNT);
+    for (let i = 0; i < LED_COUNT; i++) expect(!!a[i]).not.toBe(!!b[i]);
+  });
+
+  it('cascades the strip after the finish and then goes dark', () => {
+    expect(lit({ finished: true, finishAge: 0.01 })).toBe(1);
+    expect(lit({ finished: true, finishAge: 0.35 })).toBe(5);
+    expect(read({ finished: true, finishAge: 0.8 }).leds[0]).toBe(PR.amber);
+    expect(lit({ finished: true, finishAge: 2.5 })).toBe(0);
+  });
+
   it('mirrors the start lights and flashes green at lights out', () => {
-    expect(cabinReadout({ ...base, started: false, lights: { lit: 3, out: false, since: -1 } }).leds).toEqual([
+    expect(read({ started: false, lights: { lit: 3, out: false, since: -1 } }).leds).toEqual([
       null,
       null,
       PR.red,
@@ -175,61 +206,98 @@ describe('cockpit readout', () => {
     expect(lit({ lights: { lit: 0, out: true, since: 0.5 } })).toBe(0);
   });
 
-  it('shows the speed on an 18 segment ring with reverse marked', () => {
-    expect(cabinReadout({ ...base, speed: 95 }).ring).toBe(9);
-    expect(cabinReadout({ ...base, speed: 180 }).ring).toBe(RING_SEGS);
-    expect(cabinReadout({ ...base, speed: -12, reverse: true }).digits).toBe('R12');
+  it('shows the speed on an 18 segment ring that turns red as soon as it passes 150', () => {
+    expect(read({ speed: 0 }).ring).toBe(0);
+    expect(read({ speed: 95 }).ring).toBe(10);
+    expect(read({ speed: 150 }).ring).toBe(15);
+    expect(ringColor(read({ speed: 151 }).ring - 1)).toBe(PR.red);
+    expect(read({ speed: 180 }).ring).toBe(RING_SEGS);
+    expect(read({ speed: -12, reverse: true }).digits).toBe('R12');
     expect(ringColor(10)).toBe(PR.teal);
     expect(ringColor(14)).toBe(PR.amber);
-    expect(ringColor(15)).toBe(PR.red);
   });
 
-  it('counts fuel in laps and warns at the shared low fuel threshold', () => {
-    const half = cabinReadout({ ...base, fuel: 0.5 });
+  it('warns about fuel only when a stop is close', () => {
+    const full = read({ fuel: 1, lapsToGo: 18 });
+    expect(full.fuelColor).toBe(PR.teal);
+    expect(full.lamps.fuel).toBe(false);
+    expect(full.podBottom).toBe('+0.42');
+    const half = read({ fuel: 0.5, lapsToGo: 8 });
     expect(half.fuelLaps).toBeCloseTo(6);
     expect(half.fuelColor).toBe(PR.teal);
-    expect(cabinReadout({ ...base, fuel: 0.5, lapsToGo: 8 }).fuelColor).toBe(PR.amber);
-    expect(cabinReadout({ ...base, fuel: 0.15 }).fuelColor).not.toBe(PR.red);
-    const low = cabinReadout({ ...base, fuel: CONFIG.LOW_FUEL - 0.01, time: 0.1 });
+    const soon = read({ fuel: 0.2, lapsToGo: 8 });
+    expect(soon.fuelColor).toBe(PR.amber);
+    expect(soon.lamps.fuel).toBe(false);
+    expect(soon).toMatchObject({ podBottom: 'PIT 2', podColor: PR.amber });
+    expect(read({ fuel: 0.2, lapsToGo: 2 }).fuelColor).toBe(PR.teal);
+    expect(read({ fuel: 0.121, lapsToGo: 8 }).lamps.fuel).toBe(true);
+    expect(read({ fuel: 0.15, lapsToGo: 8 }).fuelColor).not.toBe(PR.red);
+    const low = read({ fuel: CONFIG.LOW_FUEL - 0.01, time: 0.1 });
     expect(low.fuelColor).toBe(PR.red);
     expect(low.lamps.fuel).toBe(true);
-    expect(cabinReadout({ ...base, fuel: CONFIG.LOW_FUEL - 0.01, time: 0.4 }).lamps.fuel).toBe(false);
+    expect(read({ fuel: CONFIG.LOW_FUEL - 0.01, time: 0.4 }).lamps.fuel).toBe(false);
   });
 
   it('shows position with the interval to the car ahead', () => {
-    expect(cabinReadout(base)).toMatchObject({ podTop: 'P4', podBottom: '+0.42', podColor: PR.amber });
-    expect(cabinReadout({ ...base, interval: 1.5 }).podColor).toBe(PR.tealLight);
-    expect(cabinReadout({ ...base, position: 1 }).podBottom).toBe('LEAD');
-    expect(cabinReadout({ ...base, lapsToGo: 1 }).podBottom).toBe('FINAL');
-    expect(cabinReadout({ ...base, started: false }).podBottom).toBe('— —');
+    expect(read({})).toMatchObject({ podTop: 'P4', podBottom: '+0.42', podColor: PR.amber });
+    expect(read({ interval: 1.5 }).podColor).toBe(PR.tealLight);
+    expect(read({ interval: null }).podBottom).toBe('—');
+    expect(read({ position: 1 }).podBottom).toBe('LEAD');
+    expect(read({ lapsToGo: 1 }).podBottom).toBe('FINAL');
+    expect(read({ started: false }).podBottom).toBe('— —');
+    expect(read({ finished: true, position: 3, time: 10 }).podTop).toBe('P3');
+    expect(read({ finished: true, position: 3, time: 10.6 }).podTop).toBe('FINISH');
   });
 
   it('lights the tell-tales for pit, penalty and reverse and darkens them at the finish', () => {
-    const r = cabinReadout({ ...base, pitAuto: true, penalty: 2, penaltyAge: 5, reverse: true });
+    const r = read({ pitAuto: true, penalty: 2, penaltyAge: 5, reverse: true });
     expect(r.lamps).toMatchObject({ pit: true, pen: true, rev: true });
-    expect(Object.values(cabinReadout({ ...base, finished: true, pitAuto: true, reverse: true }).lamps).some(Boolean)).toBe(false);
+    expect(read({ penalty: 2, penaltyAge: 0.3 }).lamps.pen).toBe(false);
+    expect(Object.values(read({ finished: true, pitAuto: true, reverse: true }).lamps).some(Boolean)).toBe(false);
   });
 });
 
 describe('cockpit glass and jolt', () => {
-  it('soils the glass in oil and on impacts, clears it over time, and keeps it per race', () => {
-    const race = new Race({ ...DEFAULT_OPTIONS, cars: 1 }, 1);
-    const p = race.player;
-    p.speed = 120;
-    race.oil.push({ x: p.x, y: p.y, s: 0, d: 0, age: 5 });
-    for (let i = 0; i < 30; i++) stepCabin(race, 1 / 60);
-    expect(cabinFor(race).oil).toBeGreaterThan(0.5);
-    race.oil.length = 0;
+  const race = () => {
+    const r = new Race({ ...DEFAULT_OPTIONS, cars: 1 }, 1);
+    r.player.speed = 120;
+    return r;
+  };
+
+  it('soils the glass in oil and clears most of it within 8 seconds', () => {
+    const r = race();
+    const p = r.player;
+    r.oil.push({ x: p.x, y: p.y, s: 0, d: 0, age: 5 });
+    for (let i = 0; i < 30; i++) stepCabin(r, 1 / 60);
+    const peak = cabinFor(r).oil;
+    expect(peak).toBeGreaterThan(0.5);
+    r.oil.length = 0;
+    for (let i = 0; i < 8 * 60; i++) stepCabin(r, 1 / 60);
+    expect(cabinFor(r).oil).toBeLessThan(peak * 0.05);
+    expect(cabinFor(race()).oil).toBe(0);
+  });
+
+  it('adds grit and a small jolt once per hit, not every frame of contact', () => {
+    const r = race();
+    const p = r.player;
     p.wallImpact = 30;
-    stepCabin(race, 1 / 60);
-    expect(cabinFor(race).grit).toBeGreaterThan(0.3);
-    expect(joltOffset(cabinFor(race), race.time).y).toBeGreaterThan(0);
-    expect(Math.hypot(joltOffset(cabinFor(race), race.time).x, joltOffset(cabinFor(race), race.time).y)).toBeLessThanOrEqual(3);
-    expect(joltOffset(cabinFor(race), race.time + 0.4)).toEqual({ x: 0, y: 0, kick: 0 });
-    p.wallImpact = 0;
-    const before = cabinFor(race).oil;
-    for (let i = 0; i < 600; i++) stepCabin(race, 1 / 60);
-    expect(cabinFor(race).oil).toBeLessThan(before * 0.5);
-    expect(cabinFor(new Race({ ...DEFAULT_OPTIONS, cars: 1 }, 2)).oil).toBe(0);
+    p.contactStrength = 30;
+    stepCabin(r, 1 / 60);
+    const once = cabinFor(r).grit;
+    expect(once).toBeGreaterThan(0.3);
+    for (let i = 0; i < 5; i++) stepCabin(r, 1 / 60);
+    expect(cabinFor(r).grit).toBeLessThanOrEqual(once);
+    const j = joltOffset(cabinFor(r), r.time);
+    expect(j.y).toBeGreaterThan(0);
+    expect(Math.hypot(j.x, j.y)).toBeLessThanOrEqual(3);
+    expect(joltOffset(cabinFor(r), r.time + 0.4)).toEqual({ x: 0, y: 0, kick: 0 });
+  });
+
+  it('counts a wall hit once instead of adding wall and contact strength', () => {
+    const r = race();
+    r.player.wallImpact = 4;
+    r.player.contactStrength = 4;
+    stepCabin(r, 1 / 60);
+    expect(cabinFor(r).grit).toBe(0);
   });
 });
