@@ -1,6 +1,7 @@
 import { CONFIG, LAP_CHOICES, QUALIFYING_CHOICES, type RaceOptions } from '../../config';
 import { stepCabin } from '../../gfx/fpv/cabin';
-import { drawCockpitView } from '../../gfx/fpv/view';
+import { prewarmCockpit } from '../../gfx/fpv/cockpit';
+import { cockpitOverlayMs, drawCockpitView } from '../../gfx/fpv/view';
 import { Particles } from '../../gfx/particles';
 import { drawCars, drawOil, trackCanvas } from '../../gfx/world';
 import { keyLabel } from '../../input';
@@ -384,11 +385,14 @@ export class RaceState implements State {
         : undefined;
       const touch = this.game.touch;
       drawCockpitView(g, { race, view, ix, iy, ih, steer: this.steerVis, time: race.time, touch, skid, lights, particles: this.particles });
-    } else this.renderTopDown(g, race, ix, iy, ih);
+    } else {
+      this.renderTopDown(g, race, ix, iy, ih);
+      prewarmCockpit(g, view.w, view.h, race.player.colorIdx, this.game.touch);
+    }
 
     drawHudTop(g, race, this.notice);
     drawHudPanel(g, race);
-    drawSkidLamp(g, skid, race.time, view.x + view.w - 6, view.y + 6);
+    if (!cockpit) drawSkidLamp(g, skid, race.time, view.x + view.w - 6, view.y + 6);
     const msg = this.message();
     const low = Math.round(view.h * 0.22);
     if (msg) drawRaceMessage(g, msg, cockpit ? low + 30 : 44);
@@ -563,6 +567,7 @@ export class RaceState implements State {
       `x ${p.x.toFixed(0)} y ${p.y.toFixed(0)}  s ${p.s.toFixed(0)} d ${p.d.toFixed(1)}`,
       `mph ${p.speed.toFixed(1)}  fuel ${(p.fuel * 100).toFixed(1)}%  spin ${p.spinTime.toFixed(2)}`,
       `sector ${p.lastSector} passed ${p.sectorsPassed}  t ${this.race.time.toFixed(1)}`,
+      ...(this.game.prefs.camera === 'cockpit' ? [`cockpit overlay ${cockpitOverlayMs().toFixed(2)} ms (median 60)`] : []),
     ];
   }
 }

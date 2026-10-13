@@ -9,7 +9,7 @@ import { PR } from '../../ui/theme';
 import type { Particles } from '../particles';
 import { CAR_SCHEMES, carFaces, driverName, MODEL_SCALE } from '../vehicles';
 import { trackCanvas } from '../world';
-import { type CabinView, drawCockpit, type Streak, wheelRadius } from './cockpit';
+import { type CabinView, drawCockpit, reducedMotion, type Streak, wheelRadius } from './cockpit';
 import {
   Camera,
   clipProject,
@@ -58,11 +58,10 @@ const CAR_REACH = 26;
 const OIL_MIN_PX = 6;
 const OWN_SMOKE = 15;
 const MAX_PUFF_PX = 60;
-const MAST_Z = 60;
 const FLOOD_DEPTH = 176;
 const FLOOD_SIDE = 140;
-const FLOOD_ALPHA = 0.08;
 const MAX_STREAKS = 3;
+const OVERLAY_SAMPLES = 60;
 
 let scene: Scene | null = null;
 const cam = new Camera();
@@ -604,18 +603,27 @@ export function cameraYaw(p: Car, heading: number): number {
   return camYaw;
 }
 
-function floodStreaks(c: Camera, glows: Glow[]): Streak[] {
+export function floodStreaks(c: Camera, glows: Glow[]): Streak[] {
   const out: Streak[] = [];
   for (const gl of glows) {
-    if (gl.z <= MAST_Z) continue;
+    if (!gl.flood) continue;
     const dx = gl.x - c.x;
     const dy = gl.y - c.y;
     const d = dx * c.cos + dy * c.sin;
     const lat = -dx * c.sin + dy * c.cos;
     if (d <= 0 || d >= FLOOD_DEPTH || Math.abs(lat) >= FLOOD_SIDE) continue;
-    out.push({ x: c.ox + (c.focal * lat) / d, a: FLOOD_ALPHA * (1 - d / FLOOD_DEPTH) });
+    const t = 1 - d / FLOOD_DEPTH;
+    out.push({ x: c.ox + (c.focal * lat) / d, k: t * t * (3 - 2 * t) });
   }
-  return out.sort((a, b) => b.a - a.a).slice(0, MAX_STREAKS);
+  return out.sort((a, b) => b.k - a.k).slice(0, MAX_STREAKS);
+}
+
+const overlayMs: number[] = [];
+
+export function cockpitOverlayMs(): number {
+  if (overlayMs.length === 0) return 0;
+  const sorted = [...overlayMs].sort((a, b) => a - b);
+  return sorted[Math.floor(sorted.length / 2)]!;
 }
 
 export function drawCockpitView(g: CanvasRenderingContext2D, f: CockpitFrame): void {
@@ -631,7 +639,7 @@ export function drawCockpitView(g: CanvasRenderingContext2D, f: CockpitFrame): v
   const ex = f.ix(p) + EYE_BACK * c - EYE_SIDE * s;
   const ey = f.iy(p) + EYE_BACK * s + EYE_SIDE * c;
   const speed = Math.abs(p.speed);
-  const shake = speed > 5 ? Math.sin(f.time * 41) * 0.12 * (speed / 180) : 0;
+  const shake = speed > 5 && !reducedMotion() ? Math.sin(f.time * 41) * 0.12 * (speed / 180) : 0;
 
   g.save();
   g.translate(v.x, v.y);
@@ -648,8 +656,12 @@ export function drawCockpitView(g: CanvasRenderingContext2D, f: CockpitFrame): v
   cam.fogNear = 260;
   drawSky(g, cam, v.w, yaw);
   renderWorld(g, cam, f, false);
-  drawCockpit(g, v.w, v.h, { ...f, standings, streaks: floodStreaks(cam, scene!.glows) });
+  const t0 = performance.now();
+  const jolt = drawCockpit(g, v.w, v.h, { ...f, standings, streaks: floodStreaks(cam, scene!.glows) });
+  g.translate(jolt.x, jolt.y);
   drawMirror(g, v.w, v.h, f, ex, ey, yaw);
   drawMinimap(g, v.w, v.h, wheelRadius(v.w), f);
+  overlayMs.push(performance.now() - t0);
+  if (overlayMs.length > OVERLAY_SAMPLES) overlayMs.shift();
   g.restore();
 }
