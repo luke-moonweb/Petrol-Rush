@@ -1,6 +1,16 @@
 import { describe, expect, it, vi } from 'vitest';
 import { CONFIG, DEFAULT_OPTIONS } from '../src/config';
-import { type CabinInput, cabinFor, cabinReadout, joltOffset, LED_COUNT, RING_SEGS, ringColor, stepCabin } from '../src/gfx/fpv/cabin';
+import {
+  type CabinInput,
+  cabinFor,
+  cabinReadout,
+  JOLT_GAP_S,
+  joltOffset,
+  LED_COUNT,
+  RING_SEGS,
+  ringColor,
+  stepCabin,
+} from '../src/gfx/fpv/cabin';
 import { Camera, clipProject, outX, outY } from '../src/gfx/fpv/engine';
 import { upright } from '../src/gfx/fpv/geom';
 import { buildScene } from '../src/gfx/fpv/scene';
@@ -164,8 +174,8 @@ describe('cockpit readout', () => {
 
   it('flashes the whole strip when a spin starts, then chases three red LEDs', () => {
     const start = CONFIG.SPIN_MAX_S;
-    expect(lit({ spinTime: start - 0.1, time: 10 })).toBe(LED_COUNT);
-    expect(lit({ spinTime: start - 0.1, time: 10.2 })).toBe(0);
+    for (const time of [10, 10.1, 10.37]) expect(lit({ spinTime: start - 0.01, time })).toBe(LED_COUNT);
+    expect(lit({ spinTime: start - 0.2, time: 10 })).toBe(0);
     for (const time of [11, 11.06, 11.5]) {
       const leds = read({ spinTime: 1, time }).leds;
       expect(leds.filter(Boolean).length).toBe(3);
@@ -230,6 +240,8 @@ describe('cockpit readout', () => {
     expect(soon.lamps.fuel).toBe(false);
     expect(soon).toMatchObject({ podBottom: 'PIT 2', podColor: PR.amber });
     expect(read({ fuel: 0.2, lapsToGo: 2 }).fuelColor).toBe(PR.teal);
+    expect(read({ fuel: 0.13, lapsToGo: 8 })).toMatchObject({ podBottom: 'PIT 1', podColor: PR.amber });
+    expect(read({ fuel: 0.07, lapsToGo: 8 })).toMatchObject({ podBottom: 'PIT NOW', podColor: PR.red });
     expect(read({ fuel: 0.121, lapsToGo: 8 }).lamps.fuel).toBe(true);
     expect(read({ fuel: 0.15, lapsToGo: 8 }).fuelColor).not.toBe(PR.red);
     const low = read({ fuel: CONFIG.LOW_FUEL - 0.01, time: 0.1 });
@@ -277,7 +289,7 @@ describe('cockpit glass and jolt', () => {
     expect(cabinFor(race()).oil).toBe(0);
   });
 
-  it('adds grit and a small jolt once per hit, not every frame of contact', () => {
+  it('adds grit and a small jolt once per hit, at most once per jolt gap during long contact', () => {
     const r = race();
     const p = r.player;
     p.wallImpact = 30;
@@ -291,6 +303,10 @@ describe('cockpit glass and jolt', () => {
     expect(j.y).toBeGreaterThan(0);
     expect(Math.hypot(j.x, j.y)).toBeLessThanOrEqual(3);
     expect(joltOffset(cabinFor(r), r.time + 0.4)).toEqual({ x: 0, y: 0, kick: 0 });
+    const before = cabinFor(r).grit;
+    r.time += JOLT_GAP_S + 0.01;
+    stepCabin(r, 1 / 60);
+    expect(cabinFor(r).grit).toBeGreaterThan(before + 0.3);
   });
 
   it('counts a wall hit once instead of adding wall and contact strength', () => {
