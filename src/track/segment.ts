@@ -1,15 +1,6 @@
 import { CONFIG } from '../config';
-import {
-  CAR_R,
-  type Constrainable,
-  type Corner,
-  type Frenet,
-  HALF_W,
-  type PitLane,
-  type Track,
-  type TrackPoint,
-  type WallNormal,
-} from './common';
+import { CAR_R, type Constrainable, type Corner, type Frenet, HALF_W, type Track, type TrackPoint, type WallNormal } from './common';
+import { pitGeo, StraightPit } from './straightPit';
 
 /** A corner of the track polygon: position and the radius of the arc that rounds it. */
 export type Vertex = readonly [x: number, y: number, r: number];
@@ -130,18 +121,6 @@ function segPoint(g: Segment, u: number, d: number): TrackPoint {
   return { x: g.corner.cx + rad * Math.cos(phi), y: g.corner.cy + rad * Math.sin(phi), heading: phi + (dir * Math.PI) / 2 };
 }
 
-const NO_PIT: PitLane = {
-  inLane: () => false,
-  inBox: () => false,
-  walled: () => false,
-  decideAt: () => false,
-  autoIn: () => false,
-  autoOut: () => true,
-  plan: (_car, _view, target, laneD) => ({ target, laneD, lane: null }),
-  follow: () => {},
-  aim: (car) => ({ x: car.x, y: car.y }),
-};
-
 /** A circuit built from straights and constant-radius arcs. s = 0 is the finish line. */
 export class SegmentTrack implements Track {
   readonly id: string;
@@ -152,7 +131,7 @@ export class SegmentTrack implements Track {
   readonly worldH: number;
   readonly segments: readonly Segment[];
   readonly problems: readonly string[];
-  readonly pit: PitLane = NO_PIT;
+  readonly pit: StraightPit;
   /** Length of the main straight, and where on it the finish line is. */
   readonly mainLen: number;
   readonly finishAt: number;
@@ -209,6 +188,8 @@ export class SegmentTrack implements Track {
         side[idx] = Math.max(side[idx]!, KERB_W * Math.max(0, 1 - out / KERB_RAMP));
       }
     }
+    const start = this.segments[0] as Line;
+    this.pit = new StraightPit(pitGeo(start.x0, start.y0, this.mainLen));
     const firstArc = this.segments.find((g) => g.kind === 'arc') as Arc;
     this.gridSide = -firstArc.corner.dir;
   }
@@ -307,10 +288,20 @@ export class SegmentTrack implements Track {
     return [this.kerbL[i]!, this.kerbR[i]!];
   }
 
+  /** Distance along the main straight from its start, or -1 elsewhere on the lap. */
+  mainU(s: number): number {
+    const u = this.wrapS(s + this.finishAt);
+    return u <= this.mainLen ? u : -1;
+  }
+
   constrain(p: Constrainable): WallNormal | null {
     const { s, d } = this.project(p.x, p.y);
     const [kl, kr] = this.kerbs(s);
     const lo = -(HALF_W + kl) + CAR_R;
+    if (this.mainU(s) >= 0) {
+      const pit = this.pit.constrain(p, lo);
+      if (pit !== undefined) return pit;
+    } else p.wasInPit = false;
     const hi = HALF_W + kr - CAR_R;
     if (d >= lo && d <= hi) return null;
     const dd = d < lo ? lo : hi;

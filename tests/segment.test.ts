@@ -5,6 +5,7 @@ import { GP_DEFS, gpTracks } from '../src/track/gp';
 import { CX_L, CX_R, CY, FINISH_X, RC, STRAIGHT } from '../src/track/oval';
 import { OVAL } from '../src/track/ovalTrack';
 import { compileShape, R_MIN, SegmentTrack, WORLD_MARGIN } from '../src/track/segment';
+import { PIT_D } from '../src/track/straightPit';
 
 const OVAL_DEF = {
   id: 'oval-seg',
@@ -162,7 +163,9 @@ for (const track of gpTracks()) {
         track.constrain(p);
         const after = track.project(p.x, p.y);
         const [kl, kr] = track.kerbs(after.s);
-        expect(after.d).toBeGreaterThanOrEqual(-(HALF_W + kl) + CAR_R - 0.5);
+        // Along the main straight the pit lane opens up to the north.
+        const lo = track.mainU(after.s) >= 0 ? PIT_D.BOX_TOP + CAR_R : -(HALF_W + kl) + CAR_R;
+        expect(after.d).toBeGreaterThanOrEqual(lo - 0.5);
         expect(after.d).toBeLessThanOrEqual(HALF_W + kr - CAR_R + 0.5);
       }
     });

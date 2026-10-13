@@ -7,6 +7,7 @@ export const CONFIG = {
   HUD_LEFT_W: 124,
   PLAY_H: 456,
   CAMERA_LEAD: 70,
+  CAMERA_LEAD_2D: 110,
   CAMERA_LEAD_S: 0.4,
 
   STEP_HZ: 60,
@@ -105,6 +106,7 @@ export interface RaceRules {
 export const DEFAULT_RULES: RaceRules = { penalties: true, collisions: 'realistic' };
 
 export interface RaceOptions {
+  track: string;
   cars: number;
   laps: number;
   playerColor: number;
@@ -112,6 +114,7 @@ export interface RaceOptions {
 }
 
 export const DEFAULT_OPTIONS: RaceOptions = {
+  track: 'oval',
   cars: 20,
   laps: 18,
   playerColor: 0,

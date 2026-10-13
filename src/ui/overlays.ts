@@ -171,7 +171,11 @@ function statCard(g: CanvasRenderingContext2D, y: number, fields: StatField[]): 
     const fy = y + 12 + Math.floor(i / 2) * (h / 2);
     spaced(g, f.label, fx, fy, `bold 8px ${FONT_UI}`, PR.muted, 1.5);
     if (f.carColor !== undefined) carIcon(g, f.carColor, fx + 22, fy + 21, 0.62);
-    else if (f.value !== undefined) txt(g, f.value, fx, fy + 15, `13px ${FONT_BLACK}`, PR.tealLight, 'left', 'rgba(18,181,166,0.8)');
+    else if (f.value !== undefined) {
+      g.font = `13px ${FONT_BLACK}`;
+      const size = Math.max(8, Math.floor(13 * Math.min(1, (w / 2 - 18) / g.measureText(f.value).width)));
+      txt(g, f.value, fx, fy + 15, `${size}px ${FONT_BLACK}`, PR.tealLight, 'left', 'rgba(18,181,166,0.8)');
+    }
   });
   return y + h;
 }
@@ -226,6 +230,7 @@ export interface SettingRow {
 export function drawRaceSettings(g: CanvasRenderingContext2D, rows: SettingRow[], sel: number, note: string | null): void {
   let y = sidePanel(g, 'SETUP', 'RACE SETTINGS');
   const w = PANEL_W - PAD * 2;
+  const compact = rows.length > 5;
   rows.forEach((r, i) => {
     const selected = i === sel;
     if (r.action) {
@@ -235,7 +240,7 @@ export function drawRaceSettings(g: CanvasRenderingContext2D, rows: SettingRow[]
       y += 38;
       return;
     }
-    const h = 44;
+    const h = compact ? 36 : 44;
     addHit(g, i, PAD, y, w, h);
     g.fillStyle = selected ? 'rgba(18,181,166,0.16)' : '#1C1930';
     g.beginPath();
@@ -246,15 +251,15 @@ export function drawRaceSettings(g: CanvasRenderingContext2D, rows: SettingRow[]
       g.lineWidth = 1.5;
       g.stroke();
     }
-    spaced(g, r.label, PAD + 10, y + 12, `bold 8px ${FONT_UI}`, selected ? PR.tealLight : PR.muted, 1.5);
-    const cy = y + 30;
+    spaced(g, r.label, PAD + 10, y + (compact ? 10 : 12), `bold 8px ${FONT_UI}`, selected ? PR.tealLight : PR.muted, 1.5);
+    const cy = y + (compact ? 25 : 30);
     const color = selected ? PR.amber : PR.cream;
     if (selected) {
       tri(g, PAD + 14, cy, -1, 5, PR.amber);
       tri(g, PAD + w - 14, cy, 1, 5, PR.amber);
     }
     if (r.carColor !== undefined) {
-      carIcon(g, r.carColor, PAD + w / 2, cy + 6, 0.7);
+      carIcon(g, r.carColor, PAD + w / 2, cy + (compact ? 4 : 6), compact ? 0.6 : 0.7);
     } else if (r.value !== undefined) {
       txt(g, r.value, PAD + w / 2, cy + 1, `14px ${FONT_BLACK}`, color, 'center', selected ? 'rgba(255,200,90,0.7)' : null);
     }

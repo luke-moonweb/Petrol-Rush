@@ -1,20 +1,53 @@
 import { CONFIG } from '../config';
 import type { Car } from '../race/car';
 import { type OilSlick, oilRadius } from '../race/oil';
+import type { Track } from '../track/common';
+import type { SegmentTrack } from '../track/segment';
+import { buildCircuitCanvas } from './track/circuit/canvas';
 import { buildTrackCanvas } from './track/oval/canvas';
 import { CAR_ANCHOR_X, CAR_ANCHOR_Y, carDirIndex, carGlowSprite } from './vehicles';
 
-let trackBg: HTMLCanvasElement | null = null;
+/** The part of the world shown in the race view. */
+export interface Cam {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
 
-export function trackCanvas(): HTMLCanvasElement {
-  if (!trackBg) trackBg = buildTrackCanvas();
-  return trackBg;
+export function clampCamera(cx: number, cy: number, w: number, h: number, worldW: number, worldH: number): Cam {
+  const axis = (c: number, view: number, world: number) =>
+    world <= view ? Math.round((world - view) / 2) : Math.min(Math.max(Math.round(c) - view / 2, 0), world - view);
+  return { x: axis(cx, w, worldW), y: axis(cy, h, worldH), w, h };
+}
+
+let ovalBg: HTMLCanvasElement | null = null;
+let circuitBg: { id: string; canvas: HTMLCanvasElement } | null = null;
+
+/** Pre-rendered track: the oval stays cached for the title screen, plus the latest other circuit. */
+export function trackCanvas(track: Track): HTMLCanvasElement {
+  if (track.id === 'oval') {
+    if (!ovalBg) ovalBg = buildTrackCanvas();
+    return ovalBg;
+  }
+  if (circuitBg?.id !== track.id) circuitBg = { id: track.id, canvas: buildCircuitCanvas(track as SegmentTrack) };
+  return circuitBg.canvas;
+}
+
+export function drawTrack(g: CanvasRenderingContext2D, track: Track, cam: Cam): void {
+  g.fillStyle = '#000';
+  g.fillRect(0, 0, cam.w, cam.h);
+  const sx = Math.max(0, cam.x);
+  const sy = Math.max(0, cam.y);
+  const w = Math.min(track.worldW, cam.x + cam.w) - sx;
+  const h = Math.min(track.worldH, cam.y + cam.h) - sy;
+  if (w > 0 && h > 0) g.drawImage(trackCanvas(track), sx, sy, w, h, sx - cam.x, sy - cam.y, w, h);
 }
 
 export function drawCarLights(
   g: CanvasRenderingContext2D,
   cars: Car[],
-  camX: number,
+  cam: Cam,
   ix: (c: Car) => number,
   iy: (c: Car) => number,
   ih: (c: Car) => number,
@@ -24,8 +57,8 @@ export function drawCarLights(
   const P = Math.SQRT1_2;
   g.globalCompositeOperation = 'lighter';
   for (const car of cars) {
-    const ox = ix(car) - camX;
-    const oy = iy(car);
+    const ox = ix(car) - cam.x;
+    const oy = iy(car) - cam.y;
     const h = ih(car);
     const c = Math.cos(h);
     const sn = Math.sin(h);
@@ -101,25 +134,29 @@ export function drawCarLights(
 export function drawCars(
   g: CanvasRenderingContext2D,
   cars: Car[],
-  camX: number,
-  viewW: number,
+  cam: Cam,
   ix: (c: Car) => number,
   iy: (c: Car) => number,
   ih: (c: Car) => number,
 ): void {
-  const visible = cars.filter((c) => c.x - camX > -40 && c.x - camX < viewW + 40).sort((p, q) => iy(p) - iy(q));
-  drawCarLights(g, visible, camX, ix, iy, ih, 'beams');
+  const visible = cars.filter((c) => inView(cam, c.x, c.y, 40)).sort((p, q) => iy(p) - iy(q));
+  drawCarLights(g, visible, cam, ix, iy, ih, 'beams');
   for (const car of visible) {
     const spr = carGlowSprite(car.colorIdx, carDirIndex(ih(car)));
-    g.drawImage(spr, Math.round(ix(car)) - camX - CAR_ANCHOR_X, Math.round(iy(car)) - CAR_ANCHOR_Y);
+    g.drawImage(spr, Math.round(ix(car)) - cam.x - CAR_ANCHOR_X, Math.round(iy(car)) - cam.y - CAR_ANCHOR_Y);
   }
-  drawCarLights(g, visible, camX, ix, iy, ih, 'lamps');
+  drawCarLights(g, visible, cam, ix, iy, ih, 'lamps');
 }
 
-export function drawOil(g: CanvasRenderingContext2D, oil: readonly OilSlick[], camX: number, viewW: number): void {
+export function inView(cam: Cam, x: number, y: number, margin: number): boolean {
+  return x - cam.x > -margin && x - cam.x < cam.w + margin && y - cam.y > -margin && y - cam.y < cam.h + margin;
+}
+
+export function drawOil(g: CanvasRenderingContext2D, oil: readonly OilSlick[], cam: Cam): void {
   for (const o of oil) {
-    const x = o.x - camX;
-    if (x < -30 || x > viewW + 30) continue;
+    if (!inView(cam, o.x, o.y, 30)) continue;
+    const x = o.x - cam.x;
+    const y = o.y - cam.y;
     const r = oilRadius(o);
     const fade = Math.min(1, (CONFIG.OIL_LIFE_S - o.age) / CONFIG.OIL_FADE_S);
     const seed = Math.abs(Math.sin(o.x * 12.9898 + o.y * 78.233)) * 1000;
@@ -127,18 +164,18 @@ export function drawOil(g: CanvasRenderingContext2D, oil: readonly OilSlick[], c
     g.globalAlpha = 0.85 * fade;
     g.fillStyle = '#07060C';
     g.beginPath();
-    g.ellipse(x, o.y, r, r * 0.8, seed % Math.PI, 0, Math.PI * 2);
+    g.ellipse(x, y, r, r * 0.8, seed % Math.PI, 0, Math.PI * 2);
     for (let k = 0; k < 4; k++) {
       const a = seed + k * 1.7;
       const d = r * (0.55 + 0.25 * Math.sin(a * 3));
       const rr = r * (0.35 + 0.15 * Math.cos(a * 5));
-      g.moveTo(x + Math.cos(a) * d + rr, o.y + Math.sin(a) * d * 0.8);
-      g.arc(x + Math.cos(a) * d, o.y + Math.sin(a) * d * 0.8, rr, 0, Math.PI * 2);
+      g.moveTo(x + Math.cos(a) * d + rr, y + Math.sin(a) * d * 0.8);
+      g.arc(x + Math.cos(a) * d, y + Math.sin(a) * d * 0.8, rr, 0, Math.PI * 2);
     }
     g.fill();
     g.globalCompositeOperation = 'lighter';
     g.globalAlpha = 0.35 * fade;
-    const sheen = g.createRadialGradient(x - r * 0.25, o.y - r * 0.2, 1, x, o.y, r);
+    const sheen = g.createRadialGradient(x - r * 0.25, y - r * 0.2, 1, x, y, r);
     sheen.addColorStop(0, 'rgba(120,90,200,0.0)');
     sheen.addColorStop(0.45, 'rgba(70,180,170,0.55)');
     sheen.addColorStop(0.7, 'rgba(200,120,220,0.45)');
@@ -146,7 +183,7 @@ export function drawOil(g: CanvasRenderingContext2D, oil: readonly OilSlick[], c
     sheen.addColorStop(1, 'rgba(0,0,0,0)');
     g.fillStyle = sheen;
     g.beginPath();
-    g.ellipse(x, o.y, r * 0.9, r * 0.7, seed % Math.PI, 0, Math.PI * 2);
+    g.ellipse(x, y, r * 0.9, r * 0.7, seed % Math.PI, 0, Math.PI * 2);
     g.fill();
     g.restore();
   }

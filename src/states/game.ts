@@ -3,6 +3,7 @@ import { DEFAULT_OPTIONS, LAP_CHOICES, QUALIFYING_CHOICES, type RaceOptions } fr
 import type { Input } from '../input';
 import { loadPrefs, type Prefs } from '../prefs';
 import type { TouchLayout } from '../touch';
+import { trackIds } from '../track/tracks';
 import type { Hit } from '../ui/hit';
 
 export interface State {
@@ -21,6 +22,7 @@ export interface Params {
   overlayUrl: string | null;
   cars: number | null;
   laps: number | null;
+  track: string | null;
   touch: boolean | null;
 }
 
@@ -39,6 +41,7 @@ export function readParams(search: string): Params {
     overlayUrl: p.get('overlay'),
     cars: num('cars'),
     laps: num('laps'),
+    track: p.get('track'),
     touch: p.has('touch') ? p.get('touch') !== '0' : null,
   };
 }
@@ -52,6 +55,7 @@ export function loadOptions(params: Params): RaceOptions {
     if (raw) {
       const o = JSON.parse(raw) as Partial<RaceOptions>;
       opts = {
+        track: typeof o.track === 'string' && trackIds().includes(o.track) ? o.track : opts.track,
         cars: typeof o.cars === 'number' ? o.cars : opts.cars,
         laps: typeof o.laps === 'number' ? o.laps : opts.laps,
         playerColor: typeof o.playerColor === 'number' ? o.playerColor : opts.playerColor,
@@ -61,6 +65,7 @@ export function loadOptions(params: Params): RaceOptions {
   } catch {}
   if (params.cars !== null) opts.cars = params.cars;
   if (params.laps !== null) opts.laps = params.laps;
+  if (params.track !== null && trackIds().includes(params.track)) opts.track = params.track;
   opts.cars = Math.max(1, Math.min(20, Math.round(opts.cars)));
   opts.laps = Math.max(1, Math.min(LAP_CHOICES[LAP_CHOICES.length - 1]!, Math.round(opts.laps)));
   opts.playerColor = Math.max(0, Math.min(19, Math.round(opts.playerColor)));
