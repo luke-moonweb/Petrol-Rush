@@ -1,6 +1,6 @@
 import { CONFIG, LAP_CHOICES, QUALIFYING_CHOICES, type RaceOptions } from '../../config';
 import { stepCabin } from '../../gfx/fpv/cabin';
-import { cockpitOverlayMs, drawCockpitView, prewarmCockpitView } from '../../gfx/fpv/view';
+import { cockpitOverlayMs, drawCockpitView, prewarmCockpitView, prewarmScene } from '../../gfx/fpv/view';
 import { Particles } from '../../gfx/particles';
 import { drawCars, drawOil, trackCanvas } from '../../gfx/world';
 import { keyLabel } from '../../input';
@@ -328,6 +328,7 @@ export class RaceState implements State {
       }
       if (this.lights.t >= this.lights.outAt + 1.5) this.lights = null;
       if (!this.race.started) {
+        prewarmScene();
         this.game.audio.setEngine(drive.gas ? 70 : 10, true, drive.gas);
         return;
       }
