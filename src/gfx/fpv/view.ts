@@ -5,11 +5,25 @@ import { oilRadius } from '../../race/oil';
 import type { Race } from '../../race/race';
 import { createRng } from '../../sim/rng';
 import { CX_L, CX_R, CY, PIT_DRIVE_Y, PIT_X0, PIT_X1, R_IN, R_OUT, WORLD_W, wrapAngle } from '../../track/track';
-import { FONT_BLACK, PR } from '../../ui/theme';
+import { PR } from '../../ui/theme';
 import type { Particles } from '../particles';
 import { CAR_SCHEMES, carFaces, driverName, MODEL_SCALE } from '../vehicles';
 import { trackCanvas } from '../world';
-import { Camera, clipProject, drawPoly, FOG_LEVELS, fillProjected, fogged, hexRgb, NEAR, type Poly, type RGB, visible } from './engine';
+import { type CabinView, drawCockpit, type Streak, wheelRadius } from './cockpit';
+import {
+  Camera,
+  clipProject,
+  drawPoly,
+  FOG_LEVELS,
+  fillProjected,
+  fogged,
+  glowSprite,
+  hexRgb,
+  NEAR,
+  type Poly,
+  type RGB,
+  visible,
+} from './engine';
 import { setPylonNames } from './landmarks';
 import { buildScene, type Glow, type Scene } from './scene';
 import { type Billboard, drawBillboard, drawTexQuad, type TexQuad } from './texture';
@@ -22,6 +36,9 @@ export interface CockpitFrame {
   ih: (c: Car) => number;
   steer: number;
   time: number;
+  touch: boolean;
+  skid: 0 | 1 | 2;
+  lights?: CabinView['lights'];
   particles?: Particles;
 }
 
@@ -41,6 +58,11 @@ const CAR_REACH = 26;
 const OIL_MIN_PX = 6;
 const OWN_SMOKE = 15;
 const MAX_PUFF_PX = 60;
+const MAST_Z = 60;
+const FLOOD_DEPTH = 176;
+const FLOOD_SIDE = 140;
+const FLOOD_ALPHA = 0.08;
+const MAX_STREAKS = 3;
 
 let scene: Scene | null = null;
 const cam = new Camera();
@@ -87,25 +109,6 @@ function lit(color: string, k: number, level: number, fog: RGB): string {
     shadeCache.set(key, s);
   }
   return s;
-}
-
-const glowSprites = new Map<string, HTMLCanvasElement>();
-function glowSprite(color: string): HTMLCanvasElement {
-  let c = glowSprites.get(color);
-  if (!c) {
-    c = document.createElement('canvas');
-    c.width = 64;
-    c.height = 64;
-    const g = c.getContext('2d')!;
-    const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
-    gr.addColorStop(0, `rgba(${color},0.75)`);
-    gr.addColorStop(0.35, `rgba(${color},0.22)`);
-    gr.addColorStop(1, `rgba(${color},0)`);
-    g.fillStyle = gr;
-    g.fillRect(0, 0, 64, 64);
-    glowSprites.set(color, c);
-  }
-  return c;
 }
 
 const wx = new Float32Array(64);
@@ -535,770 +538,6 @@ function drawMinimap(g: CanvasRenderingContext2D, w: number, h: number, wheelR: 
   g.restore();
 }
 
-function wheelRadius(w: number, h: number): number {
-  return Math.min(w * 0.19, h * 0.3);
-}
-
-/** Metal bezel + night instrument glow around a cluster dial. */
-function clusterBezel(
-  g: CanvasRenderingContext2D,
-  cx: number,
-  cy: number,
-  r: number,
-  glow: string,
-): void {
-  g.save();
-  g.shadowColor = glow;
-  g.shadowBlur = r * 0.65;
-  g.fillStyle = '#1A1824';
-  g.beginPath();
-  g.arc(cx, cy, r + 3, 0, Math.PI * 2);
-  g.fill();
-  g.shadowBlur = 0;
-  const bezel = g.createRadialGradient(cx - r * 0.28, cy - r * 0.35, r * 0.08, cx, cy, r + 3);
-  bezel.addColorStop(0, '#7A7688');
-  bezel.addColorStop(0.4, '#3E3A4C');
-  bezel.addColorStop(1, '#121018');
-  g.fillStyle = bezel;
-  g.beginPath();
-  g.arc(cx, cy, r + 2.5, 0, Math.PI * 2);
-  g.fill();
-  g.fillStyle = '#0A0910';
-  g.beginPath();
-  g.arc(cx, cy, r - 1, 0, Math.PI * 2);
-  g.fill();
-  g.strokeStyle = 'rgba(18,181,166,0.2)';
-  g.lineWidth = Math.max(1, r * 0.035);
-  g.beginPath();
-  g.arc(cx, cy, r - 1, 0, Math.PI * 2);
-  g.stroke();
-  g.restore();
-}
-
-function clusterNeedle(
-  g: CanvasRenderingContext2D,
-  cx: number,
-  cy: number,
-  ang: number,
-  len: number,
-  color: string,
-): void {
-  g.strokeStyle = color;
-  g.lineWidth = Math.max(1.6, len * 0.07);
-  g.lineCap = 'round';
-  g.beginPath();
-  g.moveTo(cx - Math.cos(ang) * len * 0.12, cy - Math.sin(ang) * len * 0.12);
-  g.lineTo(cx + Math.cos(ang) * len, cy + Math.sin(ang) * len);
-  g.stroke();
-  g.lineCap = 'butt';
-  g.fillStyle = PR.steel;
-  g.beginPath();
-  g.arc(cx, cy, Math.max(2.2, len * 0.09), 0, Math.PI * 2);
-  g.fill();
-  g.fillStyle = '#0A0910';
-  g.beginPath();
-  g.arc(cx, cy, Math.max(1.2, len * 0.04), 0, Math.PI * 2);
-  g.fill();
-}
-
-// Cabin PoC demo: race with cockpit cam (KeyC / prefs), watch hood lip + dash gauges + glass flecks near oil/after scrapes.
-function glassSoil(f: CockpitFrame): { oil: number; scrape: number } {
-  const p = f.race.player;
-  let oil = 0;
-  for (const o of f.race.oil) {
-    const d = Math.hypot(o.x - p.x, o.y - p.y);
-    if (d < 100) oil = Math.max(oil, 1 - d / 100);
-  }
-  const scrape = Math.min(1, (p.wallImpact + p.contactStrength) / 36 + (p.spinTime > 0 ? 0.5 : 0));
-  return { oil, scrape };
-}
-
-/** Night windshield: cool sky sheen, warm dash bounce, pillar wash; flecks stay off the race lane. */
-function drawWindshieldGlass(g: CanvasRenderingContext2D, w: number, h: number, glassBot: number, f: CockpitFrame): void {
-  const gx0 = w * 0.08;
-  const gy0 = h * 0.06;
-  const gw = w * 0.84;
-  const gh = glassBot - gy0;
-
-  const glass = g.createLinearGradient(0, gy0, 0, glassBot);
-  glass.addColorStop(0, 'rgba(130,160,230,0.08)');
-  glass.addColorStop(0.22, 'rgba(180,200,255,0.04)');
-  glass.addColorStop(0.48, 'rgba(255,255,255,0.012)');
-  glass.addColorStop(0.72, 'rgba(40,28,18,0.04)');
-  glass.addColorStop(1, 'rgba(8,6,14,0.15)');
-  g.fillStyle = glass;
-  g.fillRect(gx0, gy0, gw, gh);
-
-  // Cool night sky band (upper third, soft diagonal).
-  const skySheen = g.createLinearGradient(w * 0.08, h * 0.06, w * 0.92, h * 0.34);
-  skySheen.addColorStop(0, 'rgba(140,170,255,0)');
-  skySheen.addColorStop(0.35, 'rgba(160,190,255,0.06)');
-  skySheen.addColorStop(0.58, 'rgba(255,248,232,0.045)');
-  skySheen.addColorStop(1, 'rgba(255,255,255,0)');
-  g.fillStyle = skySheen;
-  g.fillRect(w * 0.12, h * 0.07, w * 0.76, h * 0.24);
-
-  // Thin specular streak under the roof lip (glass presence without muddying the lane).
-  const specular = g.createLinearGradient(w * 0.18, h * 0.1, w * 0.62, h * 0.22);
-  specular.addColorStop(0, 'rgba(220,235,255,0)');
-  specular.addColorStop(0.4, 'rgba(220,235,255,0.07)');
-  specular.addColorStop(0.7, 'rgba(255,248,232,0.035)');
-  specular.addColorStop(1, 'rgba(255,255,255,0)');
-  g.fillStyle = specular;
-  g.beginPath();
-  g.moveTo(w * 0.2, h * 0.1);
-  g.quadraticCurveTo(w * 0.42, h * 0.08, w * 0.58, h * 0.16);
-  g.quadraticCurveTo(w * 0.4, h * 0.14, w * 0.22, h * 0.18);
-  g.closePath();
-  g.fill();
-
-  // Warm instrument bounce off lower glass (teal–amber night palette).
-  const dashBounce = g.createLinearGradient(w * 0.25, glassBot - h * 0.14, w * 0.75, glassBot);
-  dashBounce.addColorStop(0, 'rgba(18,181,166,0)');
-  dashBounce.addColorStop(0.45, 'rgba(18,181,166,0.045)');
-  dashBounce.addColorStop(0.72, 'rgba(255,200,90,0.055)');
-  dashBounce.addColorStop(1, 'rgba(255,182,39,0.03)');
-  g.fillStyle = dashBounce;
-  g.fillRect(w * 0.18, glassBot - h * 0.16, w * 0.64, h * 0.16);
-
-  // Soft A-pillar wash — edges only so the track stays readable.
-  const leftWash = g.createLinearGradient(gx0, gy0, w * 0.28, gy0 + gh * 0.7);
-  leftWash.addColorStop(0, 'rgba(0,0,0,0.18)');
-  leftWash.addColorStop(0.55, 'rgba(0,0,0,0.045)');
-  leftWash.addColorStop(1, 'rgba(0,0,0,0)');
-  g.fillStyle = leftWash;
-  g.fillRect(gx0, gy0, w * 0.22, gh);
-  const rightWash = g.createLinearGradient(w - gx0, gy0, w * 0.72, gy0 + gh * 0.65);
-  rightWash.addColorStop(0, 'rgba(0,0,0,0.18)');
-  rightWash.addColorStop(0.55, 'rgba(0,0,0,0.045)');
-  rightWash.addColorStop(1, 'rgba(0,0,0,0)');
-  g.fillStyle = rightWash;
-  g.fillRect(w * 0.7, gy0, w * 0.22, gh);
-
-  // Faint wiper-arc hint (very soft, does not muddy the view).
-  g.save();
-  g.beginPath();
-  g.ellipse(w * 0.5, h * 0.08, w * 0.42, h * 0.55, 0, 0, Math.PI * 2);
-  g.strokeStyle = 'rgba(8,6,12,0.075)';
-  g.lineWidth = Math.max(8, w * 0.012);
-  g.stroke();
-  g.beginPath();
-  g.ellipse(w * 0.42, h * 0.1, w * 0.28, h * 0.42, -0.12, 0.15, Math.PI * 0.85);
-  g.strokeStyle = 'rgba(8,6,12,0.05)';
-  g.lineWidth = Math.max(4, w * 0.006);
-  g.stroke();
-  g.restore();
-
-  const { oil, scrape } = glassSoil(f);
-  const dirt = Math.min(1, oil * 0.9 + scrape * 0.75);
-  if (dirt > 0.03) {
-    // Fixed seed + fixed slots: flecks appear/fade with soil, never reshuffle each frame.
-    const rng = createRng(44011);
-    const slots = 24;
-    const visible = Math.floor(slots * (0.12 + dirt * 0.88));
-    for (let i = 0; i < slots; i++) {
-      const edge = rng();
-      let fx: number;
-      let fy: number;
-      if (edge < 0.35) {
-        fx = w * (0.12 + rng() * 0.18);
-        fy = h * (0.18 + rng() * 0.42);
-      } else if (edge < 0.7) {
-        fx = w * (0.7 + rng() * 0.18);
-        fy = h * (0.18 + rng() * 0.42);
-      } else {
-        fx = w * (0.22 + rng() * 0.56);
-        fy = h * (0.42 + rng() * 0.2);
-      }
-      const oilBias = rng();
-      const rx = 1.2 + rng() * 3.8;
-      const ry = 0.5 + rng() * 1.6;
-      const rot = rng() * Math.PI;
-      const s = 0.7 + rng() * 2.0;
-      if (i >= visible) continue;
-      const isOil = oilBias < oil / (oil + scrape + 0.001);
-      if (isOil) {
-        g.fillStyle = `rgba(28,22,10,${0.09 + dirt * 0.14 + oil * 0.06})`;
-        g.beginPath();
-        g.ellipse(fx, fy, rx * (0.6 + oil), ry, rot, 0, Math.PI * 2);
-        g.fill();
-      } else {
-        g.fillStyle = `rgba(48,36,22,${0.09 + dirt * 0.14 + scrape * 0.08})`;
-        g.beginPath();
-        g.ellipse(fx, fy, s * (0.7 + scrape * 0.5), s * (0.35 + scrape * 0.35), rot, 0, Math.PI * 2);
-        g.fill();
-      }
-    }
-  }
-}
-
-
-/** Roof canopy header: opaque shell + soffit thickness + teal glass bead. */
-function drawRoofCanopy(g: CanvasRenderingContext2D, w: number, h: number): void {
-  const top = h * 0.078;
-  const dip = h * 0.145;
-  g.fillStyle = '#07060E';
-  g.beginPath();
-  g.moveTo(0, 0);
-  g.lineTo(w, 0);
-  g.lineTo(w, top);
-  g.quadraticCurveTo(w * 0.5, dip, 0, top);
-  g.closePath();
-  g.fill();
-  const soffit = g.createLinearGradient(0, top * 0.4, 0, dip);
-  soffit.addColorStop(0, '#1A1726');
-  soffit.addColorStop(0.5, '#0E0C16');
-  soffit.addColorStop(1, '#08070F');
-  g.fillStyle = soffit;
-  g.beginPath();
-  g.moveTo(w * 0.05, top * 0.55);
-  g.quadraticCurveTo(w * 0.5, dip - h * 0.01, w * 0.95, top * 0.55);
-  g.lineTo(w * 0.97, top + h * 0.012);
-  g.quadraticCurveTo(w * 0.5, dip + h * 0.016, w * 0.03, top + h * 0.012);
-  g.closePath();
-  g.fill();
-  g.strokeStyle = 'rgba(18,181,166,0.3)';
-  g.lineWidth = Math.max(1.2, w * 0.0022);
-  g.beginPath();
-  g.moveTo(w * 0.08, top * 0.72);
-  g.quadraticCurveTo(w * 0.5, dip - h * 0.022, w * 0.92, top * 0.72);
-  g.stroke();
-  g.strokeStyle = 'rgba(255,248,232,0.08)';
-  g.lineWidth = Math.max(1, w * 0.0015);
-  g.beginPath();
-  g.moveTo(w * 0.06, top + h * 0.008);
-  g.quadraticCurveTo(w * 0.5, dip + h * 0.012, w * 0.94, top + h * 0.008);
-  g.stroke();
-}
-
-/** A-pillars: outer dark shell, thickness face, inner glass highlight, soft glass shadow. */
-function drawAPillars(g: CanvasRenderingContext2D, w: number, h: number, glassBot: number): void {
-  const bot = glassBot + h * 0.055;
-  g.fillStyle = '#05040A';
-  g.beginPath();
-  g.moveTo(0, 0);
-  g.lineTo(w * 0.145, 0);
-  g.lineTo(w * 0.058, bot);
-  g.lineTo(0, bot + h * 0.035);
-  g.closePath();
-  g.moveTo(w, 0);
-  g.lineTo(w * 0.855, 0);
-  g.lineTo(w * 0.942, bot - h * 0.02);
-  g.lineTo(w, bot + h * 0.015);
-  g.closePath();
-  g.fill();
-  const leftFace = g.createLinearGradient(w * 0.02, 0, w * 0.12, bot);
-  leftFace.addColorStop(0, '#18151F');
-  leftFace.addColorStop(1, '#0A0912');
-  g.fillStyle = leftFace;
-  g.beginPath();
-  g.moveTo(w * 0.118, h * 0.008);
-  g.lineTo(w * 0.145, 0);
-  g.lineTo(w * 0.058, bot);
-  g.lineTo(w * 0.042, bot - h * 0.012);
-  g.closePath();
-  g.fill();
-  const rightFace = g.createLinearGradient(w * 0.98, 0, w * 0.88, bot);
-  rightFace.addColorStop(0, '#18151F');
-  rightFace.addColorStop(1, '#0A0912');
-  g.fillStyle = rightFace;
-  g.beginPath();
-  g.moveTo(w * 0.882, h * 0.008);
-  g.lineTo(w * 0.855, 0);
-  g.lineTo(w * 0.942, bot - h * 0.02);
-  g.lineTo(w * 0.958, bot - h * 0.032);
-  g.closePath();
-  g.fill();
-  g.fillStyle = 'rgba(0,0,0,0.3)';
-  g.beginPath();
-  g.moveTo(w * 0.12, h * 0.04);
-  g.lineTo(w * 0.165, h * 0.05);
-  g.lineTo(w * 0.08, bot - h * 0.025);
-  g.lineTo(w * 0.05, bot - h * 0.035);
-  g.closePath();
-  g.fill();
-  g.beginPath();
-  g.moveTo(w * 0.88, h * 0.04);
-  g.lineTo(w * 0.835, h * 0.05);
-  g.lineTo(w * 0.92, bot - h * 0.045);
-  g.lineTo(w * 0.95, bot - h * 0.055);
-  g.closePath();
-  g.fill();
-  g.strokeStyle = 'rgba(255,248,232,0.15)';
-  g.lineWidth = Math.max(2, w * 0.0032);
-  g.beginPath();
-  g.moveTo(w * 0.128, h * 0.016);
-  g.lineTo(w * 0.048, bot - h * 0.018);
-  g.moveTo(w * 0.872, h * 0.016);
-  g.lineTo(w * 0.952, bot - h * 0.038);
-  g.stroke();
-  g.strokeStyle = 'rgba(18,181,166,0.18)';
-  g.lineWidth = Math.max(1, w * 0.0018);
-  g.beginPath();
-  g.moveTo(w * 0.134, h * 0.02);
-  g.lineTo(w * 0.054, bot - h * 0.022);
-  g.moveTo(w * 0.866, h * 0.02);
-  g.lineTo(w * 0.946, bot - h * 0.042);
-  g.stroke();
-  g.fillStyle = '#0B0A12';
-  g.beginPath();
-  g.moveTo(0, glassBot);
-  g.lineTo(w * 0.055, glassBot + h * 0.01);
-  g.lineTo(w * 0.12, glassBot + h * 0.03);
-  g.lineTo(0, bot + h * 0.02);
-  g.closePath();
-  g.fill();
-  g.beginPath();
-  g.moveTo(w, glassBot - h * 0.02);
-  g.lineTo(w * 0.945, glassBot - h * 0.01);
-  g.lineTo(w * 0.88, glassBot + h * 0.03);
-  g.lineTo(w, bot);
-  g.closePath();
-  g.fill();
-}
-
-/** Hood / nose lip through the glass — center crease, fenders, raised lip, seal. */
-function drawHoodNose(g: CanvasRenderingContext2D, w: number, h: number, glassBot: number, dashTop: number): void {
-  const lipY = glassBot - h * 0.008;
-  const deckY = dashTop - h * 0.012;
-  const body = g.createLinearGradient(0, lipY - h * 0.07, 0, deckY);
-  body.addColorStop(0, '#12101A');
-  body.addColorStop(0.4, '#0A0912');
-  body.addColorStop(1, '#05040A');
-  g.fillStyle = body;
-  g.beginPath();
-  g.moveTo(w * 0.09, lipY + h * 0.038);
-  g.quadraticCurveTo(w * 0.26, lipY - h * 0.005, w * 0.4, lipY - h * 0.052);
-  g.quadraticCurveTo(w * 0.5, lipY - h * 0.068, w * 0.6, lipY - h * 0.052);
-  g.quadraticCurveTo(w * 0.74, lipY - h * 0.005, w * 0.91, lipY + h * 0.038);
-  g.lineTo(w * 0.95, deckY);
-  g.quadraticCurveTo(w * 0.72, dashTop - h * 0.095, w * 0.5, dashTop - h * 0.12);
-  g.quadraticCurveTo(w * 0.28, dashTop - h * 0.095, w * 0.05, deckY);
-  g.closePath();
-  g.fill();
-  g.strokeStyle = 'rgba(255,248,232,0.07)';
-  g.lineWidth = Math.max(1, w * 0.0016);
-  g.beginPath();
-  g.moveTo(w * 0.5, lipY - h * 0.06);
-  g.lineTo(w * 0.5, dashTop - h * 0.1);
-  g.stroke();
-  g.fillStyle = 'rgba(255,255,255,0.035)';
-  g.beginPath();
-  g.moveTo(w * 0.13, lipY + h * 0.022);
-  g.quadraticCurveTo(w * 0.22, lipY - h * 0.008, w * 0.3, lipY + h * 0.012);
-  g.quadraticCurveTo(w * 0.21, lipY + h * 0.045, w * 0.13, lipY + h * 0.022);
-  g.closePath();
-  g.fill();
-  g.beginPath();
-  g.moveTo(w * 0.87, lipY + h * 0.022);
-  g.quadraticCurveTo(w * 0.78, lipY - h * 0.008, w * 0.7, lipY + h * 0.012);
-  g.quadraticCurveTo(w * 0.79, lipY + h * 0.045, w * 0.87, lipY + h * 0.022);
-  g.closePath();
-  g.fill();
-  g.fillStyle = '#06050B';
-  g.beginPath();
-  g.moveTo(w * 0.14, lipY + h * 0.02);
-  g.quadraticCurveTo(w * 0.5, lipY - h * 0.05, w * 0.86, lipY + h * 0.02);
-  g.lineTo(w * 0.88, lipY + h * 0.05);
-  g.quadraticCurveTo(w * 0.5, lipY - h * 0.014, w * 0.12, lipY + h * 0.05);
-  g.closePath();
-  g.fill();
-  const hoodEdge = g.createLinearGradient(0, lipY - h * 0.07, 0, lipY + h * 0.055);
-  hoodEdge.addColorStop(0, 'rgba(18,181,166,0.24)');
-  hoodEdge.addColorStop(0.3, 'rgba(255,248,232,0.09)');
-  hoodEdge.addColorStop(0.65, 'rgba(18,181,166,0.07)');
-  hoodEdge.addColorStop(1, 'rgba(0,0,0,0)');
-  g.fillStyle = hoodEdge;
-  g.beginPath();
-  g.moveTo(w * 0.16, lipY + h * 0.012);
-  g.quadraticCurveTo(w * 0.35, lipY - h * 0.038, w * 0.5, lipY - h * 0.055);
-  g.quadraticCurveTo(w * 0.65, lipY - h * 0.038, w * 0.84, lipY + h * 0.012);
-  g.lineTo(w * 0.8, lipY + h * 0.04);
-  g.quadraticCurveTo(w * 0.5, lipY - h * 0.015, w * 0.2, lipY + h * 0.04);
-  g.closePath();
-  g.fill();
-  g.strokeStyle = 'rgba(0,0,0,0.55)';
-  g.lineWidth = Math.max(2, w * 0.0035);
-  g.beginPath();
-  g.moveTo(w * 0.125, lipY + h * 0.03);
-  g.quadraticCurveTo(w * 0.5, lipY - h * 0.045, w * 0.875, lipY + h * 0.03);
-  g.stroke();
-  const hoodShade = g.createLinearGradient(0, lipY + h * 0.025, 0, dashTop);
-  hoodShade.addColorStop(0, 'rgba(0,0,0,0.38)');
-  hoodShade.addColorStop(0.5, 'rgba(0,0,0,0.14)');
-  hoodShade.addColorStop(1, 'rgba(0,0,0,0)');
-  g.fillStyle = hoodShade;
-  g.beginPath();
-  g.moveTo(w * 0.14, lipY + h * 0.035);
-  g.quadraticCurveTo(w * 0.5, lipY - h * 0.018, w * 0.86, lipY + h * 0.035);
-  g.lineTo(w * 0.9, dashTop - h * 0.028);
-  g.quadraticCurveTo(w * 0.5, dashTop - h * 0.1, w * 0.1, dashTop - h * 0.028);
-  g.closePath();
-  g.fill();
-}
-
-function drawCockpit(g: CanvasRenderingContext2D, w: number, h: number, f: CockpitFrame): void {
-  const p = f.race.player;
-  const dashTop = h * 0.74;
-  const glassBot = dashTop - h * 0.1;
-
-  drawWindshieldGlass(g, w, h, glassBot, f);
-
-  // Structure: hood under aperture, then canopy + thicker A-pillars framing glass.
-  drawHoodNose(g, w, h, glassBot, dashTop);
-  drawRoofCanopy(g, w, h);
-  drawAPillars(g, w, h, glassBot);
-
-  // Gentle dash parallax vs fixed pillars (embodiment cue while steering).
-  const steerPx = f.steer * w * 0.01;
-  g.save();
-  g.translate(steerPx, 0);
-
-  // Matte dash plastic under the hood lip (instrument binnacle sits in the center recess).
-  const dash = g.createLinearGradient(0, dashTop - h * 0.08, 0, h);
-  dash.addColorStop(0, '#2A2736');
-  dash.addColorStop(0.18, '#1C1A28');
-  dash.addColorStop(0.55, '#12101A');
-  dash.addColorStop(1, '#08070E');
-  g.fillStyle = dash;
-  g.beginPath();
-  g.moveTo(0, dashTop + h * 0.02);
-  g.quadraticCurveTo(w * 0.22, dashTop - h * 0.01, w * 0.32, dashTop - h * 0.008);
-  g.quadraticCurveTo(w * 0.5, dashTop - h * 0.095, w * 0.68, dashTop - h * 0.008);
-  g.quadraticCurveTo(w * 0.82, dashTop + h * 0.005, w, dashTop + h * 0.03);
-  g.lineTo(w, h);
-  g.lineTo(0, h);
-  g.closePath();
-  g.fill();
-  // Soft teal rim light along the dash lip (night instrument wash).
-  const lipGlow = g.createLinearGradient(0, dashTop - h * 0.1, 0, dashTop + h * 0.04);
-  lipGlow.addColorStop(0, 'rgba(18,181,166,0)');
-  lipGlow.addColorStop(0.55, 'rgba(18,181,166,0.22)');
-  lipGlow.addColorStop(0.85, 'rgba(255,200,90,0.08)');
-  lipGlow.addColorStop(1, 'rgba(18,181,166,0)');
-  g.fillStyle = lipGlow;
-  g.beginPath();
-  g.moveTo(w * 0.08, dashTop + h * 0.01);
-  g.quadraticCurveTo(w * 0.5, dashTop - h * 0.1, w * 0.92, dashTop + h * 0.01);
-  g.lineTo(w * 0.9, dashTop + h * 0.035);
-  g.quadraticCurveTo(w * 0.5, dashTop - h * 0.055, w * 0.1, dashTop + h * 0.035);
-  g.closePath();
-  g.fill();
-  g.strokeStyle = 'rgba(18,181,166,0.35)';
-  g.lineWidth = 1.1;
-  g.beginPath();
-  g.moveTo(0, dashTop + h * 0.02);
-  g.quadraticCurveTo(w * 0.22, dashTop - h * 0.01, w * 0.32, dashTop - h * 0.008);
-  g.quadraticCurveTo(w * 0.5, dashTop - h * 0.095, w * 0.68, dashTop - h * 0.008);
-  g.quadraticCurveTo(w * 0.82, dashTop + h * 0.005, w, dashTop + h * 0.03);
-  g.stroke();
-
-  // Recessed instrument binnacle — gauges read as bolted in-car cluster, not HUD.
-  const binCx = w * 0.5;
-  const binCy = dashTop + h * 0.018;
-  const binW = w * 0.52;
-  const binH = h * 0.115;
-  g.fillStyle = '#0A0912';
-  g.beginPath();
-  g.moveTo(binCx - binW * 0.5, binCy + binH * 0.15);
-  g.quadraticCurveTo(binCx - binW * 0.48, binCy - binH * 0.55, binCx - binW * 0.22, binCy - binH * 0.72);
-  g.quadraticCurveTo(binCx, binCy - binH * 0.95, binCx + binW * 0.22, binCy - binH * 0.72);
-  g.quadraticCurveTo(binCx + binW * 0.48, binCy - binH * 0.55, binCx + binW * 0.5, binCy + binH * 0.15);
-  g.quadraticCurveTo(binCx, binCy + binH * 0.55, binCx - binW * 0.5, binCy + binH * 0.15);
-  g.closePath();
-  g.fill();
-  const binShade = g.createLinearGradient(binCx, binCy - binH, binCx, binCy + binH * 0.2);
-  binShade.addColorStop(0, 'rgba(0,0,0,0.55)');
-  binShade.addColorStop(0.45, 'rgba(18,181,166,0.06)');
-  binShade.addColorStop(1, 'rgba(0,0,0,0.35)');
-  g.fillStyle = binShade;
-  g.fill();
-  g.strokeStyle = 'rgba(74,72,96,0.7)';
-  g.lineWidth = 1.4;
-  g.stroke();
-  g.strokeStyle = 'rgba(255,200,90,0.12)';
-  g.lineWidth = 1;
-  g.beginPath();
-  g.moveTo(binCx - binW * 0.42, binCy - binH * 0.35);
-  g.quadraticCurveTo(binCx, binCy - binH * 0.78, binCx + binW * 0.42, binCy - binH * 0.35);
-  g.stroke();
-
-  const mphVal = Math.round(Math.abs(p.speed));
-  const fuel = Math.max(0, Math.min(1, p.fuel));
-  const rpmT = Math.min(1, Math.abs(p.speed) / CONFIG.MAX_MPH);
-  const labelPx = Math.max(7, Math.round(h * 0.012));
-  const tickPx = Math.max(6, Math.round(h * 0.01));
-
-  // FUEL dial (left secondary).
-  const fuelCx = binCx - binW * 0.28;
-  const fuelCy = binCy - binH * 0.05;
-  const fuelR = Math.max(16, h * 0.034);
-  const fuelGlow = fuel < 0.2 ? 'rgba(230,59,46,0.55)' : 'rgba(18,181,166,0.45)';
-  clusterBezel(g, fuelCx, fuelCy, fuelR, fuelGlow);
-  g.strokeStyle = PR.red;
-  g.lineWidth = 2.5;
-  g.beginPath();
-  g.arc(fuelCx, fuelCy, fuelR - 5, Math.PI, Math.PI + Math.PI * 0.12, false);
-  g.stroke();
-  g.strokeStyle = PR.amber;
-  g.lineWidth = 1.2;
-  for (let k = 0; k <= 4; k++) {
-    const a = Math.PI + (k / 4) * Math.PI;
-    const major = k % 2 === 0;
-    g.beginPath();
-    g.moveTo(fuelCx + Math.cos(a) * (fuelR - (major ? 11 : 9)), fuelCy + Math.sin(a) * (fuelR - (major ? 11 : 9)));
-    g.lineTo(fuelCx + Math.cos(a) * (fuelR - 4), fuelCy + Math.sin(a) * (fuelR - 4));
-    g.stroke();
-  }
-  g.fillStyle = PR.amber;
-  g.font = `${tickPx}px ${FONT_BLACK}`;
-  g.textAlign = 'center';
-  g.textBaseline = 'middle';
-  g.fillText('E', fuelCx - fuelR + 9, fuelCy - 2);
-  g.fillText('F', fuelCx + fuelR - 9, fuelCy - 2);
-  clusterNeedle(g, fuelCx, fuelCy, Math.PI + fuel * Math.PI, fuelR - 6, fuel < 0.2 ? PR.red : PR.amber);
-  g.font = `bold ${labelPx}px ${FONT_BLACK}`;
-  g.fillStyle = fuel < 0.12 && Math.floor(f.time * 3) % 2 === 0 ? PR.amber : PR.tealLight;
-  if (fuel < 0.12) {
-    g.shadowColor = PR.amber;
-    g.shadowBlur = 6;
-  }
-  g.fillText('FUEL', fuelCx, fuelCy + fuelR * 0.42);
-  g.shadowBlur = 0;
-
-  // MPH dial (center primary) — digital + arc ticks.
-  const mphCx = binCx;
-  const mphCy = binCy - binH * 0.18;
-  const mphR = Math.max(24, h * 0.048);
-  clusterBezel(g, mphCx, mphCy, mphR, 'rgba(255,200,90,0.5)');
-  const mphAng = (val: number) => Math.PI + (Math.min(200, val) / 200) * Math.PI;
-  g.strokeStyle = PR.red;
-  g.lineWidth = 2.8;
-  g.beginPath();
-  g.arc(mphCx, mphCy, mphR - 6, mphAng(CONFIG.SPIN_MPH), mphAng(200), false);
-  g.stroke();
-  g.strokeStyle = PR.amber;
-  for (let val = 0; val <= 200; val += 20) {
-    if (val > CONFIG.SPIN_MPH) continue;
-    const a = mphAng(val);
-    const major = val % 40 === 0;
-    g.lineWidth = major ? 2 : 1;
-    g.beginPath();
-    g.moveTo(mphCx + Math.cos(a) * (mphR - (major ? 13 : 10)), mphCy + Math.sin(a) * (mphR - (major ? 13 : 10)));
-    g.lineTo(mphCx + Math.cos(a) * (mphR - 5), mphCy + Math.sin(a) * (mphR - 5));
-    g.stroke();
-  }
-  g.fillStyle = PR.amber;
-  g.font = `${tickPx}px ${FONT_BLACK}`;
-  g.textAlign = 'center';
-  g.textBaseline = 'middle';
-  for (const val of [0, 80, 160]) {
-    const a = mphAng(val);
-    g.fillText(String(val), mphCx + Math.cos(a) * (mphR - 17), mphCy + Math.sin(a) * (mphR - 17));
-  }
-  const mphHot = mphVal > CONFIG.SPIN_MPH;
-  g.font = `bold ${Math.max(14, Math.round(h * 0.032))}px ${FONT_BLACK}`;
-  g.fillStyle = mphHot ? PR.red : PR.amber;
-  g.shadowColor = mphHot ? 'rgba(230,59,46,0.85)' : 'rgba(255,200,90,0.75)';
-  g.shadowBlur = 7;
-  g.fillText(p.reverse ? `R${mphVal}` : String(mphVal), mphCx, mphCy - mphR * 0.12);
-  g.shadowBlur = 0;
-  clusterNeedle(g, mphCx, mphCy, mphAng(mphVal), mphR - 7, mphHot ? PR.red : '#FF5A3A');
-  g.font = `bold ${labelPx}px ${FONT_BLACK}`;
-  g.fillStyle = PR.muted;
-  g.fillText('MPH', mphCx, mphCy + mphR * 0.38);
-
-  // RPM dial (right secondary).
-  const rpmCx = binCx + binW * 0.28;
-  const rpmCy = binCy - binH * 0.05;
-  const rpmR = Math.max(16, h * 0.034);
-  clusterBezel(g, rpmCx, rpmCy, rpmR, 'rgba(18,181,166,0.5)');
-  g.strokeStyle = 'rgba(138,134,160,0.55)';
-  g.lineWidth = 2;
-  g.beginPath();
-  g.arc(rpmCx, rpmCy, rpmR - 5, Math.PI * 0.85, Math.PI * 0.15, false);
-  g.stroke();
-  g.strokeStyle = 'rgba(230,59,46,0.65)';
-  g.beginPath();
-  g.arc(rpmCx, rpmCy, rpmR - 5, Math.PI * 0.05, Math.PI * 0.15, false);
-  g.stroke();
-  g.strokeStyle = PR.tealLight;
-  g.lineWidth = 1.2;
-  for (let k = 0; k <= 5; k++) {
-    const a = Math.PI * 0.85 + (k / 5) * Math.PI * 1.3;
-    g.beginPath();
-    g.moveTo(rpmCx + Math.cos(a) * (rpmR - 10), rpmCy + Math.sin(a) * (rpmR - 10));
-    g.lineTo(rpmCx + Math.cos(a) * (rpmR - 4), rpmCy + Math.sin(a) * (rpmR - 4));
-    g.stroke();
-  }
-  const rpmAng = Math.PI * 0.85 + rpmT * Math.PI * 1.3;
-  clusterNeedle(g, rpmCx, rpmCy, rpmAng, rpmR - 6, PR.amber);
-  g.font = `bold ${labelPx}px ${FONT_BLACK}`;
-  g.textAlign = 'center';
-  g.fillStyle = PR.tealLight;
-  g.fillText('RPM', rpmCx, rpmCy + rpmR * 0.42);
-
-  // Lap / TO GO — small LCD window under the MPH bezel (tertiary race cue).
-  const lcdW = Math.max(56, w * 0.11);
-  const lcdH = Math.max(12, h * 0.022);
-  const lcdX = mphCx - lcdW / 2;
-  const lcdY = mphCy + mphR * 0.55;
-  g.fillStyle = '#05040C';
-  g.beginPath();
-  g.roundRect(lcdX - 2, lcdY - 2, lcdW + 4, lcdH + 4, 3);
-  g.fill();
-  g.strokeStyle = 'rgba(74,72,96,0.8)';
-  g.lineWidth = 1;
-  g.stroke();
-  g.fillStyle = '#0E1A18';
-  g.fillRect(lcdX, lcdY, lcdW, lcdH);
-  g.font = `bold ${Math.max(8, Math.round(h * 0.014))}px ${FONT_BLACK}`;
-  g.textAlign = 'center';
-  g.textBaseline = 'middle';
-  if (f.race.started && !p.finished) {
-    const left = f.race.lapsToGo(p);
-    const finalLap = left <= 1;
-    g.fillStyle = finalLap ? PR.amber : PR.tealLight;
-    g.shadowColor = finalLap ? 'rgba(255,200,90,0.7)' : 'rgba(18,181,166,0.55)';
-    g.shadowBlur = 4;
-    g.fillText(finalLap ? 'FINAL' : `${left} TO GO`, mphCx, lcdY + lcdH / 2);
-    g.shadowBlur = 0;
-  } else {
-    g.fillStyle = 'rgba(18,181,166,0.35)';
-    g.fillText('— — —', mphCx, lcdY + lcdH / 2);
-  }
-  g.restore();
-
-  // Steering wheel: leather rim thickness, tapered spokes, hub; rotates with steer; sits low for mirror/minimap.
-  const r = wheelRadius(w, h);
-  const cx = w * 0.5;
-  const cy = h + r * 0.42;
-  g.save();
-  g.translate(cx, cy);
-  g.rotate(f.steer * 1.4);
-  // Outer carcass + matte leather + inner highlight = readable rim thickness.
-  g.strokeStyle = '#05040A';
-  g.lineWidth = r * 0.26;
-  g.lineCap = 'butt';
-  g.beginPath();
-  g.arc(0, 0, r, 0, Math.PI * 2);
-  g.stroke();
-  g.strokeStyle = '#1A1520';
-  g.lineWidth = r * 0.17;
-  g.beginPath();
-  g.arc(0, 0, r, 0, Math.PI * 2);
-  g.stroke();
-  g.strokeStyle = '#2E2838';
-  g.lineWidth = r * 0.075;
-  g.beginPath();
-  g.arc(0, 0, r - r * 0.015, 0, Math.PI * 2);
-  g.stroke();
-  // Leather highlight + stitch ring.
-  g.strokeStyle = 'rgba(255,248,232,0.14)';
-  g.lineWidth = r * 0.028;
-  g.beginPath();
-  g.arc(0, 0, r - r * 0.065, Math.PI * 1.02, Math.PI * 1.98);
-  g.stroke();
-  g.strokeStyle = 'rgba(90,80,110,0.45)';
-  g.lineWidth = Math.max(1, r * 0.012);
-  g.setLineDash([r * 0.04, r * 0.035]);
-  g.beginPath();
-  g.arc(0, 0, r - r * 0.04, 0, Math.PI * 2);
-  g.stroke();
-  g.setLineDash([]);
-  // Grip pads at 9 / 3.
-  g.strokeStyle = '#12101A';
-  g.lineWidth = r * 0.14;
-  g.beginPath();
-  g.arc(0, 0, r, Math.PI * 0.86, Math.PI * 1.14);
-  g.stroke();
-  g.beginPath();
-  g.arc(0, 0, r, -Math.PI * 0.14, Math.PI * 0.14);
-  g.stroke();
-  g.strokeStyle = 'rgba(255,248,232,0.06)';
-  g.lineWidth = r * 0.04;
-  g.beginPath();
-  g.arc(0, 0, r - r * 0.02, Math.PI * 0.9, Math.PI * 1.1);
-  g.stroke();
-  g.beginPath();
-  g.arc(0, 0, r - r * 0.02, -Math.PI * 0.1, Math.PI * 0.1);
-  g.stroke();
-  // Three tapered spokes into the hub (one at 6 o'clock).
-  for (const a of [Math.PI * 0.5, Math.PI * 0.5 + (Math.PI * 2) / 3, Math.PI * 0.5 + (Math.PI * 4) / 3]) {
-    g.save();
-    g.rotate(a);
-    const spoke = g.createLinearGradient(r * 0.18, -r * 0.08, r * 0.9, r * 0.08);
-    spoke.addColorStop(0, '#3A3548');
-    spoke.addColorStop(0.45, '#22202E');
-    spoke.addColorStop(1, '#14121C');
-    g.fillStyle = spoke;
-    g.beginPath();
-    g.moveTo(r * 0.18, -r * 0.05);
-    g.lineTo(r * 0.9, -r * 0.09);
-    g.lineTo(r * 0.9, r * 0.09);
-    g.lineTo(r * 0.18, r * 0.05);
-    g.closePath();
-    g.fill();
-    g.strokeStyle = 'rgba(201,204,214,0.28)';
-    g.lineWidth = 1;
-    g.beginPath();
-    g.moveTo(r * 0.22, -r * 0.012);
-    g.lineTo(r * 0.86, -r * 0.02);
-    g.stroke();
-    g.fillStyle = 'rgba(201,204,214,0.35)';
-    g.beginPath();
-    g.arc(r * 0.28, 0, r * 0.028, 0, Math.PI * 2);
-    g.fill();
-    g.restore();
-  }
-  // Soft glove / hand suggestion on the rim (stays below mirror band).
-  for (const side of [-1, 1]) {
-    const hx = side * r * 0.8;
-    const hy = r * 0.05;
-    const palm = g.createRadialGradient(hx, hy, r * 0.02, hx, hy, r * 0.16);
-    palm.addColorStop(0, 'rgba(48,38,44,0.55)');
-    palm.addColorStop(1, 'rgba(22,18,28,0.15)');
-    g.fillStyle = palm;
-    g.beginPath();
-    g.ellipse(hx, hy, r * 0.15, r * 0.11, side * 0.28, 0, Math.PI * 2);
-    g.fill();
-    g.fillStyle = 'rgba(40,32,40,0.4)';
-    g.beginPath();
-    g.ellipse(hx + side * r * 0.02, hy - r * 0.08, r * 0.06, r * 0.05, side * 0.4, 0, Math.PI * 2);
-    g.fill();
-  }
-  g.fillStyle = PR.red;
-  g.fillRect(-r * 0.035, -r * 1.1, r * 0.07, r * 0.18);
-  // Hub + chrome ring + small team cue.
-  const hub = g.createRadialGradient(-r * 0.07, -r * 0.09, r * 0.02, 0, 0, r * 0.34);
-  hub.addColorStop(0, '#3A3548');
-  hub.addColorStop(0.55, '#1E1A28');
-  hub.addColorStop(1, '#12101A');
-  g.fillStyle = hub;
-  g.beginPath();
-  g.arc(0, 0, r * 0.32, 0, Math.PI * 2);
-  g.fill();
-  g.strokeStyle = 'rgba(201,204,214,0.5)';
-  g.lineWidth = 2;
-  g.stroke();
-  g.strokeStyle = 'rgba(18,181,166,0.25)';
-  g.lineWidth = 1.2;
-  g.beginPath();
-  g.arc(0, 0, r * 0.26, 0, Math.PI * 2);
-  g.stroke();
-  g.fillStyle = PR.teal;
-  g.fillRect(-r * 0.13, -r * 0.04, r * 0.26, r * 0.08);
-  g.fillStyle = PR.amber;
-  g.beginPath();
-  g.arc(0, 0, r * 0.085, 0, Math.PI * 2);
-  g.fill();
-  g.fillStyle = 'rgba(10,9,16,0.55)';
-  g.beginPath();
-  g.arc(0, 0, r * 0.035, 0, Math.PI * 2);
-  g.fill();
-  g.restore();
-}
-
 function drawMirror(g: CanvasRenderingContext2D, w: number, h: number, f: CockpitFrame, ex: number, ey: number, yaw: number): void {
   const mw = Math.round(Math.max(140, Math.min(420, w * 0.26)));
   const mh = Math.round(mw * 0.25);
@@ -1365,14 +604,24 @@ export function cameraYaw(p: Car, heading: number): number {
   return camYaw;
 }
 
+function floodStreaks(c: Camera, glows: Glow[]): Streak[] {
+  const out: Streak[] = [];
+  for (const gl of glows) {
+    if (gl.z <= MAST_Z) continue;
+    const dx = gl.x - c.x;
+    const dy = gl.y - c.y;
+    const d = dx * c.cos + dy * c.sin;
+    const lat = -dx * c.sin + dy * c.cos;
+    if (d <= 0 || d >= FLOOD_DEPTH || Math.abs(lat) >= FLOOD_SIDE) continue;
+    out.push({ x: c.ox + (c.focal * lat) / d, a: FLOOD_ALPHA * (1 - d / FLOOD_DEPTH) });
+  }
+  return out.sort((a, b) => b.a - a.a).slice(0, MAX_STREAKS);
+}
+
 export function drawCockpitView(g: CanvasRenderingContext2D, f: CockpitFrame): void {
   if (stars.length === 0) initSky();
-  setPylonNames(
-    f.race
-      .standings()
-      .slice(0, 4)
-      .map((car) => driverName(car.colorIdx).slice(0, 3)),
-  );
+  const standings = f.race.standings();
+  setPylonNames(standings.slice(0, 4).map((car) => driverName(car.colorIdx).slice(0, 3)));
   const v = f.view;
   const p = f.race.player;
   const heading = f.ih(p);
@@ -1399,8 +648,8 @@ export function drawCockpitView(g: CanvasRenderingContext2D, f: CockpitFrame): v
   cam.fogNear = 260;
   drawSky(g, cam, v.w, yaw);
   renderWorld(g, cam, f, false);
-  drawCockpit(g, v.w, v.h, f);
+  drawCockpit(g, v.w, v.h, { ...f, standings, streaks: floodStreaks(cam, scene!.glows) });
   drawMirror(g, v.w, v.h, f, ex, ey, yaw);
-  drawMinimap(g, v.w, v.h, wheelRadius(v.w, v.h), f);
+  drawMinimap(g, v.w, v.h, wheelRadius(v.w), f);
   g.restore();
 }
