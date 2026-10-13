@@ -2,7 +2,7 @@
 
 # 🏁 PETROL RUSH
 
-**An old-school arcade night race under floodlights – 20 cars, fuel strategy, pit stops and crashes that matter.**
+**An old-school arcade night race under floodlights – 20 cars, a five-round Grand Prix, fuel strategy, pit stops and crashes that matter.**
 
 ### [▶ Play in your browser](https://luke-moonweb.github.io/Petrol-Rush/)
 
@@ -18,13 +18,17 @@
 </div>
 
 Petrol Rush is a top-down 2D racing game written in TypeScript with plain Canvas 2D and Web Audio.
-You race up to 19 AI drivers on a four-lane night oval, manage fuel, dive into the pit lane and try to
-stay out of the pile-ups. **Every pixel and every sound is generated in code at start-up** – there
+You race up to 19 AI drivers on a four-lane night oval or in a five-round **Grand Prix** on five more
+circuits, manage fuel, dive into the pit lane and try to stay out of the pile-ups. **Every pixel and every sound is generated in code at start-up** – there
 are no image, audio or font files in the project.
 
 ## ✨ Highlights
 
 - 🏎️ **20-car races** with F1-style grid, five-light start and live timing tower with sector gaps.
+- 🏆 **Grand Prix** – a five-round championship on five new circuits, each with its own shape and
+  scenery: a harbour triangle, a desert heart with a hairpin dip, an L-shaped street circuit with a
+  chicane, twisty forest esses and a grand finale. F1 points (25-18-15-12-10-8-6-4-2-1), standings
+  after every round, progress saved in the browser. Every circuit is also available in QUICK RACE.
 - ⛽ **Fuel & pit stops** – a full tank lasts about 12 laps. Cross the yellow PIT LANE line and the
   game drives you to your box, refuels and takes you back out.
 - 💥 **Crashes that matter** – hit someone in the rear and *they* spin; spinning cars spill
@@ -126,8 +130,11 @@ browser does not support it (iPhone Safari).
   projected position, e.g. `PEN +2s → P6`. Penalties count in the final classification.
 - **Hit a wall head-on and you stop dead** – back out with reverse and straighten up; only light
   glancing contacts let you slide along the barrier.
-- **Pit when the fuel gauge gets low.** Take the funnel at the bottom-left of the oval, follow the
-  PIT arrows, and the pit crew does the rest.
+- **Pit when the fuel gauge gets low.** On the oval, take the funnel at the bottom-left, follow the PIT
+  arrows, and the pit crew does the rest. On the Grand Prix circuits the pit lane runs alongside the
+  main straight: keep left out of the last corner and take the entry road at the start of the straight.
+- **Every corner is taken at 150 mph or less** – on the Grand Prix circuits too. Tighter corners only
+  need a cleaner line.
 
 ## ⚙️ Settings
 
@@ -137,9 +144,29 @@ browser does not support it (iPhone Safari).
 | Crash penalties | On / Off |
 | Speed warning bar | On / Off |
 | Collisions | **Realistic** – the car hit in the rear or rear side spins, the hitter does not · **Classic** – in a hard crash both cars spin |
-| Race | Number of cars (up to 20), laps (1–100), your car colour, starting position (last / middle / pole / random) |
+| Race | Track, number of cars (up to 20), laps (1–100), your car colour, starting position (last / middle / pole / random) |
 
-Settings and key bindings are stored in `localStorage`.
+Settings, key bindings and the Grand Prix in progress are stored in `localStorage`.
+
+## 🏆 Grand Prix
+
+Pick the number of cars, laps per race, your colour and starting position, then race the calendar:
+
+| Round | Circuit | Shape |
+|---|---|---|
+| 1 | HARBOUR LOOP | Clockwise triangle: a long straight and three sweepers |
+| 2 | DESERT HEART | Anticlockwise, with a right-hand hairpin dipping into the infield |
+| 3 | NEON CITY | Clockwise L-shaped street circuit with a chicane |
+| 4 | PINE FOREST | Anticlockwise, esses and a winding back section |
+| 5 | GRAND FINALE | Clockwise: a kink, a chicane, a switchback and a double right |
+
+- Points go to the top ten; penalties count, ties are broken by count-back (more wins, then more
+  2nd places …).
+- AI drivers keep their pace for the whole season and line up by the standings; you start from the
+  grid position you chose.
+- When you cross the line, the rest of the field finishes in the background. **RETIRE** in the race
+  menu ends your race with a DNF (no points). Restarting a race is allowed (and counted).
+- The championship is saved after every round – **CONTINUE** from the Grand Prix screen after a reload.
 
 ## 🔗 URL parameters
 
@@ -150,6 +177,7 @@ Handy for testing and tuning:
 | `?quick` | Skip the menus and start a race |
 | `?cars=20&laps=3` | Race options |
 | `?seed=123` | Repeatable race |
+| `?track=harbour` | Track for `?quick` and QUICK RACE: `oval`, `harbour`, `desert`, `city`, `forest`, `finale` |
 | `?debug` | Debug overlay, `]` speeds up time ×4/×8, `window.__game` and `window.__race` in the console |
 | `?overlay=URL` | Semi-transparent 640×480 image over the screen for layout comparison |
 | `?touch` / `?touch=0` | Force touch controls on / off, regardless of the device |
@@ -159,7 +187,10 @@ Handy for testing and tuning:
 - **Fixed 60 Hz simulation** with interpolated rendering; logical resolution 640×480, scaled to the
   window and drawn at device resolution, so text stays sharp and pixel art stays crisp.
 - **Track in Frenet coordinates** (`s` along the lap, `d` across it) – lane keeping, lap counting,
-  sectors and AI all work in that space.
+  sectors and AI all work in that space. The oval is analytic; the Grand Prix circuits are polygons with
+  a corner radius at every vertex, compiled into straights and arcs (`src/track/segment.ts`), so a loop
+  closes by construction and `pointAt`/`project` stay exact.
+- **2D camera** – the oval only scrolls sideways; the circuits scroll both ways, leading along the track.
 - **Cars are pre-rendered** from tiny 3D models into 32 rotation sprites per livery at start-up.
 - **Procedural audio** – engines, tyres, crashes, radio and UI sounds are synthesised with Web Audio.
 - **Tunable** – almost every gameplay constant (grip, braking, slide thresholds, AI, collisions,
@@ -173,18 +204,21 @@ src/
   input.ts         keyboard, rebindable keys, virtual (touch) actions
   touch.ts         phone detection, on-screen controls and their layout
   prefs.ts         SETTINGS → GAME options
-  states/          title (with demo race), controls, settings, credits
+  states/          title (with demo race), Grand Prix screen, controls, settings, credits
     race/          race screen: flow, sound, race-only drawing
-  track/           oval geometry, walls, pit road
-  race/            cars, physics & collisions, AI, oil, pit stops, race logic & classification
+  track/           Track interface, oval geometry and pit road, segment circuits, GP calendar,
+                   straight pit lane and the pit-lane AI shared by both
+  race/            cars, physics & collisions, AI, oil, pit stops, race logic & classification,
+                   Grand Prix championship (points, standings, save)
   ui/              HUD, race overlays, text, palette
     menus/         title, controls, settings and credits screens
   gfx/             3D-to-sprite renderer, liveries, particles, world drawing
-    track/         night track pre-render: tarmac, pit road, paddock, infield
+    track/         pre-rendered tracks: oval/ (tarmac, pit road, paddock, infield), circuit/ (themes)
   audio/           Web Audio effects and four engine voices
 docs/screenshots/  images used in this README
-tests/             Vitest: track geometry, lap counting, physics, collisions, penalties,
-                   oil, pit autopilot and full headless 20-car races
+tests/             Vitest: oval golden master, track geometry, lap counting, physics, collisions,
+                   penalties, oil, pit autopilot, championship logic and full headless 20-car
+                   races on every circuit
 ```
 
 ## 🧪 Tests
@@ -193,8 +227,10 @@ tests/             Vitest: track geometry, lap counting, physics, collisions, pe
 npm test
 ```
 
-The suite includes headless simulations of complete 20-car, 18-lap races to make sure every AI
-driver finishes without getting stuck or leaving the track.
+The suite includes headless simulations of complete 20-car races on every circuit (including all
+cars pitting on the same lap) to make sure every AI driver finishes without getting stuck or leaving
+the track, a whole headless Grand Prix season, and a golden-master test that fingerprints oval races
+bit for bit, so refactors cannot change how the oval drives.
 
 ---
 

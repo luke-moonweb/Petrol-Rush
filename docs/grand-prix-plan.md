@@ -307,3 +307,25 @@ Figura „8” jest poza zakresem v1.
 | `seed++`, wspólny RNG, `car.id` ≠ tożsamość (QA) | Seed z GP, osobny strumień RNG, klucz `colorIdx` |
 | Boks na zespół wygląda jak błąd, `freeBox` (designer, QA) | Własny boks, poprawka `freeBox` |
 | Brak CI dla PR (QA) | Workflow `pull_request` w F7 |
+
+## 10. Stan realizacji (2026-10-14)
+
+| Faza | Status | Uwagi |
+|---|---|---|
+| F−1 | ✅ | `tests/oval-golden.test.ts`: 5 scenariuszy, hash FNV-1a; snapshot nie zmienił się przez cały branch |
+| F0 | ✅ | `Track` w `src/track/common.ts`, owal 1:1 (`oval.ts`, `ovalPit.ts`, `ovalTrack.ts`), test struktury importów |
+| F1 | ✅ | `SegmentTrack` z wierzchołków `(x, y, R)`; owal zbudowany z segmentów = owal analityczny (≤1e-6) |
+| F2 | ✅ | Kamera 2D (cel na osi toru), renderer `gfx/track/circuit/`, motywy (woda w porcie, wydmy, miasto, las, stadion) |
+| F3 | ✅ | AI bez zmian w logice jazdy, `cornerAssist` z kierunkiem; testy 150/165 mph na każdym zakręcie |
+| F4 | ✅ | Pit lane wzdłuż prostej startowej (`straightPit.ts`), wspólne AI pitu (`pitAi.ts`) |
+| F5 | ✅ | `race/grandprix.ts` + `states/gp.ts` + `ui/menus/gp.ts`; RETIRE, dokończenie wyścigu w tle, zapis |
+| F6 | ✅ | 5 torów w `src/track/gp.ts` |
+| F7 | ✅ | README, workflow `ci.yml` na `pull_request` |
+
+Odstępstwa od planu v2:
+
+- **Wjazd do pitu:** zamiast płaskiego czoła separatora jest klin (30 px). Płaskie czoło
+  zatrzymywało auta w korkach przy wjeździe (20 aut zjeżdżających naraz).
+- **Kolejka na drodze wjazdowej:** auta jadą gęsiego. Zmiana rzędu działa dopiero w pit lane.
+- **Minimapa i tablica zakrętu:** pominięte, zgodnie z decyzjami D2 i D4. SKID ostrzega jak na owalu.
+- **Długość okrążenia:** pokazywana w km (1 px = 1 m; owal ma 4,6 km).
