@@ -10,27 +10,28 @@ Quality gate: see `CABIN_QUALITY.md` (Done-when playtester questions).
 2. Start a race at night (default oval night look).
 3. Toggle **cockpit camera** with **KeyC** (or prefs camera = cockpit). Top-down still works — toggle back to compare.
 4. Cold playtest checklist:
-   - Do you feel **inside** a car? Look for roof header, thick A-pillars with inner highlight, hood/nose lip under the glass, low steering wheel.
-   - Can you still see the **track and rivals** clearly? Center glass should stay open; dirt flecks hug edges/lower band.
-   - Do the **gauges** look intentional? Center binnacle: primary MPH dial, secondary FUEL + RPM with metal bezels, tertiary lap LCD.
-5. Stress glass: drive near an **oil** slick (longer brown smears) and scrape a wall / take contact (smaller flecks). Sheen should stay night-cool up top with a faint teal–amber bounce near the dash.
-6. Confirm **mirror** + **minimap** still usable; wheel follows steer without covering them; spin yaw recovery unchanged (`cameraYaw`).
+   - Do you feel **inside** a car? Roof header, A-pillars, livery hood, binnacle on the dash, wheel with gloves at 10 and 2.
+   - Can you still see the **track and rivals** clearly? The centre lane and the race-info corridor under the mirror stay clear; flecks sit at the edges.
+   - Do the **gauges** look intentional? LED strip, segmented speed ring, fuel-laps pod, race pod (position + interval ahead) and tell-tales.
+5. Stress the cabin: drive through an **oil** slick (dark flecks with a teal rim build up) and hit a wall (grit flecks plus a small cabin jolt). Go over 150 mph in a turn: LED strip and SKID lamp blink together with the HUD SKID lamp.
+6. Confirm **mirror** + **minimap** are still usable; the wheel follows steer; spin yaw recovery is unchanged (`cameraYaw`).
 
 ## Acceptance (Done when)
 
 | Question | Verdict |
 | --- | --- |
-| Do I feel *inside* a car? | **Yes** — canopy frame, hood lip, binnacle, wheel, glass sheen |
-| Can I still see the track and rivals clearly? | **Yes** — center kept clear; flecks edge-biased; overlay opacity capped |
-| Do the gauges look intentional, not prototype? | **Yes** — recessed cluster with bezels, hierarchy, night glow |
+| Do I feel *inside* a car? | Self-check yes; not re-run by a cold playtester |
+| Can I still see the track and rivals clearly? | Self-check yes; measured clear zones (see `CABIN_QUALITY.md`) |
+| Do the gauges look intentional, not prototype? | Self-check yes; not re-run by a cold playtester |
 
 ## Remaining limits (honest)
 
-- Still a **Canvas 2D overlay** on the existing FPV world — not a 3D cabin mesh or real reflections of cars/lights on glass.
-- Dirt flecks are **stable** (fixed layout; never reshuffle) and **proximity / impact driven**, not persistent mud that accumulates over a stint.
-- Dash parallax vs pillars is **very subtle**; no G-force roll / speed-warp / Night Drama (other branches).
-- Wheel is a stylized 2D silhouette (rim/spokes/hub cue), not a textured model.
+- Still a **Canvas 2D overlay** on the existing FPV world, not a 3D cabin or real reflections.
+- Floodlight streaks are capped at alpha 0.08 and are hard to notice on the dark pillars.
+- Glass soil decays over ~8 s; it does not accumulate over a whole stint.
+- Wheel and gloves are a flat 2D sprite.
+- fps at the target sizes was not read live (hidden browser pane); overlay cost was measured with `performance.now()` and a GPU-synced A/B instead.
 
 ## Scope
 
-Only `src/gfx/fpv/view.ts` `drawCockpit` / framing helpers (+ `CABIN_QUALITY.md`). No speed-warp, G-force roll, or chase-cam.
+Cabin drawing in `src/gfx/fpv/cockpit.ts`, readout and per-race cabin state in `src/gfx/fpv/cabin.ts` (tests in `tests/fpv.test.ts`), frame plumbing in `src/states/race/state.ts`, shared `CONFIG.LOW_FUEL`. No speed-warp, G-force roll, or chase-cam.
