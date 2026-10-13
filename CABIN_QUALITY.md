@@ -39,3 +39,7 @@ Windshield aperture now reads as a sealed canopy: deeper roof header with unders
 ## Status — Cluster
 
 Dash under the hood lip is matte plastic with a soft teal/amber lip wash. Gauges sit in a recessed binnacle (not floating HUD): primary MPH dial (digital + needle + spin-zone arc), secondary FUEL and RPM dials with metal bezels and night glow, tertiary lap LCD (`TO GO` / `FINAL`). Instrument hierarchy and warm teal–amber glow match the night cabin bar. Structure pillars/hood left intact; KeyC, mirror, minimap, `cameraYaw` unchanged. `npm test` + `npm run typecheck` pass.
+
+## Status — Atmosphere
+
+Night glass: cool sky sheen + roof specular streak, warm teal/amber dash bounce, pillar edge wash, soft wiper arcs; center race lane stays clear. Dirt flecks use a fixed RNG seed and slot layout (appear/fade with oil/scrape only — no per-frame reshuffle). Steering wheel: leather rim thickness + stitch ring, grip pads, tapered riveted spokes, chrome hub with team cue, soft glove hands; sits low so mirror/minimap stay usable. Kept Cluster dash parallax and Structure canopy/pillars/hood; reconciled draw order (glass → hood/roof/pillars → parallax dash/cluster → wheel). No G-force / speed-warp / Night Drama. KeyC, mirror, minimap, `cameraYaw` unchanged. `npm test` + `npm run typecheck` pass. Done-when playtester questions: yes / yes / yes (see `NOTES.md`).

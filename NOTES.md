@@ -27,7 +27,7 @@ Quality gate: see `CABIN_QUALITY.md` (Done-when playtester questions).
 ## Remaining limits (honest)
 
 - Still a **Canvas 2D overlay** on the existing FPV world — not a 3D cabin mesh or real reflections of cars/lights on glass.
-- Dirt is **proximity / impact driven**, not persistent mud that accumulates over a stint.
+- Dirt flecks are **stable** (fixed layout; never reshuffle) and **proximity / impact driven**, not persistent mud that accumulates over a stint.
 - Dash parallax vs pillars is **very subtle**; no G-force roll / speed-warp / Night Drama (other branches).
 - Wheel is a stylized 2D silhouette (rim/spokes/hub cue), not a textured model.
 
