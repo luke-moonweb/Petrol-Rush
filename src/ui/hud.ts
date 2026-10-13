@@ -354,7 +354,7 @@ export function drawFuelGauge(g: CanvasRenderingContext2D, fuel: number, time: n
   g.strokeStyle = PR.red;
   g.lineWidth = 3;
   g.beginPath();
-  g.arc(cx, cy, r - 8, ang(0), ang(0.12));
+  g.arc(cx, cy, r - 8, ang(0), ang(CONFIG.LOW_FUEL));
   g.stroke();
   g.strokeStyle = PR.amber;
   for (let k = 0; k <= 4; k++) {
@@ -374,7 +374,7 @@ export function drawFuelGauge(g: CanvasRenderingContext2D, fuel: number, time: n
   g.fillText('½', cx, cy - r + 15);
   g.fillText('F', cx + r - 9, cy - 3);
   needle(g, cx, cy, ang(f), r - 7);
-  const lit = f < 0.12 && Math.floor(time * 3) % 2 === 0;
+  const lit = f < CONFIG.LOW_FUEL && Math.floor(time * 3) % 2 === 0;
   const ic = lit ? PR.amber : PR.muted;
   if (lit) {
     g.shadowColor = PR.amber;
