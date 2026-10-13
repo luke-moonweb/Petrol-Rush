@@ -1,5 +1,5 @@
 import type { Rng } from '../../../sim/rng';
-import { CY, FINISH_X, PIT_LABEL_TOP, STANDS_BOTTOM, STANDS_X1 } from '../../../track/oval';
+import { CY, FINISH_X, PIT_LABEL_TOP, RC, STANDS_BOTTOM, STANDS_X1 } from '../../../track/oval';
 import { shade } from '../../sprites';
 import { drawHauler3d } from '../../vehicles';
 import { COL, FONT_BLACK } from '../style';
@@ -17,6 +17,9 @@ const TEAMS = [
   { name: 'TORO JUNIOR', a: '#F4F4F8', b: '#1E3CA0', t: '#1E3CA0' },
 ];
 const SKIN = ['#f0c098', '#e0a878', '#c88a5a', '#8a5a38'];
+
+/** Finish line on the main straight's centre line: the paddock is laid out relative to it. */
+export const PADDOCK_ORIGIN = { x: FINISH_X, y: CY + RC };
 
 export const STAND_X0 = FINISH_X - 215;
 export const STAND_X1 = FINISH_X + 215;

@@ -16,6 +16,8 @@ export const COL = {
   label: '#FFB627',
   labelAlt: '#12B5A6',
   ink: '#17142B',
+  kerbDark: '#C8202A',
+  kerbLight: '#E8E4DA',
 };
 
 export const FONT_BLACK = '"Arial Black", "Arial Bold", Arial, sans-serif';

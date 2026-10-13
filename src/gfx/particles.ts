@@ -1,5 +1,6 @@
 import { CONFIG } from '../config';
 import type { Car } from '../race/car';
+import type { Cam } from './world';
 
 enum Kind {
   Spark,
@@ -126,7 +127,7 @@ export class Particles {
     }
   }
 
-  renderSmoke(g: CanvasRenderingContext2D, camX: number): void {
+  renderSmoke(g: CanvasRenderingContext2D, cam: Cam): void {
     for (const p of this.pool) {
       if (!p.alive || p.kind !== Kind.Smoke) continue;
       const t = p.age / p.life;
@@ -134,19 +135,19 @@ export class Particles {
       g.globalAlpha = 0.55 * (1 - t);
       g.fillStyle = t < 0.3 ? '#e8e8e8' : '#bdbdbd';
       g.beginPath();
-      g.arc(Math.round(p.x - camX), Math.round(p.y), r, 0, Math.PI * 2);
+      g.arc(Math.round(p.x - cam.x), Math.round(p.y - cam.y), r, 0, Math.PI * 2);
       g.fill();
     }
     g.globalAlpha = 1;
   }
 
-  renderSparks(g: CanvasRenderingContext2D, camX: number): void {
+  renderSparks(g: CanvasRenderingContext2D, cam: Cam): void {
     for (const p of this.pool) {
       if (!p.alive || p.kind !== Kind.Spark) continue;
       const t = p.age / p.life;
       g.fillStyle = SPARK_COLORS[Math.min(SPARK_COLORS.length - 1, Math.floor(t * SPARK_COLORS.length))]!;
-      const x = Math.round(p.x - camX);
-      const y = Math.round(p.y);
+      const x = Math.round(p.x - cam.x);
+      const y = Math.round(p.y - cam.y);
       g.fillRect(x, y, p.size, p.size);
       const tx = Math.round(x - p.vx * 0.012);
       const ty = Math.round(y - p.vy * 0.012);

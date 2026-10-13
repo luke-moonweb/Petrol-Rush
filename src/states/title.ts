@@ -1,7 +1,7 @@
 import { CONFIG } from '../config';
 import { Particles } from '../gfx/particles';
 import { driverName } from '../gfx/vehicles';
-import { drawCars, drawOil, trackCanvas } from '../gfx/world';
+import { drawCars, drawOil, drawTrack } from '../gfx/world';
 import { layout } from '../layout';
 import { type Car, lapsCompleted } from '../race/car';
 import { Race } from '../race/race';
@@ -34,7 +34,7 @@ export class TitleState implements State {
   }
 
   private newDemo(): Race {
-    const race = new Race({ cars: 20, laps: DEMO_LAPS, playerColor: 0, qualifying: 'random' }, this.demoSeed++, true);
+    const race = new Race({ track: 'oval', cars: 20, laps: DEMO_LAPS, playerColor: 0, qualifying: 'random' }, this.demoSeed++, true);
     race.start();
     const dt = 1 / CONFIG.STEP_HZ;
     for (let t = 0; t < DEMO_WARMUP_S; t += dt) race.step(dt, null);
@@ -124,11 +124,12 @@ export class TitleState implements State {
     g.beginPath();
     g.rect(0, 0, W, CONFIG.PLAY_H);
     g.clip();
-    g.drawImage(trackCanvas(), camX, 0, W, CONFIG.PLAY_H, 0, 0, W, CONFIG.PLAY_H);
-    drawOil(g, race.oil, camX, W);
-    this.particles.renderSmoke(g, camX);
-    drawCars(g, race.cars, camX, W, ix, iy, ih);
-    this.particles.renderSparks(g, camX);
+    const cam = { x: camX, y: 0, w: W, h: CONFIG.PLAY_H };
+    drawTrack(g, race.track, cam);
+    drawOil(g, race.oil, cam);
+    this.particles.renderSmoke(g, cam);
+    drawCars(g, race.cars, cam, ix, iy, ih);
+    this.particles.renderSparks(g, cam);
     g.restore();
 
     const order = race.standings();

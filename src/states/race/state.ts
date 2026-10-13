@@ -1,6 +1,6 @@
 import { CONFIG, LAP_CHOICES, QUALIFYING_CHOICES, type RaceOptions } from '../../config';
 import { Particles } from '../../gfx/particles';
-import { drawCars, drawOil, trackCanvas } from '../../gfx/world';
+import { type Cam, clampCamera, drawCars, drawOil, drawTrack, trackCanvas } from '../../gfx/world';
 import { keyLabel } from '../../input';
 import { inFrame, layout } from '../../layout';
 import { type Car, lapsCompleted } from '../../race/car';
@@ -8,6 +8,7 @@ import { cornerAssist, type DriveInput, SteerRamp, skidWarning } from '../../rac
 import { NUM_COLORS, Race } from '../../race/race';
 import type { TouchLayout } from '../../touch';
 import { wrapAngle } from '../../track/common';
+import { getTrack, trackIds } from '../../track/tracks';
 import type { Hit } from '../../ui/hit';
 import { drawHudPanel, drawHudTop, drawSkidLamp } from '../../ui/hud';
 import { drawPause, drawRaceMenu, drawRaceSettings, drawResults, type SettingRow, type StatField } from '../../ui/overlays';
@@ -35,7 +36,7 @@ const RADIO_GAP_S = 8;
 
 let overlayImg: HTMLImageElement | null = null;
 
-const OPTION_LABELS = ['CARS', 'LAPS', 'YOUR CAR', 'GRID POSITION', 'START RACE'];
+const OPTION_LABELS = ['TRACK', 'CARS', 'LAPS', 'YOUR CAR', 'GRID POSITION', 'START RACE'];
 
 const QUALIFYING_LABELS: Record<string, string> = {
   last: 'BACK OF GRID',
@@ -52,7 +53,8 @@ export class RaceState implements State {
   private savedRace: Race | null = null;
   private finishTimer = 0;
   private assistLevel = 0;
-  private camOff = NaN;
+  private camOffX = NaN;
+  private camOffY = 0;
   private readonly steerRamp = new SteerRamp();
   private reverseHint = 0;
   private notice: { text: string; age: number } | null = null;
@@ -71,7 +73,7 @@ export class RaceState implements State {
     private opts: RaceOptions,
     phase: Phase,
   ) {
-    trackCanvas();
+    trackCanvas(getTrack(opts.track));
     if (game.params.overlayUrl && !overlayImg) {
       overlayImg = new Image();
       overlayImg.src = game.params.overlayUrl;
@@ -85,14 +87,14 @@ export class RaceState implements State {
 
   private newRace(): Race {
     this.particles?.clear();
-    this.camOff = NaN;
+    this.camOffX = NaN;
     this.assistLevel = 0;
     this.sound = new RaceSound(this.game.audio);
     this.lightsShown = 0;
     const prefs = this.game.prefs;
     this.notice = null;
     this.penaltyMsg = 0;
-    return new Race(this.opts, this.seed++, false, { penalties: prefs.penalties, collisions: prefs.collisions });
+    return new Race(this.opts, this.seed++, false, { penalties: prefs.penalties, collisions: prefs.collisions }, getTrack(this.opts.track));
   }
 
   touchLayout(): TouchLayout {
@@ -238,19 +240,24 @@ export class RaceState implements State {
     audio.ui('move');
     const o = { ...this.opts };
     switch (this.sel) {
-      case 0:
+      case 0: {
+        const ids = trackIds();
+        o.track = ids[(ids.indexOf(o.track) + delta + ids.length) % ids.length]!;
+        break;
+      }
+      case 1:
         o.cars = ((o.cars - 1 + delta + 20) % 20) + 1;
         break;
-      case 1: {
+      case 2: {
         const idx = LAP_CHOICES.indexOf(o.laps);
         const cur = idx < 0 ? LAP_CHOICES.indexOf(18) : idx;
         o.laps = LAP_CHOICES[(cur + delta + LAP_CHOICES.length) % LAP_CHOICES.length]!;
         break;
       }
-      case 2:
+      case 3:
         o.playerColor = (o.playerColor + delta + NUM_COLORS) % NUM_COLORS;
         break;
-      case 3: {
+      case 4: {
         const idx = QUALIFYING_CHOICES.indexOf(o.qualifying);
         o.qualifying = QUALIFYING_CHOICES[(idx + delta + QUALIFYING_CHOICES.length) % QUALIFYING_CHOICES.length]!;
         break;
@@ -327,7 +334,7 @@ export class RaceState implements State {
     this.updateCamera(dt);
 
     const used = this.race.pitAuto ? this.race.playerDrive : drive;
-    this.sound.update(dt, this.race, used, this.camXFor(this.race.player.x));
+    this.sound.update(dt, this.race, used, this.camFor(this.race.player.x, this.race.player.y).x);
     this.handleEvents(dt);
     const p = this.race.player;
 
@@ -337,18 +344,31 @@ export class RaceState implements State {
     }
   }
 
-  private updateCamera(dt: number): void {
+  private cameraLead(): [number, number] {
     const p = this.race.player;
-    const target = CONFIG.CAMERA_LEAD * Math.cos(this.race.track.headingAt(p.x, p.y));
-    if (Number.isNaN(this.camOff)) this.camOff = target;
-    else this.camOff += (target - this.camOff) * Math.min(1, dt / CONFIG.CAMERA_LEAD_S);
+    const track = this.race.track;
+    const h = track.headingAt(p.x, p.y);
+    const lead = track.worldH > CONFIG.PLAY_H ? CONFIG.CAMERA_LEAD_2D : CONFIG.CAMERA_LEAD;
+    return [lead * Math.cos(h), lead * Math.sin(h)];
   }
 
-  private camXFor(x: number): number {
-    const p = this.race.player;
-    const off = Number.isNaN(this.camOff) ? CONFIG.CAMERA_LEAD * Math.cos(this.race.track.headingAt(p.x, p.y)) : this.camOff;
-    const vw = layout.view.w;
-    return Math.min(Math.max(Math.round(x + off) - vw / 2, 0), this.race.track.worldW - vw);
+  private updateCamera(dt: number): void {
+    const [tx, ty] = this.cameraLead();
+    if (Number.isNaN(this.camOffX)) {
+      this.camOffX = tx;
+      this.camOffY = ty;
+      return;
+    }
+    const k = Math.min(1, dt / CONFIG.CAMERA_LEAD_S);
+    this.camOffX += (tx - this.camOffX) * k;
+    this.camOffY += (ty - this.camOffY) * k;
+  }
+
+  private camFor(x: number, y: number): Cam {
+    const [ox, oy] = Number.isNaN(this.camOffX) ? this.cameraLead() : [this.camOffX, this.camOffY];
+    const v = layout.view;
+    const track = this.race.track;
+    return clampCamera(Math.round(x + ox), Math.round(y + oy), v.w, v.h, track.worldW, track.worldH);
   }
 
   render(g: CanvasRenderingContext2D, alpha = 1): void {
@@ -361,21 +381,21 @@ export class RaceState implements State {
     const ix = (c: Car) => c.prevX + (c.x - c.prevX) * a;
     const iy = (c: Car) => c.prevY + (c.y - c.prevY) * a;
     const ih = (c: Car) => c.prevHeading + wrapAngle(c.heading - c.prevHeading) * a;
-    const camX = this.camXFor(Math.round(ix(race.player)));
+    const cam = this.camFor(Math.round(ix(race.player)), Math.round(iy(race.player)));
     g.save();
     const view = layout.view;
     g.translate(view.x, view.y);
     g.beginPath();
     g.rect(0, 0, view.w, view.h);
     g.clip();
-    g.drawImage(trackCanvas(), camX, 0, view.w, view.h, 0, 0, view.w, view.h);
-    drawOil(g, race.oil, camX, view.w);
-    this.particles.renderSmoke(g, camX);
+    drawTrack(g, race.track, cam);
+    drawOil(g, race.oil, cam);
+    this.particles.renderSmoke(g, cam);
 
-    drawCars(g, race.cars, camX, view.w, ix, iy, ih);
-    this.particles.renderSparks(g, camX);
-    const px = Math.round(ix(race.player)) - camX;
-    const py = Math.round(iy(race.player)) - 26;
+    drawCars(g, race.cars, cam, ix, iy, ih);
+    this.particles.renderSparks(g, cam);
+    const px = Math.round(ix(race.player)) - cam.x;
+    const py = Math.round(iy(race.player)) - cam.y - 26;
     g.fillStyle = PR.teal;
     g.beginPath();
     g.moveTo(px - 5, py - 6);
@@ -434,12 +454,14 @@ export class RaceState implements State {
     return OPTION_LABELS.map((label, i) => {
       switch (i) {
         case 0:
-          return { label, value: String(o.cars) };
+          return { label, value: getTrack(o.track).name };
         case 1:
-          return { label, value: String(o.laps) };
+          return { label, value: String(o.cars) };
         case 2:
-          return { label, carColor: o.playerColor };
+          return { label, value: String(o.laps) };
         case 3:
+          return { label, carColor: o.playerColor };
+        case 4:
           return { label, value: QUALIFYING_LABELS[o.qualifying] };
         default:
           return { label, action: true };
@@ -465,8 +487,8 @@ export class RaceState implements State {
     } else {
       const o = this.opts;
       stats = [
-        { label: 'CARS', value: String(o.cars) },
-        { label: 'LAPS', value: String(o.laps) },
+        { label: 'TRACK', value: getTrack(o.track).name },
+        { label: 'LAPS', value: `${o.laps}  ·  ${o.cars} CARS` },
         { label: 'YOUR CAR', carColor: o.playerColor },
         { label: 'GRID', value: QUALIFYING_LABELS[o.qualifying]!.replace(' OF GRID', '').replace(' POSITION', '') },
       ];
