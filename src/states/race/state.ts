@@ -7,7 +7,7 @@ import { type Car, lapsCompleted } from '../../race/car';
 import { cornerAssist, type DriveInput, SteerRamp, skidWarning } from '../../race/physics';
 import { NUM_COLORS, Race } from '../../race/race';
 import type { TouchLayout } from '../../touch';
-import { deltaS, inTurn, trackHeadingAt, WORLD_W, wrapAngle } from '../../track/track';
+import { wrapAngle } from '../../track/common';
 import type { Hit } from '../../ui/hit';
 import { drawHudPanel, drawHudTop, drawSkidLamp } from '../../ui/hud';
 import { drawPause, drawRaceMenu, drawRaceSettings, drawResults, type SettingRow, type StatField } from '../../ui/overlays';
@@ -291,10 +291,11 @@ export class RaceState implements State {
     }
     const p0 = this.race.player;
     const steerKey = (input.isDown('right') ? 1 : 0) - (input.isDown('left') ? 1 : 0);
-    const assist = cornerAssist(p0);
+    const track = this.race.track;
+    const assist = cornerAssist(p0, track);
     const step = dt / CONFIG.CORNER_ASSIST_IN_S;
     this.assistLevel = assist !== 0 ? Math.min(1, this.assistLevel + step) : Math.max(0, this.assistLevel - step);
-    const keySteer = this.steerRamp.update(steerKey, dt, inTurn(p0.x));
+    const keySteer = this.steerRamp.update(steerKey, dt, track.cornerAt(p0.x, p0.y) !== null);
     const drive: DriveInput = {
       steer: this.race.pitAuto ? 0 : Math.max(-1, Math.min(1, keySteer + assist * this.assistLevel)),
       gas: input.isDown('gas'),
@@ -338,16 +339,16 @@ export class RaceState implements State {
 
   private updateCamera(dt: number): void {
     const p = this.race.player;
-    const target = CONFIG.CAMERA_LEAD * Math.cos(trackHeadingAt(p.x, p.y));
+    const target = CONFIG.CAMERA_LEAD * Math.cos(this.race.track.headingAt(p.x, p.y));
     if (Number.isNaN(this.camOff)) this.camOff = target;
     else this.camOff += (target - this.camOff) * Math.min(1, dt / CONFIG.CAMERA_LEAD_S);
   }
 
   private camXFor(x: number): number {
     const p = this.race.player;
-    const off = Number.isNaN(this.camOff) ? CONFIG.CAMERA_LEAD * Math.cos(trackHeadingAt(p.x, p.y)) : this.camOff;
+    const off = Number.isNaN(this.camOff) ? CONFIG.CAMERA_LEAD * Math.cos(this.race.track.headingAt(p.x, p.y)) : this.camOff;
     const vw = layout.view.w;
-    return Math.min(Math.max(Math.round(x + off) - vw / 2, 0), WORLD_W - vw);
+    return Math.min(Math.max(Math.round(x + off) - vw / 2, 0), this.race.track.worldW - vw);
   }
 
   render(g: CanvasRenderingContext2D, alpha = 1): void {
@@ -387,7 +388,13 @@ export class RaceState implements State {
 
     drawHudTop(g, race, this.notice);
     drawHudPanel(g, race);
-    drawSkidLamp(g, this.phase === 'running' && race.started ? skidWarning(race.player) : 0, race.time, view.x + view.w - 6, view.y + 6);
+    drawSkidLamp(
+      g,
+      this.phase === 'running' && race.started ? skidWarning(race.player, race.track) : 0,
+      race.time,
+      view.x + view.w - 6,
+      view.y + 6,
+    );
     const msg = this.message();
     if (msg) drawRaceMessage(g, msg);
     if (this.lights && this.phase !== 'choose' && this.phase !== 'options') drawStartLights(g, this.lights);
@@ -492,7 +499,7 @@ export class RaceState implements State {
         continue;
       }
       if (e.type !== 'spin' || e.car === p || p.finished) continue;
-      const ds = deltaS(p.s, e.car.s);
+      const ds = race.track.deltaS(p.s, e.car.s);
       if (ds < -40 || ds > CRASH_WARN_PX || (e.car.pitSide && e.car.wasInPit)) continue;
       if (this.notice) this.notice.age = Math.min(this.notice.age, 1);
       else this.notice = { text: 'CAUTION  ·  CRASH AHEAD', age: 0 };

@@ -1,20 +1,5 @@
 import { CONFIG, type CollisionMode } from '../config';
-import {
-  CAR_R,
-  CX_L,
-  CX_R,
-  CY,
-  constrainPos,
-  deltaS,
-  inPitLane,
-  inTurn,
-  inWallRange,
-  project,
-  TRACK_LEN,
-  trackHeadingAt,
-  type WallNormal,
-  wrapAngle,
-} from '../track/track';
+import { CAR_R, type Track, type WallNormal, wrapAngle } from '../track/common';
 import type { Car } from './car';
 
 export interface DriveInput {
@@ -62,19 +47,20 @@ export class SteerRamp {
   }
 }
 
-export function cornerAssist(car: Car): number {
+export function cornerAssist(car: Car, track: Track): number {
   const C = CONFIG;
-  if (!inTurn(car.x) || car.reverse || car.spinTime > 0 || car.speed < C.CORNER_ASSIST_MIN_MPH) return 0;
+  const corner = track.cornerAt(car.x, car.y);
+  if (!corner || car.reverse || car.spinTime > 0 || car.speed < C.CORNER_ASSIST_MIN_MPH) return 0;
   if (car.pitSide && car.wasInPit) return 0;
   const vpx = car.speed * C.PX_PER_MPH;
   const rate = Math.min(C.MAX_TURN_RATE, vpx / C.MIN_TURN_RADIUS);
-  const r = Math.max(60, Math.hypot(car.x - (car.x < CX_L ? CX_L : CX_R), car.y - CY));
-  return -Math.min(1, (C.CORNER_ASSIST * vpx) / r / rate);
+  const r = Math.max(60, Math.hypot(car.x - corner.cx, car.y - corner.cy));
+  return corner.dir * Math.min(1, (C.CORNER_ASSIST * vpx) / r / rate);
 }
 
-export function skidWarning(car: Car): 0 | 1 | 2 {
+export function skidWarning(car: Car, track: Track): 0 | 1 | 2 {
   if (car.spinTime > 0 || Math.round(Math.abs(car.speed)) <= CONFIG.SPIN_MPH) return 0;
-  return inTurn(car.x) ? 2 : 1;
+  return track.cornerAt(car.x, car.y) ? 2 : 1;
 }
 
 function accelAt(mph: number): number {
@@ -99,7 +85,7 @@ export function startSpin(car: Car, rate: number, dir: number): boolean {
   return true;
 }
 
-export function stepCar(car: Car, input: DriveInput, dt: number): void {
+export function stepCar(car: Car, input: DriveInput, dt: number, track: Track): void {
   const C = CONFIG;
   const pxm = C.PX_PER_MPH;
   car.wallImpact = 0;
@@ -139,13 +125,14 @@ export function stepCar(car: Car, input: DriveInput, dt: number): void {
     const vpx = Math.abs(car.speed) * pxm;
     const rate = Math.min(C.MAX_TURN_RATE, vpx / C.MIN_TURN_RADIUS);
     const over = Math.round(car.speed) - C.SPIN_MPH;
-    const sliding = inTurn(car.x) && over > 0 && over < C.SLIDE_SPIN_OVER;
+    const inCorner = track.cornerAt(car.x, car.y) !== null;
+    const sliding = inCorner && over > 0 && over < C.SLIDE_SPIN_OVER;
     car.slideTime = sliding ? car.slideTime + dt : 0;
     const grip = sliding ? C.SLIDE_GRIP : 1;
     if (sliding) car.speed = Math.max(C.SPIN_MPH - 4, car.speed - C.SLIDE_DECEL_MPH_S * dt);
     car.heading += input.steer * rate * grip * dt * (car.speed >= 0 ? 1 : -1);
-    if (input.steer === 0 && car.speed > 20 && !inTurn(car.x)) {
-      const err = wrapAngle(trackHeadingAt(car.x, car.y) - car.heading);
+    if (input.steer === 0 && car.speed > 20 && !inCorner) {
+      const err = wrapAngle(track.headingAt(car.x, car.y) - car.heading);
       if (Math.abs(err) < (C.STRAIGHT_ASSIST_DEG * Math.PI) / 180) {
         const step = C.STRAIGHT_ASSIST_RATE * dt;
         car.heading += Math.max(-step, Math.min(step, err));
@@ -156,7 +143,7 @@ export function stepCar(car: Car, input: DriveInput, dt: number): void {
     if (sliding) {
       car.overTime = 0;
       if (car.slideTime > C.SLIDE_MAX_S) startSpin(car, C.SPIN_RATE, input.steer > 0 ? 1 : -1);
-    } else if (inTurn(car.x) && over > 0) {
+    } else if (inCorner && over > 0) {
       car.overTime += dt;
       if (car.overTime > C.SPIN_GRACE_S) startSpin(car, C.SPIN_RATE, input.steer > 0 ? 1 : -1);
     } else {
@@ -167,9 +154,9 @@ export function stepCar(car: Car, input: DriveInput, dt: number): void {
   const dist = car.speed * pxm * dt;
   car.x += Math.cos(car.moveAngle) * dist;
   car.y += Math.sin(car.moveAngle) * dist;
-  if (!car.finished) car.fuel = Math.max(0, car.fuel - Math.abs(dist) / (C.FUEL_RANGE_LAPS * TRACK_LEN));
+  if (!car.finished) car.fuel = Math.max(0, car.fuel - Math.abs(dist) / (C.FUEL_RANGE_LAPS * track.len));
 
-  const hit = constrainPos(car);
+  const hit = track.constrain(car);
   if (hit) applyWall(car, hit);
   car.heading = wrapAngle(car.heading);
   car.moveAngle = wrapAngle(car.moveAngle);
@@ -255,6 +242,7 @@ function setVelocity(car: Car, vx: number, vy: number): void {
 export type CrashHandler = (culprit: Car | null, victims: Car[]) => void;
 
 function blameFor(
+  track: Track,
   a: Car,
   b: Car,
   before: { aSpun: boolean; bSpun: boolean; aMph: number; bMph: number },
@@ -262,7 +250,7 @@ function blameFor(
 ): Car | null {
   const { aSpun, bSpun } = before;
   if (Math.cos(a.heading - b.heading) < -0.5) return null;
-  const ds = deltaS(project(a.x, a.y).s, project(b.x, b.y).s);
+  const ds = track.deltaS(track.project(a.x, a.y).s, track.project(b.x, b.y).s);
   let culprit = sideBySide;
   if (Math.abs(ds) >= CONFIG.BLAME_AHEAD_PX) {
     const frontReversing = (ds > 0 ? before.bMph : before.aMph) < -2;
@@ -283,14 +271,14 @@ function zoneOf(car: Car, towardX: number, towardY: number, px: number, py: numb
   return (px - car.x) * hx + (py - car.y) * hy >= 0 ? 'sideFront' : 'sideRear';
 }
 
-export function collideCars(cars: Car[], mode: CollisionMode = 'realistic', onCrash?: CrashHandler): void {
+export function collideCars(cars: Car[], track: Track, mode: CollisionMode = 'realistic', onCrash?: CrashHandler): void {
   const C = CONFIG;
   for (let i = 0; i < cars.length; i++) {
     const a = cars[i]!;
     for (let j = i + 1; j < cars.length; j++) {
       const b = cars[j]!;
       if (Math.abs(b.x - a.x) > 44 || Math.abs(b.y - a.y) > 44) continue;
-      if (inWallRange(a.x) && inWallRange(b.x) && a.wasInPit && b.wasInPit && a.pitSide !== b.pitSide) continue;
+      if (track.pit.walled(a, b)) continue;
 
       let best: { nx: number; ny: number; pen: number; px: number; py: number } | null = null;
       for (const oa of CIRCLE_OFFSETS) {
@@ -326,7 +314,7 @@ export function collideCars(cars: Car[], mode: CollisionMode = 'realistic', onCr
         markContact(b, mx, my, closing);
       }
 
-      const inPits = inPitLane(a.x, a.y) && inPitLane(b.x, b.y);
+      const inPits = track.pit.inLane(a.x, a.y) && track.pit.inLane(b.x, b.y);
       const fast = Math.max(Math.abs(a.speed), Math.abs(b.speed)) > C.CRASH_MIN_SPEED_MPH;
       const before = { aSpun: a.spinTime > 0, bSpun: b.spinTime > 0, aMph: a.speed, bMph: b.speed };
       const spinningBefore = before.aSpun || before.bSpun;
@@ -355,7 +343,7 @@ export function collideCars(cars: Car[], mode: CollisionMode = 'realistic', onCr
         const za = zoneOf(a, nx, ny, px, py);
         const zb = zoneOf(b, -nx, -ny, px, py);
         const hitSpins = (v: Car, zv: Zone): boolean => {
-          if (zv === 'rear') return closing > (inTurn(v.x) ? C.REAR_SPIN_TURN_MPH : C.REAR_SPIN_MPH);
+          if (zv === 'rear') return closing > (track.cornerAt(v.x, v.y) ? C.REAR_SPIN_TURN_MPH : C.REAR_SPIN_MPH);
           if (zv === 'sideRear') return closing > C.SIDE_REAR_SPIN_MPH;
           return false;
         };
@@ -388,9 +376,9 @@ export function collideCars(cars: Car[], mode: CollisionMode = 'realistic', onCr
         const jImp = ((1 + C.CRASH_RESTITUTION) * closing) / 2;
         setVelocity(a, avx - jImp * nx, avy - jImp * ny);
         setVelocity(b, bvx + jImp * nx, bvy + jImp * ny);
-        if (victims.length > 0) onCrash?.(blameFor(a, b, before, culprit), victims);
+        if (victims.length > 0) onCrash?.(blameFor(track, a, b, before, culprit), victims);
       } else if (closing > 0) {
-        const ds = deltaS(a.s, b.s);
+        const ds = track.deltaS(a.s, b.s);
         if (Math.abs(ds) > 10) {
           const front = ds > 0 ? b : a;
           const rear = ds > 0 ? a : b;
@@ -406,8 +394,8 @@ export function collideCars(cars: Car[], mode: CollisionMode = 'realistic', onCr
           }
         }
       }
-      constrainPos(a);
-      constrainPos(b);
+      track.constrain(a);
+      track.constrain(b);
     }
   }
 }

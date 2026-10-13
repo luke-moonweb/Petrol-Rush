@@ -1,20 +1,18 @@
 import { CONFIG, DEFAULT_RULES, type RaceOptions, type RaceRules } from '../config';
 import { createRng, lerp, type Rng } from '../sim/rng';
-import { inPitLane, NUM_SECTORS, PIT_LINE_IN_X, PIT_LINE_OUT_X, pointAt, project, SECTOR_LEN, TRACK_LEN } from '../track/track';
+import { NUM_SECTORS, type Track } from '../track/common';
+import { OVAL } from '../track/ovalTrack';
 import { aiInput } from './ai';
 import { type Car, initProgress, lapsCompleted, progress, updateProgress } from './car';
 import { type OilSlick, oilRadius } from './oil';
 import { collideCars, type DriveInput, NO_INPUT, startSpin, stepCar } from './physics';
-import { boxX, updatePit } from './pit';
+import { updatePit } from './pit';
 
 export const NUM_COLORS = 20;
 const TYPICAL_MPH = 155;
 
 export type RaceEvent = { type: 'spin'; car: Car } | { type: 'penalty'; car: Car; seconds: number };
 
-export function gridS(slot: number): number {
-  return CONFIG.GRID_FRONT_S - CONFIG.CAR_LEN / 2 - slot * CONFIG.GRID_SPACING;
-}
 const MAX_CARS = 20;
 
 export class Race {
@@ -38,6 +36,7 @@ export class Race {
     seed: number,
     readonly playerAI = false,
     readonly rules: RaceRules = DEFAULT_RULES,
+    readonly track: Track = OVAL,
   ) {
     this.rng = createRng(seed);
     this.laps = opts.laps;
@@ -70,9 +69,8 @@ export class Race {
   }
 
   private makeCar(slot: number, colorIdx: number, isPlayer: boolean): Car {
-    const d = CONFIG.GRID_LANES[slot % 2]!;
-    const s = gridS(slot);
-    const p = pointAt(s, d);
+    const { s, d } = this.track.gridSlot(slot);
+    const p = this.track.pointAt(s, d);
     const car: Car = {
       id: slot,
       colorIdx,
@@ -120,7 +118,7 @@ export class Race {
         lane: d,
         laneCooldown: 0,
         pitPhase: 'none',
-        boxX: boxX(slot),
+        box: slot,
         pitFuelLaps: lerp(CONFIG.AI_PIT_FUEL_LAPS[0], CONFIG.AI_PIT_FUEL_LAPS[1], this.rng()),
         stuckTime: 0,
         reaction: lerp(CONFIG.AI_REACTION_S[0], CONFIG.AI_REACTION_S[1], this.rng()),
@@ -130,10 +128,10 @@ export class Race {
         oilTime: 0,
       },
     };
-    const st = project(car.x, car.y);
+    const st = this.track.project(car.x, car.y);
     car.s = st.s;
     car.d = st.d;
-    initProgress(car);
+    initProgress(car, this.track);
     return car;
   }
 
@@ -153,35 +151,36 @@ export class Race {
       car.contactPrev = car.contactStrength;
       car.contactStrength = 0;
     }
-    const view = { cars: this.cars, started: this.started, laps: this.laps, time: this.time, oil: this.oil };
+    const track = this.track;
+    const view = { track, cars: this.cars, started: this.started, laps: this.laps, time: this.time, oil: this.oil };
     for (const car of this.cars) {
       const own = car.isPlayer && !this.playerAI && !this.pitAuto;
       const input = own ? (playerInput ?? NO_INPUT) : aiInput(car, view, dt);
       if (car.isPlayer) this.playerDrive = input;
       car.brakeHold = input.brake && Math.abs(car.speed) > 1 ? CONFIG.BRAKE_LIGHT_HOLD_S : Math.max(0, car.brakeHold - dt);
       car.braking = car.brakeHold > 0;
-      stepCar(car, input, dt);
+      stepCar(car, input, dt, track);
     }
-    collideCars(this.cars, this.rules.collisions, (culprit) => this.penalize(culprit));
+    collideCars(this.cars, track, this.rules.collisions, (culprit) => this.penalize(culprit));
     this.updateOil(dt);
     this.cars.forEach((car, i) => {
       if (car.spinTime > 0 && !spinning[i]) {
         this.events.push({ type: 'spin', car });
-        if (!inPitLane(car.x, car.y)) this.spillOil(car);
+        if (!track.pit.inLane(car.x, car.y)) this.spillOil(car);
       }
       car.oilImmune = car.spinTime > 0 ? CONFIG.OIL_IMMUNE_S : Math.max(0, car.oilImmune - dt);
     });
     for (const car of this.cars) {
-      const st = project(car.x, car.y);
+      const st = track.project(car.x, car.y);
       car.s = st.s;
       car.d = st.d;
       const before = car.sectorsPassed;
-      const crossed = updateProgress(car);
+      const crossed = updateProgress(car, track);
       if (car.sectorsPassed !== before && !car.finished) this.logSector(car);
       if (crossed && !car.finished && (car.sectorsPassed >= this.laps * NUM_SECTORS || this.leaderFinished)) {
         this.finish(car);
       }
-      updatePit(car, dt);
+      updatePit(car, dt, track);
     }
     if (!this.playerAI) this.updatePitAuto(this.player);
   }
@@ -189,8 +188,7 @@ export class Race {
   private updatePitAuto(car: Car): void {
     const ai = car.ai;
     if (!this.pitAuto) {
-      const crossed = car.prevX < PIT_LINE_IN_X && car.x >= PIT_LINE_IN_X;
-      if (crossed && car.pitSide && inPitLane(car.x, car.y)) {
+      if (this.track.pit.autoIn(car)) {
         this.pitAuto = true;
         ai.pitPhase = 'entering';
         ai.recoverTime = 0;
@@ -200,7 +198,7 @@ export class Race {
       return;
     }
     if (ai.pitPhase === 'parked') ai.pitPhase = 'fueling';
-    const out = car.x >= PIT_LINE_OUT_X || !car.pitSide;
+    const out = this.track.pit.autoOut(car);
     if (out || ai.pitPhase === 'none') {
       this.pitAuto = false;
       ai.pitPhase = 'none';
@@ -219,7 +217,7 @@ export class Race {
 
   private spillOil(car: Car): void {
     if (this.oil.length >= CONFIG.OIL_MAX) this.oil.shift();
-    const st = project(car.x, car.y);
+    const st = this.track.project(car.x, car.y);
     this.oil.push({ x: car.x, y: car.y, s: st.s, d: st.d, age: 0 });
   }
 
@@ -250,7 +248,7 @@ export class Race {
       if (la !== lb) return lb - la;
       if (a.finished !== b.finished) return a.finished ? -1 : 1;
       if (a.finished && b.finished) return this.resultTime(a)! - this.resultTime(b)!;
-      return progress(b) - progress(a);
+      return progress(b, this.track) - progress(a, this.track);
     });
   }
 
@@ -258,7 +256,7 @@ export class Race {
     this.finishOrder.push(car);
     car.finishPos = this.finishOrder.length;
     car.finalSectors = car.sectorsPassed;
-    car.finalProgress = car.sectorsPassed * SECTOR_LEN + (MAX_CARS - car.finishPos) * 0.01;
+    car.finalProgress = car.sectorsPassed * this.track.sectorLen + (MAX_CARS - car.finishPos) * 0.01;
     car.finished = true;
     this.finishTimes.set(car.id, this.time);
     this.leaderFinished = true;
@@ -291,7 +289,7 @@ export class Race {
   }
 
   standings(): Car[] {
-    return [...this.cars].sort((a, b) => progress(b) - progress(a));
+    return [...this.cars].sort((a, b) => progress(b, this.track) - progress(a, this.track));
   }
 
   position(car: Car): number {
@@ -305,7 +303,7 @@ export class Race {
     const t1 = this.sectorTimes.get(car.id)?.get(k);
     const t0 = this.sectorTimes.get(leader.id)?.get(k);
     if (t1 !== undefined && t0 !== undefined) return Math.max(0, t1 - t0);
-    return Math.max(0, progress(leader) - progress(car)) / (TYPICAL_MPH * CONFIG.PX_PER_MPH);
+    return Math.max(0, progress(leader, this.track) - progress(car, this.track)) / (TYPICAL_MPH * CONFIG.PX_PER_MPH);
   }
 
   projectedPosition(car: Car): number {
@@ -317,7 +315,7 @@ export class Race {
   lapsBehind(car: Car): number {
     const leader = this.standings()[0]!;
     if (this.leaderFinished) return Math.max(0, lapsCompleted(leader) - lapsCompleted(car));
-    return Math.max(0, Math.floor((progress(leader) - progress(car)) / TRACK_LEN));
+    return Math.max(0, Math.floor((progress(leader, this.track) - progress(car, this.track)) / this.track.len));
   }
 
   lapsToGo(car: Car): number {

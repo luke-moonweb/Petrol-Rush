@@ -5,7 +5,7 @@ import { drawCars, drawOil, trackCanvas } from '../gfx/world';
 import { layout } from '../layout';
 import { type Car, lapsCompleted } from '../race/car';
 import { Race } from '../race/race';
-import { trackHeadingAt, WORLD_W, wrapAngle } from '../track/track';
+import { wrapAngle } from '../track/common';
 import type { Hit } from '../ui/hit';
 import { drawTitle, TITLE_ITEMS } from '../ui/menus/title';
 import { CreditsState } from './credits';
@@ -45,9 +45,10 @@ export class TitleState implements State {
 
   private camTarget(): number {
     const lead = this.demo.standings()[0]!;
-    const x = lead.x + CAM_LEAD * Math.cos(trackHeadingAt(lead.x, lead.y));
+    const track = this.demo.track;
+    const x = lead.x + CAM_LEAD * Math.cos(track.headingAt(lead.x, lead.y));
     const W = layout.w;
-    return Math.min(Math.max(x - W / 2, 0), WORLD_W - W);
+    return Math.min(Math.max(x - W / 2, 0), track.worldW - W);
   }
 
   update(dt: number): void {

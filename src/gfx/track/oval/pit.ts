@@ -15,8 +15,8 @@ import {
   SEP_BOTTOM,
   WALL_X0,
   WALL_X1,
-} from '../../track/track';
-import { COL, FONT_BLACK } from './style';
+} from '../../../track/oval';
+import { COL, FONT_BLACK } from '../style';
 
 export function drawPitRoad(g: CanvasRenderingContext2D): void {
   const len = PIT_X1 - PIT_X0;

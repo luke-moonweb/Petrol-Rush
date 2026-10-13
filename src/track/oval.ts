@@ -1,3 +1,5 @@
+import { CAR_R, type Constrainable, NUM_SECTORS, type TrackPoint, type WallNormal } from './common';
+
 export const WORLD_W = 2240;
 export const CY = 208;
 export const R_OUT = 194;
@@ -14,7 +16,6 @@ export const S_TURN1 = CX_R - FINISH_X;
 export const S_TOP = S_TURN1 + TURN_LEN;
 export const S_TURN2 = S_TOP + STRAIGHT;
 export const S_BOTTOM = S_TURN2 + TURN_LEN;
-export const NUM_SECTORS = 8;
 export const SECTOR_LEN = TRACK_LEN / NUM_SECTORS;
 
 export const CURB_H = 15;
@@ -154,9 +155,6 @@ function collideIsland(p: { x: number; y: number }, r: number): WallNormal | nul
 export const STANDS_X1 = WORLD_W - 447;
 export const STANDS_BOTTOM = PIT_LABEL_TOP;
 
-export const CAR_R = 7;
-export const LANES = [-28.5, -9.5, 9.5, 28.5];
-
 export function wrapS(s: number): number {
   s %= TRACK_LEN;
   return s < 0 ? s + TRACK_LEN : s;
@@ -166,18 +164,6 @@ export function deltaS(a: number, b: number): number {
   let d = wrapS(b - a);
   if (d > TRACK_LEN / 2) d -= TRACK_LEN;
   return d;
-}
-
-export function wrapAngle(a: number): number {
-  a = (a + Math.PI) % (2 * Math.PI);
-  if (a < 0) a += 2 * Math.PI;
-  return a - Math.PI;
-}
-
-export interface TrackPoint {
-  x: number;
-  y: number;
-  heading: number;
 }
 
 export function pointAt(sIn: number, d: number): TrackPoint {
@@ -242,18 +228,6 @@ export function inPitBox(x: number, y: number): boolean {
 
 export function boxX(i: number): number {
   return PIT_X0 + BOX_PITCH / 2 + i * BOX_PITCH;
-}
-
-export interface Constrainable {
-  x: number;
-  y: number;
-  pitSide: boolean;
-  wasInPit: boolean;
-}
-
-export interface WallNormal {
-  nx: number;
-  ny: number;
 }
 
 export function constrainPos(p: Constrainable): WallNormal | null {

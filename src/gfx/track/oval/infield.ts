@@ -1,6 +1,6 @@
-import type { Rng } from '../../sim/rng';
-import { CY, islandOutline } from '../../track/track';
-import { FONT_BLACK } from './style';
+import type { Rng } from '../../../sim/rng';
+import { CY, islandOutline } from '../../../track/oval';
+import { FONT_BLACK } from '../style';
 
 const HELI = { x: 300, y: CY - 39, r: 24 };
 const PYLON = { x: 1945, y: CY - 39 };

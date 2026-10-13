@@ -1,4 +1,4 @@
-import { NUM_SECTORS, SECTOR_LEN, TRACK_LEN } from '../track/track';
+import { NUM_SECTORS, type Track } from '../track/common';
 
 export type PitPhase = 'none' | 'entering' | 'fueling' | 'exiting' | 'parked';
 
@@ -8,7 +8,8 @@ export interface AiState {
   lane: number;
   laneCooldown: number;
   pitPhase: PitPhase;
-  boxX: number;
+  /** Index of the car's own pit box. */
+  box: number;
   pitFuelLaps: number;
   stuckTime: number;
   reaction: number;
@@ -73,27 +74,33 @@ export function lapsCompleted(car: Car): number {
   return Math.max(0, Math.floor(sectors / NUM_SECTORS));
 }
 
-export function progress(car: Car): number {
+export function progress(car: Car, track: Track): number {
   if (car.finished) return car.finalProgress;
-  let off = car.s - car.lastSector * SECTOR_LEN;
-  if (off < -TRACK_LEN / 2) off += TRACK_LEN;
-  if (off > TRACK_LEN / 2) off -= TRACK_LEN;
-  off = Math.min(Math.max(off, 0), SECTOR_LEN);
-  return car.sectorsPassed * SECTOR_LEN + off;
+  const len = track.len;
+  const sectorLen = track.sectorLen;
+  let off = car.s - car.lastSector * sectorLen;
+  if (off < -len / 2) off += len;
+  if (off > len / 2) off -= len;
+  off = Math.min(Math.max(off, 0), sectorLen);
+  return car.sectorsPassed * sectorLen + off;
 }
 
-export function initProgress(car: Car): void {
-  const sec = Math.floor(car.s / SECTOR_LEN) % NUM_SECTORS;
+export function initProgress(car: Car, track: Track): void {
+  const sec = Math.floor(car.s / track.sectorLen) % NUM_SECTORS;
   car.lastSector = sec;
-  car.sectorsPassed = car.s < TRACK_LEN / 2 ? sec : sec - NUM_SECTORS;
+  car.sectorsPassed = car.s < track.len / 2 ? sec : sec - NUM_SECTORS;
 }
 
-export function updateProgress(car: Car): boolean {
-  const sec = Math.floor(car.s / SECTOR_LEN) % NUM_SECTORS;
+export function updateProgress(car: Car, track: Track): boolean {
+  const sec = Math.floor(car.s / track.sectorLen) % NUM_SECTORS;
   if (sec === (car.lastSector + 1) % NUM_SECTORS) {
     car.lastSector = sec;
     car.sectorsPassed++;
     return sec === 0;
   }
   return false;
+}
+
+export function isServicing(o: Car): boolean {
+  return o.ai.pitPhase === 'fueling' || o.ai.pitPhase === 'parked' || o.refueling;
 }
