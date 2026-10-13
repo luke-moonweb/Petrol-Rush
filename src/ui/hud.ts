@@ -77,7 +77,7 @@ export function drawHudTop(g: CanvasRenderingContext2D, race: Race, notice: { te
   x += label(g, 'BEHIND', x, y) + 5;
   x += glowText(g, String(race.lapsBehind(p)), x, y, `13px ${FONT_BLACK}`, PR.tealLight, 'rgba(18,181,166,0.9)');
 
-  const pos = String(race.position(p));
+  const pos = String(race.shownPosition(p));
   const of = `/${race.cars.length}`;
   g.font = `16px ${FONT_BLACK}`;
   const wPos = g.measureText(pos).width;
