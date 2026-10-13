@@ -10,9 +10,10 @@ Isolated R&D branch for night-racer cabin presence (Canvas 2D cockpit overlay).
 4. Look for:
    - Dark **hood / nose lip** under the windshield opening
    - Thicker **A-pillars** with a faint inner highlight
-   - Dash **FUEL** bar, **RPM** needle, MPH, and lap “TO GO” / FINAL
+   - **Instrument binnacle** cluster: primary MPH dial, secondary FUEL + RPM gauges with bezels, tertiary lap strip
+   - Matte dash plastic + soft teal/amber night instrument glow
    - Soft **glass** sheen; dirt flecks strengthen near oil slicks or after wall/contact scrapes
-   - Richer **steering wheel** (spokes + hand blobs) that still follows steer
+   - Believable **steering wheel** (leather rim thickness, tapered spokes, hub cue) that follows steer without covering mirror/minimap
 5. Confirm mirror + minimap still draw; spin yaw behavior unchanged.
 
 ## Scope
