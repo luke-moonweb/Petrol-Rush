@@ -539,32 +539,106 @@ function wheelRadius(w: number, h: number): number {
   return Math.min(w * 0.19, h * 0.3);
 }
 
+// Cabin PoC demo: race with cockpit cam (KeyC / prefs), watch hood lip + dash gauges + glass flecks near oil/after scrapes.
+function glassDirt(f: CockpitFrame): number {
+  const p = f.race.player;
+  let near = 0;
+  for (const o of f.race.oil) {
+    const d = Math.hypot(o.x - p.x, o.y - p.y);
+    if (d < 90) near = Math.max(near, 1 - d / 90);
+  }
+  const scrape = Math.min(1, (p.wallImpact + p.contactStrength) / 40 + (p.spinTime > 0 ? 0.45 : 0));
+  return Math.min(1, near * 0.85 + scrape * 0.7);
+}
+
 function drawCockpit(g: CanvasRenderingContext2D, w: number, h: number, f: CockpitFrame): void {
   const p = f.race.player;
+  const dashTop = h * 0.74;
+  const glassBot = dashTop - h * 0.08;
+
+  // Soft windshield glass: night reflection band + sparse dirt when near oil / after scrapes.
+  const glass = g.createLinearGradient(0, h * 0.08, 0, glassBot);
+  glass.addColorStop(0, 'rgba(180,200,255,0.06)');
+  glass.addColorStop(0.35, 'rgba(255,255,255,0.03)');
+  glass.addColorStop(0.72, 'rgba(40,30,20,0.04)');
+  glass.addColorStop(1, 'rgba(10,8,14,0.12)');
+  g.fillStyle = glass;
+  g.fillRect(w * 0.08, h * 0.06, w * 0.84, glassBot - h * 0.06);
+  const sheen = g.createLinearGradient(w * 0.15, h * 0.12, w * 0.85, h * 0.28);
+  sheen.addColorStop(0, 'rgba(255,255,255,0)');
+  sheen.addColorStop(0.45, 'rgba(255,248,232,0.07)');
+  sheen.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = sheen;
+  g.fillRect(w * 0.12, h * 0.1, w * 0.76, h * 0.16);
+  const dirt = glassDirt(f);
+  if (dirt > 0.05) {
+    const rng = createRng(901 + Math.floor(f.time * 0.35) * 17 + Math.floor(dirt * 8));
+    g.fillStyle = `rgba(40,28,12,${0.12 + dirt * 0.28})`;
+    for (let i = 0; i < Math.floor(6 + dirt * 18); i++) {
+      const fx = w * (0.14 + rng() * 0.72);
+      const fy = h * (0.12 + rng() * 0.48);
+      const s = 1 + rng() * 2.2 * dirt;
+      g.beginPath();
+      g.ellipse(fx, fy, s, s * (0.4 + rng() * 0.6), rng() * Math.PI, 0, Math.PI * 2);
+      g.fill();
+    }
+  }
+
+  // Roof header + thicker A-pillars with inner edge highlight.
   g.fillStyle = '#0B0A12';
   g.beginPath();
   g.moveTo(0, 0);
   g.lineTo(w, 0);
-  g.lineTo(w, h * 0.05);
-  g.quadraticCurveTo(w * 0.5, h * 0.1, 0, h * 0.05);
+  g.lineTo(w, h * 0.055);
+  g.quadraticCurveTo(w * 0.5, h * 0.115, 0, h * 0.055);
   g.closePath();
   g.fill();
   g.beginPath();
   g.moveTo(0, 0);
-  g.lineTo(w * 0.09, 0);
-  g.lineTo(w * 0.035, h * 0.64);
-  g.lineTo(0, h * 0.68);
+  g.lineTo(w * 0.115, 0);
+  g.lineTo(w * 0.048, h * 0.66);
+  g.lineTo(0, h * 0.7);
   g.closePath();
   g.moveTo(w, 0);
-  g.lineTo(w * 0.94, 0);
-  g.lineTo(w * 0.985, h * 0.6);
-  g.lineTo(w, h * 0.62);
+  g.lineTo(w * 0.885, 0);
+  g.lineTo(w * 0.952, h * 0.62);
+  g.lineTo(w, h * 0.66);
+  g.closePath();
+  g.fill();
+  g.strokeStyle = 'rgba(255,248,232,0.1)';
+  g.lineWidth = Math.max(1.5, w * 0.0025);
+  g.beginPath();
+  g.moveTo(w * 0.112, h * 0.02);
+  g.lineTo(w * 0.05, h * 0.62);
+  g.moveTo(w * 0.888, h * 0.02);
+  g.lineTo(w * 0.95, h * 0.58);
+  g.stroke();
+
+  // Hood / nose lip: dark silhouette above the dash so the world reads through glass over a car nose.
+  g.fillStyle = '#08070E';
+  g.beginPath();
+  g.moveTo(w * 0.12, glassBot + h * 0.02);
+  g.quadraticCurveTo(w * 0.5, glassBot - h * 0.045, w * 0.88, glassBot + h * 0.02);
+  g.lineTo(w * 0.9, dashTop - h * 0.02);
+  g.quadraticCurveTo(w * 0.5, dashTop - h * 0.12, w * 0.1, dashTop - h * 0.02);
+  g.closePath();
+  g.fill();
+  const hoodEdge = g.createLinearGradient(0, glassBot - h * 0.05, 0, dashTop);
+  hoodEdge.addColorStop(0, 'rgba(18,181,166,0.18)');
+  hoodEdge.addColorStop(0.4, 'rgba(255,255,255,0.04)');
+  hoodEdge.addColorStop(1, 'rgba(0,0,0,0)');
+  g.fillStyle = hoodEdge;
+  g.beginPath();
+  g.moveTo(w * 0.14, glassBot + h * 0.01);
+  g.quadraticCurveTo(w * 0.5, glassBot - h * 0.04, w * 0.86, glassBot + h * 0.01);
+  g.lineTo(w * 0.84, glassBot + h * 0.035);
+  g.quadraticCurveTo(w * 0.5, glassBot - h * 0.01, w * 0.16, glassBot + h * 0.035);
   g.closePath();
   g.fill();
 
-  const dashTop = h * 0.74;
   const dash = g.createLinearGradient(0, dashTop - h * 0.06, 0, h);
   dash.addColorStop(0, '#24212F');
+  dash.addColorStop(0.35, '#16131F');
   dash.addColorStop(1, '#0A0910');
   g.fillStyle = dash;
   g.beginPath();
@@ -576,56 +650,135 @@ function drawCockpit(g: CanvasRenderingContext2D, w: number, h: number, f: Cockp
   g.lineTo(0, h);
   g.closePath();
   g.fill();
-  g.strokeStyle = 'rgba(18,181,166,0.35)';
-  g.lineWidth = 1;
+  g.strokeStyle = 'rgba(18,181,166,0.4)';
+  g.lineWidth = 1.2;
   g.stroke();
 
+  // Living gauges: MPH + fuel + RPM needle + lap hint.
   const mph = Math.round(Math.abs(p.speed));
   const big = Math.max(22, Math.round(h * 0.045));
+  const gy = dashTop - h * 0.035;
   g.font = `bold ${big}px ${FONT_BLACK}`;
   g.textAlign = 'center';
   g.textBaseline = 'middle';
   g.fillStyle = PR.amber;
   g.shadowColor = 'rgba(255,182,39,0.8)';
   g.shadowBlur = 6;
-  g.fillText(p.reverse ? `R ${mph}` : String(mph), w * 0.5, dashTop - h * 0.035);
+  g.fillText(p.reverse ? `R ${mph}` : String(mph), w * 0.5, gy);
   g.shadowBlur = 0;
   g.font = `bold ${Math.max(10, Math.round(h * 0.018))}px ${FONT_BLACK}`;
   g.fillStyle = PR.muted;
-  g.fillText('MPH', w * 0.5, dashTop - h * 0.035 + big * 0.75);
+  g.fillText('MPH', w * 0.5, gy + big * 0.75);
 
+  const panelY = dashTop + h * 0.02;
+  const fuelW = Math.max(48, w * 0.09);
+  const fuelH = Math.max(6, h * 0.012);
+  const fuelX = w * 0.28 - fuelW / 2;
+  g.fillStyle = 'rgba(10,9,16,0.85)';
+  g.fillRect(fuelX - 4, panelY - 2, fuelW + 8, fuelH + 14);
+  g.font = `bold ${Math.max(8, Math.round(h * 0.014))}px ${FONT_BLACK}`;
+  g.textAlign = 'left';
+  g.fillStyle = PR.tealLight;
+  g.fillText('FUEL', fuelX, panelY + 4);
+  g.fillStyle = '#1A1824';
+  g.fillRect(fuelX, panelY + 8, fuelW, fuelH);
+  const fuel = Math.max(0, Math.min(1, p.fuel));
+  g.fillStyle = fuel < 0.2 ? PR.red : fuel < 0.4 ? PR.mango : PR.teal;
+  g.fillRect(fuelX, panelY + 8, fuelW * fuel, fuelH);
+
+  const rpmX = w * 0.72;
+  const rpmR = Math.max(18, h * 0.038);
+  g.fillStyle = 'rgba(10,9,16,0.85)';
+  g.beginPath();
+  g.arc(rpmX, panelY + rpmR * 0.15, rpmR + 4, 0, Math.PI * 2);
+  g.fill();
+  g.strokeStyle = 'rgba(138,134,160,0.45)';
+  g.lineWidth = 2;
+  g.beginPath();
+  g.arc(rpmX, panelY + rpmR * 0.15, rpmR, Math.PI * 0.85, Math.PI * 0.15, false);
+  g.stroke();
+  g.strokeStyle = 'rgba(230,59,46,0.55)';
+  g.beginPath();
+  g.arc(rpmX, panelY + rpmR * 0.15, rpmR, Math.PI * 0.05, Math.PI * 0.15, false);
+  g.stroke();
+  const rpmT = Math.min(1, Math.abs(p.speed) / CONFIG.MAX_MPH);
+  const ang = Math.PI * 0.85 + rpmT * Math.PI * 1.3;
+  g.strokeStyle = PR.amber;
+  g.lineWidth = 2;
+  g.beginPath();
+  g.moveTo(rpmX, panelY + rpmR * 0.15);
+  g.lineTo(rpmX + Math.cos(ang) * rpmR * 0.82, panelY + rpmR * 0.15 + Math.sin(ang) * rpmR * 0.82);
+  g.stroke();
+  g.fillStyle = PR.teal;
+  g.beginPath();
+  g.arc(rpmX, panelY + rpmR * 0.15, 3, 0, Math.PI * 2);
+  g.fill();
+  g.font = `bold ${Math.max(8, Math.round(h * 0.012))}px ${FONT_BLACK}`;
+  g.textAlign = 'center';
+  g.fillStyle = PR.muted;
+  g.fillText('RPM', rpmX, panelY + rpmR * 0.95);
+
+  if (f.race.started && !p.finished) {
+    const left = f.race.lapsToGo(p);
+    g.font = `bold ${Math.max(10, Math.round(h * 0.016))}px ${FONT_BLACK}`;
+    g.fillStyle = PR.cream;
+    g.fillText(left <= 1 ? 'FINAL' : `${left} TO GO`, w * 0.5, panelY + h * 0.028);
+  }
+
+  // Wheel: thicker rim, spoke grip, subtle hand silhouette suggestion; still rotates with steer.
   const r = wheelRadius(w, h);
   const cx = w * 0.5;
   const cy = h + r * 0.38;
   g.save();
   g.translate(cx, cy);
   g.rotate(f.steer * 1.4);
-  g.strokeStyle = '#15131F';
-  g.lineWidth = r * 0.17;
+  g.strokeStyle = '#0E0C14';
+  g.lineWidth = r * 0.2;
   g.beginPath();
   g.arc(0, 0, r, 0, Math.PI * 2);
   g.stroke();
-  g.strokeStyle = 'rgba(255,255,255,0.08)';
-  g.lineWidth = r * 0.04;
+  g.strokeStyle = '#1A1724';
+  g.lineWidth = r * 0.14;
   g.beginPath();
-  g.arc(0, 0, r - r * 0.05, Math.PI * 1.1, Math.PI * 1.9);
+  g.arc(0, 0, r, 0, Math.PI * 2);
+  g.stroke();
+  g.strokeStyle = 'rgba(255,248,232,0.1)';
+  g.lineWidth = r * 0.035;
+  g.beginPath();
+  g.arc(0, 0, r - r * 0.06, Math.PI * 1.05, Math.PI * 1.95);
   g.stroke();
   g.fillStyle = '#1C1A26';
-  for (const a of [Math.PI, 0]) {
+  for (const a of [0, (Math.PI * 2) / 3, (Math.PI * 4) / 3]) {
     g.save();
     g.rotate(a);
-    g.fillRect(r * 0.2, -r * 0.07, r * 0.75, r * 0.14);
+    g.beginPath();
+    g.moveTo(r * 0.18, -r * 0.06);
+    g.lineTo(r * 0.92, -r * 0.08);
+    g.lineTo(r * 0.92, r * 0.08);
+    g.lineTo(r * 0.18, r * 0.06);
+    g.closePath();
+    g.fill();
     g.restore();
   }
+  // Soft hand silhouettes at 9 and 3 o'clock.
+  g.fillStyle = 'rgba(35,28,40,0.55)';
+  for (const side of [-1, 1]) {
+    g.beginPath();
+    g.ellipse(side * r * 0.78, r * 0.08, r * 0.16, r * 0.11, side * 0.35, 0, Math.PI * 2);
+    g.fill();
+  }
   g.fillStyle = PR.red;
-  g.fillRect(-r * 0.04, -r * 1.08, r * 0.08, r * 0.16);
+  g.fillRect(-r * 0.045, -r * 1.1, r * 0.09, r * 0.18);
   g.fillStyle = '#211E2C';
   g.beginPath();
-  g.arc(0, 0, r * 0.26, 0, Math.PI * 2);
+  g.arc(0, 0, r * 0.28, 0, Math.PI * 2);
   g.fill();
+  g.strokeStyle = 'rgba(18,181,166,0.35)';
+  g.lineWidth = 1.5;
+  g.stroke();
   g.fillStyle = PR.teal;
   g.beginPath();
-  g.arc(0, 0, r * 0.09, 0, Math.PI * 2);
+  g.arc(0, 0, r * 0.1, 0, Math.PI * 2);
   g.fill();
   g.restore();
 }
