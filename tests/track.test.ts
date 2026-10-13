@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createRng } from '../src/sim/rng';
-import { deltaS, HALF_W, pointAt, project, TRACK_LEN, wrapS } from '../src/track/track';
+import { deltaS, HALF_W, pointAt, project, TRACK_LEN, wrapS } from '../src/track/oval';
 
 describe('track geometry (Frenet)', () => {
   it('project(pointAt(s, d)) returns the same s and d', () => {

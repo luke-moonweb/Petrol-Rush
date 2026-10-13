@@ -15,20 +15,21 @@ import {
   TRACK_LEN,
   WORLD_W,
   wrapS,
-} from '../src/track/track';
+} from '../src/track/oval';
+import { OVAL } from '../src/track/ovalTrack';
 
 function fakeCar(s: number): Car {
   const race = new Race({ ...DEFAULT_OPTIONS, cars: 1 }, 1);
   const car = race.player;
   car.s = s;
-  initProgress(car);
+  initProgress(car, OVAL);
   return car;
 }
 
 function drive(car: Car, from: number, to: number, step: number): void {
   for (let s = from; step > 0 ? s <= to : s >= to; s += step) {
     car.s = wrapS(s);
-    updateProgress(car);
+    updateProgress(car, OVAL);
   }
 }
 
@@ -160,7 +161,7 @@ describe('player pit lane autopilot', () => {
     let wall = 0;
     while (race.time < 120 && off < 0) {
       if (p.ai.pitPhase === 'none' && !race.pitAuto && on < 0 && p.s > S_TURN2 && race.time > 5) p.ai.pitPhase = 'entering';
-      const view = { cars: race.cars, started: true, laps: 5, time: race.time };
+      const view = { track: OVAL, cars: race.cars, started: true, laps: 5, time: race.time };
       race.step(dt, race.pitAuto ? NO_INPUT : aiInput(p, view, dt));
       if (race.pitAuto && on < 0) on = p.x;
       if (race.pitAuto && p.wallImpact > 0) wall++;

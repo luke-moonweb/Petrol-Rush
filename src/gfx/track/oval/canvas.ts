@@ -1,12 +1,12 @@
-import { CONFIG } from '../../config';
-import { gridS } from '../../race/race';
-import { createRng, type Rng } from '../../sim/rng';
-import { CURB_H, CX_L, CX_R, CY, FINISH_X, islandOutline, pointAt, R_IN, R_OUT, RC, STANDS_BOTTOM, WORLD_W } from '../../track/track';
-import { makeCanvas } from '../sprites';
+import { CONFIG } from '../../../config';
+import { createRng, type Rng } from '../../../sim/rng';
+import { CURB_H, CX_L, CX_R, CY, FINISH_X, islandOutline, pointAt, R_IN, R_OUT, RC, STANDS_BOTTOM, WORLD_W } from '../../../track/oval';
+import { gridS } from '../../../track/ovalTrack';
+import { makeCanvas } from '../../sprites';
+import { COL, FONT_BLACK } from '../style';
 import { drawInfieldDecor, drawInfieldDecorLights } from './infield';
 import { drawCenter, drawCenterLights, STAND_TOP, STAND_X0, STAND_X1 } from './paddock';
 import { drawPitLabels, drawPitRoad, drawPitRoadPaint, drawPitSigns } from './pit';
-import { COL, FONT_BLACK } from './style';
 
 const OUT_TOP = CY + R_OUT + 12;
 

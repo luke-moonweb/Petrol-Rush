@@ -3,7 +3,6 @@ import { CAR_SCHEMES, driverName } from '../gfx/vehicles';
 import { type Box, layout } from '../layout';
 import { lapsCompleted, progress } from '../race/car';
 import type { Race } from '../race/race';
-import { TRACK_LEN } from '../track/track';
 import { FONT_UI } from './text';
 import { FONT_BLACK, PR } from './theme';
 
@@ -149,7 +148,7 @@ function gapLabel(race: Race, i: number, list: ReturnType<Race['standings']>): s
   if (i === 0) return 'LEADER';
   const car = list[i]!;
   const ahead = list[i - 1]!;
-  const laps = Math.floor((progress(ahead) - progress(car)) / TRACK_LEN);
+  const laps = Math.floor((progress(ahead, race.track) - progress(car, race.track)) / race.track.len);
   if (laps >= 1 && !race.leaderFinished) return `+${laps} LAP`;
   const gap = race.gap(car, ahead);
   return gap === null ? '—' : `+${gap.toFixed(2)}`;

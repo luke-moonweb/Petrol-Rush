@@ -55,7 +55,7 @@ function run(sc: Scenario) {
   while (!race.allFinished() && race.time < sc.maxTime) {
     let input = null;
     if (sc.humanPlayer) {
-      const view = { cars: race.cars, started: true, laps: race.laps, time: race.time, oil: race.oil };
+      const view = { track: race.track, cars: race.cars, started: true, laps: race.laps, time: race.time, oil: race.oil };
       input = race.pitAuto ? NO_INPUT : aiInput(race.player, view, dt);
     }
     race.step(dt, input);

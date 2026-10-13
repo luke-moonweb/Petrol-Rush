@@ -1,8 +1,8 @@
-import type { Rng } from '../../sim/rng';
-import { CY, FINISH_X, PIT_LABEL_TOP, STANDS_BOTTOM, STANDS_X1 } from '../../track/track';
-import { shade } from '../sprites';
-import { drawHauler3d } from '../vehicles';
-import { COL, FONT_BLACK } from './style';
+import type { Rng } from '../../../sim/rng';
+import { CY, FINISH_X, PIT_LABEL_TOP, STANDS_BOTTOM, STANDS_X1 } from '../../../track/oval';
+import { shade } from '../../sprites';
+import { drawHauler3d } from '../../vehicles';
+import { COL, FONT_BLACK } from '../style';
 
 const TEAMS = [
   { name: 'ROSSETTI', a: '#D8141E', b: '#FFD200', t: '#FFF8E8' },
