@@ -200,3 +200,22 @@ export function drawPoly(g: CanvasRenderingContext2D, cam: Camera, p: Poly, d: n
   const m = clipProject(cam, p.xs, p.ys, p.zs, p.xs.length);
   fillProjected(g, m, polyStyle(p, cam, d));
 }
+
+const glowSprites = new Map<string, HTMLCanvasElement>();
+export function glowSprite(color: string): HTMLCanvasElement {
+  let c = glowSprites.get(color);
+  if (!c) {
+    c = document.createElement('canvas');
+    c.width = 64;
+    c.height = 64;
+    const g = c.getContext('2d')!;
+    const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+    gr.addColorStop(0, `rgba(${color},0.75)`);
+    gr.addColorStop(0.35, `rgba(${color},0.22)`);
+    gr.addColorStop(1, `rgba(${color},0)`);
+    g.fillStyle = gr;
+    g.fillRect(0, 0, 64, 64);
+    glowSprites.set(color, c);
+  }
+  return c;
+}

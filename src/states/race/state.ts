@@ -1,4 +1,5 @@
 import { CONFIG, LAP_CHOICES, QUALIFYING_CHOICES, type RaceOptions } from '../../config';
+import { stepCabin } from '../../gfx/fpv/cabin';
 import { drawCockpitView } from '../../gfx/fpv/view';
 import { Particles } from '../../gfx/particles';
 import { drawCars, drawOil, trackCanvas } from '../../gfx/world';
@@ -332,6 +333,7 @@ export class RaceState implements State {
       }
     }
     this.race.step(dt, drive);
+    stepCabin(this.race, dt);
     this.particles.emit(this.race.cars, dt);
     this.particles.update(dt);
     this.updateCamera(dt);
@@ -373,12 +375,20 @@ export class RaceState implements State {
     const ih = (c: Car) => c.prevHeading + wrapAngle(c.heading - c.prevHeading) * a;
     const view = layout.view;
     const cockpit = this.game.prefs.camera === 'cockpit';
-    if (cockpit) drawCockpitView(g, { race, view, ix, iy, ih, steer: this.steerVis, time: race.time, particles: this.particles });
-    else this.renderTopDown(g, race, ix, iy, ih);
+    const skid = this.phase === 'running' && race.started ? skidWarning(race.player) : 0;
+    if (cockpit) {
+      const lt = this.lights;
+      const out = !!lt && lt.t >= lt.outAt;
+      const lights = lt
+        ? { lit: out ? 0 : Math.min(LIGHTS_COUNT, Math.floor(lt.t / LIGHT_INTERVAL_S)), out, since: lt.t - lt.outAt }
+        : undefined;
+      const touch = this.game.touch;
+      drawCockpitView(g, { race, view, ix, iy, ih, steer: this.steerVis, time: race.time, touch, skid, lights, particles: this.particles });
+    } else this.renderTopDown(g, race, ix, iy, ih);
 
     drawHudTop(g, race, this.notice);
     drawHudPanel(g, race);
-    drawSkidLamp(g, this.phase === 'running' && race.started ? skidWarning(race.player) : 0, race.time, view.x + view.w - 6, view.y + 6);
+    drawSkidLamp(g, skid, race.time, view.x + view.w - 6, view.y + 6);
     const msg = this.message();
     const low = Math.round(view.h * 0.22);
     if (msg) drawRaceMessage(g, msg, cockpit ? low + 30 : 44);
