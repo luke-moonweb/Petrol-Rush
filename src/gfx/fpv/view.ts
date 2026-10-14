@@ -43,10 +43,6 @@ const MIRROR_FAR = 600;
 const SKY_TOP = '#05040C';
 const SKY_HORIZON = '#221C3C';
 const GROUND = '#0B0A16';
-const SPIN_LOOK = 0.5;
-const CAM_EASE_S = 0.25;
-const SETTLED = 0.002;
-const MAX_SWING = 2.5;
 const CAR_REACH = 26;
 const OIL_MIN_PX = 6;
 const OWN_SMOKE = 15;
@@ -66,13 +62,6 @@ const lodMain = new Int8Array(64);
 const lodMirror = new Int8Array(64);
 // Time spent drawing rival cars this frame, main view and mirror together.
 let carMs = 0;
-let camYaw = Number.NaN;
-let camClock = 0;
-let recovering = false;
-let camOff = 0;
-let camRace: Race | null = null;
-// Set when a frame was rendered without the cockpit (top-down camera).
-let cockpitSkipped = false;
 
 interface Star {
   a: number;
@@ -522,7 +511,7 @@ function stadiumPath(g: CanvasRenderingContext2D, r: number, kx: number, ky: num
   g.closePath();
 }
 
-function drawMinimap(g: CanvasRenderingContext2D, w: number, h: number, wheelR: number, f: CockpitFrame, camYawNow: number): void {
+function drawMinimap(g: CanvasRenderingContext2D, w: number, h: number, wheelR: number, f: CockpitFrame): void {
   const pad = 6;
   const room = w / 2 - wheelR - 16;
   const mw = Math.round(Math.max(90, Math.min(340, w * 0.24, room - pad * 2)));
@@ -564,13 +553,11 @@ function drawMinimap(g: CanvasRenderingContext2D, w: number, h: number, wheelR: 
   const py = y0 + f.iy(p) * ky;
   // On the squashed map an angle is mapped through the axis scales.
   const mapAngle = (a: number) => Math.atan2(Math.sin(a) * ky, Math.cos(a) * kx);
-  // The wedge shows where the camera looks (it differs from the heading during a spin), the arrow the car.
-  const look = mapAngle(camYawNow);
   const ang = mapAngle(f.ih(p));
   g.fillStyle = 'rgba(127,227,217,0.25)';
   g.beginPath();
   g.moveTo(px, py);
-  g.arc(px, py, mh * 0.6, look - 0.5, look + 0.5);
+  g.arc(px, py, mh * 0.6, ang - 0.5, ang + 0.5);
   g.closePath();
   g.fill();
   for (const car of f.race.cars) {
@@ -628,58 +615,6 @@ function drawMirror(g: CanvasRenderingContext2D, w: number, h: number, f: Cockpi
   g.beginPath();
   g.roundRect(mx, my, mw, mh, mh * 0.35);
   g.stroke();
-}
-
-// The race state calls this for every frame it renders with the top-down camera.
-export function noteTopDownFrame(): void {
-  cockpitSkipped = true;
-}
-
-// Forgets a leftover spin swing: on a new race, a restart (race time goes back), or when the cockpit was
-// not drawn last frame.
-export function syncCameraYaw(race: Race, time: number): void {
-  const keep = race === camRace && time >= camClock && !cockpitSkipped;
-  cockpitSkipped = false;
-  if (keep) return;
-  camRace = race;
-  camClock = time;
-  camYaw = Number.NaN;
-  recovering = false;
-  camOff = 0;
-}
-
-// Direction the cockpit camera looks in for this race, or NaN when the cockpit has not drawn it.
-// During a spin it differs from the car heading, so the sound uses it to pan rivals.
-export function cockpitCameraYaw(race: Race): number {
-  return race === camRace ? camYaw : Number.NaN;
-}
-
-// During a spin the camera keeps looking roughly where the car travels instead of turning with it.
-// Afterwards it follows the car's heading and only its leftover offset fades out, so turning into the
-// rest of a corner does not leave it trailing. In normal driving it is locked to the heading.
-export function cameraYaw(p: Car, heading: number, time: number): number {
-  const dt = Math.max(0, Math.min(0.1, time - camClock));
-  camClock = time;
-  const ease = Math.min(1, dt / CAM_EASE_S);
-  if (p.spinTime > 0 && Math.abs(p.speed) > 2) {
-    const off = wrapAngle(heading - p.moveAngle);
-    const target = p.moveAngle + Math.max(-SPIN_LOOK, Math.min(SPIN_LOOK, off));
-    if (Number.isNaN(camYaw)) camYaw = heading;
-    camYaw += wrapAngle(target - camYaw) * ease;
-    camOff = wrapAngle(camYaw - heading);
-    recovering = true;
-    return camYaw;
-  }
-  if (recovering) {
-    camOff -= Math.sign(camOff) * Math.min(Math.abs(camOff) * ease, MAX_SWING * dt);
-    if (Math.abs(camOff) < SETTLED) recovering = false;
-    else {
-      camYaw = heading + camOff;
-      return camYaw;
-    }
-  }
-  camYaw = heading;
-  return camYaw;
 }
 
 const streaks: Streak[] = [];
@@ -770,8 +705,6 @@ export function drawCockpitView(g: CanvasRenderingContext2D, f: CockpitFrame): v
   const v = f.view;
   const p = f.race.player;
   const heading = f.ih(p);
-  syncCameraYaw(f.race, f.time);
-  const yaw = cameraYaw(p, heading, f.time);
   const c = Math.cos(heading);
   const s = Math.sin(heading);
   const ex = f.ix(p) + EYE_BACK * c - EYE_SIDE * s;
@@ -784,7 +717,7 @@ export function drawCockpitView(g: CanvasRenderingContext2D, f: CockpitFrame): v
   g.beginPath();
   g.rect(0, 0, v.w, v.h);
   g.clip();
-  cam.set(ex, ey, EYE_Z + shake, yaw);
+  cam.set(ex, ey, EYE_Z + shake, heading);
   // The car LOD counts device pixels (DPR and layout scale included).
   setCarPixelScale(f.pixelScale ?? 1);
   carMs = 0;
@@ -795,7 +728,7 @@ export function drawCockpitView(g: CanvasRenderingContext2D, f: CockpitFrame): v
   cam.flip = 1;
   cam.far = 1300;
   cam.fogNear = 260;
-  drawSky(g, cam, v.w, yaw);
+  drawSky(g, cam, v.w, heading);
   renderWorld(g, cam, f, false);
   const t0 = performance.now();
   cabinIn.race = f.race;
@@ -809,8 +742,8 @@ export function drawCockpitView(g: CanvasRenderingContext2D, f: CockpitFrame): v
   const jolt = drawCockpit(g, v.w, v.h, cabinIn);
   const t1 = performance.now();
   g.translate(jolt.x, jolt.y);
-  drawMirror(g, v.w, v.h, f, ex, ey, yaw);
-  drawMinimap(g, v.w, v.h, wheelRadius(v.w), f, yaw);
+  drawMirror(g, v.w, v.h, f, ex, ey, heading);
+  drawMinimap(g, v.w, v.h, wheelRadius(v.w), f);
   sample(cabinMs, t1 - t0);
   sample(mirrorMs, performance.now() - t1);
   sample(carsMs, carMs);

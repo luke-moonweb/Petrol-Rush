@@ -1,6 +1,5 @@
 import type { GameAudio } from '../../audio/audio';
 import { CONFIG } from '../../config';
-import { cockpitCameraYaw } from '../../gfx/fpv/view';
 import { layout } from '../../layout';
 import { lapsCompleted } from '../../race/car';
 import type { DriveInput } from '../../race/physics';
@@ -32,11 +31,8 @@ export class RaceSound {
     audio.setScreech(p.spinTime > 0 ? 1 : p.slideTime > 0 ? 0.7 : braking ? 0.35 : 0);
     audio.setRefuel(p.refueling);
 
-    // In the cockpit, pan by where the camera looks: during a spin that is not the car's heading.
-    const camYaw = cockpit ? cockpitCameraYaw(race) : Number.NaN;
-    const earYaw = Number.isNaN(camYaw) ? p.heading : camYaw;
-    const pc = Math.cos(earYaw);
-    const ps = Math.sin(earYaw);
+    const pc = Math.cos(p.heading);
+    const ps = Math.sin(p.heading);
     const panOf = (c: { x: number; y: number }): number | null => {
       if (cockpit) {
         if (Math.hypot(c.x - p.x, c.y - p.y) > COCKPIT_HEAR) return null;

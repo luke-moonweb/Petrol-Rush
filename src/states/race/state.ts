@@ -1,6 +1,6 @@
 import { CONFIG, LAP_CHOICES, QUALIFYING_CHOICES, type RaceOptions } from '../../config';
 import { stepCabin } from '../../gfx/fpv/cabin';
-import { cockpitOverlayMs, drawCockpitView, noteTopDownFrame, prewarmCockpitView, prewarmScene } from '../../gfx/fpv/view';
+import { cockpitOverlayMs, drawCockpitView, prewarmCockpitView, prewarmScene } from '../../gfx/fpv/view';
 import { Particles } from '../../gfx/particles';
 import { drawCars, drawOil, trackCanvas } from '../../gfx/world';
 import { keyLabel } from '../../input';
@@ -401,7 +401,6 @@ export class RaceState implements State {
       });
     } else {
       this.renderTopDown(g, race, ix, iy, ih);
-      noteTopDownFrame();
       prewarmCockpitView(g, view, race.player.colorIdx, this.game.touch);
     }
 
