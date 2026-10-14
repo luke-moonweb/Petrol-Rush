@@ -159,6 +159,7 @@ const indegree = new Int32Array(MAX_CARS);
 const placed = new Uint8Array(MAX_CARS);
 const angLo = new Float64Array(MAX_CARS);
 const angHi = new Float64Array(MAX_CARS);
+const startD = new Float64Array(MAX_CARS);
 const ORDER_GAP = 0.01;
 
 export function orderCarsAgainstCars(c: Camera, list: Item[]): void {
@@ -172,6 +173,7 @@ export function orderCarsAgainstCars(c: Camera, list: Item[]): void {
     drawsBefore.fill(0, i * MAX_CARS, i * MAX_CARS + n);
     indegree[i] = 0;
     placed[i] = 0;
+    startD[i] = it.d;
   }
   let edges = 0;
   for (let i = 0; i < n; i++) {
@@ -179,6 +181,8 @@ export function orderCarsAgainstCars(c: Camera, list: Item[]): void {
     for (let j = i + 1; j < n; j++) {
       const b = carItems[j]!;
       if (Math.abs(a.x! - b.x!) > CAR_PAIR_DIST || Math.abs(a.y! - b.y!) > CAR_PAIR_DIST) continue;
+      // An interval wider than half a turn wraps round the camera (a rival on top of the player): no order.
+      if (angHi[i]! - angLo[i]! > Math.PI || angHi[j]! - angLo[j]! > Math.PI) continue;
       if (angLo[i]! >= angHi[j]! || angLo[j]! >= angHi[i]!) continue;
       const o = carPaintOrder(a.x!, a.y!, a.h!, b.x!, b.y!, b.h!, c.x, c.y);
       if (o > 0) {
@@ -200,12 +204,22 @@ export function orderCarsAgainstCars(c: Camera, list: Item[]): void {
       if (placed[i] || indegree[i]! > 0) continue;
       if (next < 0 || carItems[i]!.d > carItems[next]!.d) next = i;
     }
-    if (next < 0) return;
+    if (next < 0) {
+      // A cycle (should not happen for disjoint footprints): fall back to the depths before this pass.
+      for (let i = 0; i < n; i++) carItems[i]!.d = startD[i]!;
+      return;
+    }
     placed[next] = 1;
     const it = carItems[next]!;
-    let d = it.d;
-    for (let p = 0; p < n; p++) if (drawsBefore[p * MAX_CARS + next]) d = Math.min(d, carItems[p]!.d - ORDER_GAP);
-    if (it.wallLo !== undefined && d <= it.wallLo) d = it.wallLo + ORDER_GAP;
+    let firstBefore = Infinity;
+    for (let p = 0; p < n; p++) if (drawsBefore[p * MAX_CARS + next]) firstBefore = Math.min(firstBefore, carItems[p]!.d);
+    let d = Math.min(it.d, firstBefore - ORDER_GAP);
+    const lo = it.wallLo;
+    if (lo !== undefined && d <= lo) {
+      // Stay strictly inside the window between the wall and the cars drawn before; only when that window is
+      // empty does the wall win.
+      d = firstBefore > lo && firstBefore !== Infinity ? (lo + firstBefore) / 2 : lo + ORDER_GAP;
+    }
     it.d = d;
     for (let q = 0; q < n; q++) if (drawsBefore[next * MAX_CARS + q]) indegree[q]!--;
   }
