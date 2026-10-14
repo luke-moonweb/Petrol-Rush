@@ -325,6 +325,10 @@ export class Race {
     return this.standings().indexOf(car) + 1;
   }
 
+  shownPosition(car: Car): number {
+    return car.finished ? this.classification().indexOf(car) + 1 : this.position(car);
+  }
+
   timeBehindLeader(car: Car): number {
     const leader = this.standings()[0]!;
     if (car === leader) return 0;

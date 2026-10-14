@@ -16,7 +16,7 @@ export interface StartLights {
   outAt: number;
 }
 
-export function drawStartLights(g: CanvasRenderingContext2D, lights: StartLights): void {
+export function drawStartLights(g: CanvasRenderingContext2D, lights: StartLights, top = 12): void {
   const out = lights.t >= lights.outAt;
   const lit = out ? 0 : Math.min(LIGHTS_COUNT, Math.floor(lights.t / LIGHT_INTERVAL_S));
   const r = 7;
@@ -25,7 +25,7 @@ export function drawStartLights(g: CanvasRenderingContext2D, lights: StartLights
   const h = 2 * r + 2 * 8;
   const v = layout.view;
   const x0 = Math.round(v.x + v.w / 2 - w / 2);
-  const y0 = v.y + 12;
+  const y0 = v.y + top;
   g.fillStyle = PR.night;
   g.fillRect(x0, y0, w, h);
   g.strokeStyle = '#2A2740';
@@ -67,11 +67,11 @@ export function drawSpeedBar(g: CanvasRenderingContext2D, p: Car, pitAuto: boole
   g.fillRect(x0 + slideEnd, y0 - 1, 1, H_BAR + 2);
 }
 
-export function drawRaceMessage(g: CanvasRenderingContext2D, msg: string): void {
+export function drawRaceMessage(g: CanvasRenderingContext2D, msg: string, top = 44): void {
   g.save();
   g.shadowColor = PR.amber;
   g.shadowBlur = 8;
-  text(g, msg, layout.view.x + layout.view.w / 2, layout.view.y + 44, {
+  text(g, msg, layout.view.x + layout.view.w / 2, layout.view.y + top, {
     font: `14px ${FONT_BLACK}`,
     align: 'center',
     color: PR.amber,

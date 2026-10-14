@@ -2,8 +2,8 @@ import type { Rng } from '../../../sim/rng';
 import { CY, islandOutline } from '../../../track/oval';
 import { FONT_BLACK } from '../style';
 
-const HELI = { x: 300, y: CY - 39, r: 24 };
-const PYLON = { x: 1945, y: CY - 39 };
+export const HELI = { x: 300, y: CY - 39, r: 24 };
+export const PYLON = { x: 1945, y: CY - 39 };
 const palms: { x: number; y: number; s: number }[] = [];
 
 function insideIsland(x: number, y: number, margin: number): boolean {
@@ -120,6 +120,19 @@ export function drawInfieldDecorLights(g: CanvasRenderingContext2D): void {
     g.fillRect(x - 1, y - 1, 2, 2);
     g.restore();
   }
+  const hx = HELI.x;
+  const hy = HELI.y + HELI.r + 6;
+  g.fillStyle = '#17142B';
+  g.fillRect(hx - 9, hy - 14, 18, 15);
+  g.save();
+  g.font = `11px ${FONT_BLACK}`;
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  g.fillStyle = '#7FE3D9';
+  g.shadowColor = '#7FE3D9';
+  g.shadowBlur = 5;
+  g.fillText('H', hx, hy - 6);
+  g.restore();
   const x = PYLON.x;
   const top = PYLON.y - 58;
   g.fillStyle = '#17142B';
@@ -146,4 +159,8 @@ export function drawInfieldDecorLights(g: CanvasRenderingContext2D): void {
   g.shadowBlur = 6;
   g.fillRect(x - 1, top - 7, 2, 3);
   g.restore();
+}
+
+export function palmSpots(): readonly { x: number; y: number; s: number }[] {
+  return palms;
 }

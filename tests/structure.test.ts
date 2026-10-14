@@ -4,8 +4,15 @@ import { describe, expect, it } from 'vitest';
 const SOURCES = import.meta.glob<string>('../src/**/*.ts', { query: '?raw', import: 'default', eager: true });
 
 // Oval geometry constants must not leak into code shared by every track, or new tracks would
-// silently use the oval's numbers.
-const OVAL_ONLY = ['../src/track/oval.ts', '../src/track/ovalPit.ts', '../src/track/ovalTrack.ts', '../src/gfx/track/oval/'];
+// silently use the oval's numbers. The cockpit view (gfx/fpv) is an oval renderer too: the race state
+// only offers it on the oval.
+const OVAL_ONLY = [
+  '../src/track/oval.ts',
+  '../src/track/ovalPit.ts',
+  '../src/track/ovalTrack.ts',
+  '../src/gfx/track/oval/',
+  '../src/gfx/fpv/',
+];
 
 describe('module structure', () => {
   it('finds the sources', () => {
