@@ -29,9 +29,12 @@ const OUTLINE_KQ = -12;
 const TINT: RGB = [0.85, 0.85, 0.95];
 const SHADOW_ALPHA = 0.42;
 const BODY_LEN = 4 * K;
-// Footprint half sizes in world units for ordering cars against each other (tyres and lamps included).
-const FOOT_HL = 2.02 * K;
-const FOOT_HW = TYRE_OUT * K;
+// Footprint half sizes (model units) covering everything a car draws on the ground or above it: body,
+// lamps, tyres and the contact shadow. Ordering cars against each other uses the same box.
+const FOOT_L = 2.08;
+const FOOT_W = Math.max(TYRE_OUT, 0.9);
+const FOOT_HL = FOOT_L * K;
+const FOOT_HW = FOOT_W * K;
 
 // One style cache per fog colour (main view and mirror may use different fog arrays).
 const styleCaches = new Map<RGB, string[]>();
@@ -55,7 +58,25 @@ function style(cid: number, kq: number, level: number, fog: RGB): string {
   return s;
 }
 
-const SHADOW = new Float32Array([2.2, -0.75, 1.95, -0.9, -1.95, -0.9, -2.2, -0.75, -2.2, 0.75, -1.95, 0.9, 1.95, 0.9, 2.2, 0.75]);
+// Contact shadow: the footprint with chamfered corners.
+const SHADOW = new Float32Array([
+  FOOT_L,
+  -0.75,
+  1.9,
+  -FOOT_W,
+  -1.9,
+  -FOOT_W,
+  -FOOT_L,
+  -0.75,
+  -FOOT_L,
+  0.75,
+  -1.9,
+  FOOT_W,
+  1.9,
+  FOOT_W,
+  FOOT_L,
+  0.75,
+]);
 const TAIL = [-1, 1].map(
   (s) => new Float32Array([-2.01, s * 0.42, 0.44, -2.01, s * 0.78, 0.44, -2.01, s * 0.78, 0.58, -2.01, s * 0.42, 0.58]),
 );
@@ -313,4 +334,24 @@ export function carPaintOrder(
     return camOnB ? 1 : -1;
   }
   return 0;
+}
+
+// Angular extent of a car's footprint seen from the camera (radians, relative to the view direction),
+// written to lo[i] and hi[i]. Two cars can only overlap on screen when these intervals overlap.
+export function footprintAngles(c: Camera, x: number, y: number, h: number, lo: Float64Array, hi: Float64Array, i: number): void {
+  const hc = Math.cos(h);
+  const hs = Math.sin(h);
+  let a0 = Infinity;
+  let a1 = -Infinity;
+  for (let k = 0; k < 4; k++) {
+    const u = k < 2 ? FOOT_HL : -FOOT_HL;
+    const v = k % 2 === 0 ? FOOT_HW : -FOOT_HW;
+    const dx = x + u * hc - v * hs - c.x;
+    const dy = y + u * hs + v * hc - c.y;
+    const a = Math.atan2(-dx * c.sin + dy * c.cos, dx * c.cos + dy * c.sin);
+    if (a < a0) a0 = a;
+    if (a > a1) a1 = a;
+  }
+  lo[i] = a0;
+  hi[i] = a1;
 }

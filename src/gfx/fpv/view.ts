@@ -9,7 +9,7 @@ import { PR } from '../../ui/theme';
 import type { Particles } from '../particles';
 import { CAR_SCHEMES, driverName } from '../vehicles';
 import { trackCanvas } from '../world';
-import { carPaintOrder, drawCarModel, setCarPixelScale } from './cars';
+import { carPaintOrder, drawCarModel, footprintAngles, setCarPixelScale } from './cars';
 import { type CabinView, cockpitUsed, drawCockpit, prewarmCockpit, reducedMotion, type Streak, wheelRadius } from './cockpit';
 import { Camera, clipProject, drawGlowAt, drawPoly, FOG_LEVELS, fillProjected, NEAR, type Poly, visible } from './engine';
 import { setPylonNames } from './landmarks';
@@ -145,26 +145,67 @@ function drawCar(g: CanvasRenderingContext2D, c: Camera, it: Item): void {
   drawCarModel(g, c, car.colorIdx, it.x!, it.y!, it.h!, it.dist!, car.braking, c === mirrorCam ? lodMirror : lodMain);
 }
 
-// Centre depth alone can paint a car over the one beside it. For cars close together, a vertical plane
-// between their footprints decides: the car on the camera's side is drawn later.
+// Centre depth alone can paint a car over the one beside it. Cars whose footprints overlap as seen from the
+// camera are ordered by a vertical plane between the footprints (the car on the camera's side is drawn
+// later). For disjoint convex footprints that relation has no cycles, so a topological sort settles it in
+// one pass. A car is never moved out of the window its walls allow (walls win over cars).
 const carItems: Item[] = [];
 const CAR_PAIR_DIST = 80;
+const MAX_CARS = 64;
+const drawsBefore = new Uint8Array(MAX_CARS * MAX_CARS);
+const indegree = new Int32Array(MAX_CARS);
+const placed = new Uint8Array(MAX_CARS);
+const angLo = new Float64Array(MAX_CARS);
+const angHi = new Float64Array(MAX_CARS);
+const ORDER_GAP = 0.01;
 
 export function orderCarsAgainstCars(c: Camera, list: Item[]): void {
   carItems.length = 0;
-  for (const it of list) if (it.car) carItems.push(it);
-  for (let pass = 0; pass < 2; pass++) {
-    for (let i = 0; i < carItems.length; i++) {
-      const a = carItems[i]!;
-      for (let j = i + 1; j < carItems.length; j++) {
-        const b = carItems[j]!;
-        if (Math.abs(a.x! - b.x!) > CAR_PAIR_DIST || Math.abs(a.y! - b.y!) > CAR_PAIR_DIST) continue;
-        const o = carPaintOrder(a.x!, a.y!, a.h!, b.x!, b.y!, b.h!, c.x, c.y);
-        // Items are drawn in decreasing d: the later car needs the smaller d.
-        if (o > 0 && b.d >= a.d) b.d = a.d - 0.01;
-        else if (o < 0 && a.d >= b.d) a.d = b.d - 0.01;
+  for (const it of list) if (it.car && carItems.length < MAX_CARS) carItems.push(it);
+  const n = carItems.length;
+  if (n < 2) return;
+  for (let i = 0; i < n; i++) {
+    const it = carItems[i]!;
+    footprintAngles(c, it.x!, it.y!, it.h!, angLo, angHi, i);
+    drawsBefore.fill(0, i * MAX_CARS, i * MAX_CARS + n);
+    indegree[i] = 0;
+    placed[i] = 0;
+  }
+  let edges = 0;
+  for (let i = 0; i < n; i++) {
+    const a = carItems[i]!;
+    for (let j = i + 1; j < n; j++) {
+      const b = carItems[j]!;
+      if (Math.abs(a.x! - b.x!) > CAR_PAIR_DIST || Math.abs(a.y! - b.y!) > CAR_PAIR_DIST) continue;
+      if (angLo[i]! >= angHi[j]! || angLo[j]! >= angHi[i]!) continue;
+      const o = carPaintOrder(a.x!, a.y!, a.h!, b.x!, b.y!, b.h!, c.x, c.y);
+      if (o > 0) {
+        drawsBefore[i * MAX_CARS + j] = 1;
+        indegree[j]!++;
+        edges++;
+      } else if (o < 0) {
+        drawsBefore[j * MAX_CARS + i] = 1;
+        indegree[i]!++;
+        edges++;
       }
     }
+  }
+  if (edges === 0) return;
+  // Kahn's algorithm. Items are drawn in decreasing d, so a car gets a d below every car drawn before it.
+  for (let step = 0; step < n; step++) {
+    let next = -1;
+    for (let i = 0; i < n; i++) {
+      if (placed[i] || indegree[i]! > 0) continue;
+      if (next < 0 || carItems[i]!.d > carItems[next]!.d) next = i;
+    }
+    if (next < 0) return;
+    placed[next] = 1;
+    const it = carItems[next]!;
+    let d = it.d;
+    for (let p = 0; p < n; p++) if (drawsBefore[p * MAX_CARS + next]) d = Math.min(d, carItems[p]!.d - ORDER_GAP);
+    if (it.wallLo !== undefined && d <= it.wallLo) d = it.wallLo + ORDER_GAP;
+    it.d = d;
+    for (let q = 0; q < n; q++) if (drawsBefore[next * MAX_CARS + q]) indegree[q]!--;
   }
 }
 
@@ -241,6 +282,8 @@ interface Item {
   y?: number;
   h?: number;
   dist?: number;
+  // A car must stay drawn before (d above) this wall item's d.
+  wallLo?: number;
   glow?: Glow;
   sign?: TexQuad;
   bill?: Billboard;
@@ -296,6 +339,8 @@ function orderCarsAgainstWalls(c: Camera, items: Item[]): void {
     }
     if (front !== Infinity) it.d = Math.min(it.d, front - 0.01);
     if (behind !== -Infinity && behind > it.d) it.d = behind + 0.01;
+    // The car pass may lower d but never down to a wall the car stands in front of.
+    it.wallLo = behind === -Infinity ? undefined : behind;
   }
 }
 
