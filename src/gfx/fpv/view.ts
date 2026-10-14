@@ -7,23 +7,11 @@ import { createRng } from '../../sim/rng';
 import { CX_L, CX_R, CY, PIT_DRIVE_Y, PIT_X0, PIT_X1, R_IN, R_OUT, WORLD_W, wrapAngle } from '../../track/track';
 import { PR } from '../../ui/theme';
 import type { Particles } from '../particles';
-import { CAR_SCHEMES, carFaces, driverName, MODEL_SCALE } from '../vehicles';
+import { CAR_SCHEMES, driverName } from '../vehicles';
 import { trackCanvas } from '../world';
+import { drawCarModel } from './cars';
 import { type CabinView, cockpitUsed, drawCockpit, prewarmCockpit, reducedMotion, type Streak, wheelRadius } from './cockpit';
-import {
-  Camera,
-  clipProject,
-  drawPoly,
-  FOG_LEVELS,
-  fillProjected,
-  fogged,
-  glowSprite,
-  hexRgb,
-  NEAR,
-  type Poly,
-  type RGB,
-  visible,
-} from './engine';
+import { Camera, clipProject, drawGlowAt, drawPoly, FOG_LEVELS, fillProjected, NEAR, type Poly, visible } from './engine';
 import { setPylonNames } from './landmarks';
 import { buildScene, type Glow, type Scene } from './scene';
 import { type Billboard, drawBillboard, drawTexQuad, type TexQuad } from './texture';
@@ -46,7 +34,6 @@ const EYE_BACK = -2;
 const EYE_SIDE = -3.6;
 const EYE_Z = 9.2;
 const MIRROR_FAR = 600;
-const LIGHT: [number, number, number] = [0.27, -0.37, 0.89];
 const SKY_TOP = '#05040C';
 const SKY_HORIZON = '#221C3C';
 const GROUND = '#0B0A16';
@@ -96,20 +83,6 @@ function initSky(): void {
   }
 }
 
-const shadeCache = new Map<string, string>();
-function lit(color: string, k: number, level: number, fog: RGB): string {
-  const kq = Math.round(k * 20);
-  const key = `${color}|${kq}|${level}`;
-  let s = shadeCache.get(key);
-  if (!s) {
-    const amt = kq / 20;
-    const c = hexRgb(color).map((v) => (amt >= 0 ? v + (255 - v) * amt : v * (1 + amt))) as RGB;
-    s = fogged(c, fog, level);
-    shadeCache.set(key, s);
-  }
-  return s;
-}
-
 const wx = new Float32Array(64);
 const wy = new Float32Array(64);
 const wz = new Float32Array(64);
@@ -150,92 +123,11 @@ function drawSky(g: CanvasRenderingContext2D, c: Camera, w: number, yaw: number)
 }
 
 function drawGlow(g: CanvasRenderingContext2D, c: Camera, gl: Glow): void {
-  const dx = gl.x - c.x;
-  const dy = gl.y - c.y;
-  const z = dx * c.cos + dy * c.sin;
-  if (z < NEAR * 2 || z > c.far) return;
-  const x = -dx * c.sin + dy * c.cos;
-  const r = (c.focal * gl.r) / z;
-  if (r < 0.8) return;
-  const sx = c.ox + (c.flip * c.focal * x) / z;
-  const sy = c.oy - (c.focal * (gl.z - c.z)) / z;
-  g.globalCompositeOperation = 'lighter';
-  g.drawImage(glowSprite(gl.color), sx - r, sy - r, r * 2, r * 2);
-  g.globalCompositeOperation = 'source-over';
+  drawGlowAt(g, c, gl.x, gl.y, gl.z, gl.r, gl.color);
 }
 
 function drawCar(g: CanvasRenderingContext2D, c: Camera, car: Car, f: CockpitFrame, dist: number): void {
-  const h = f.ih(car);
-  const ox = f.ix(car);
-  const oy = f.iy(car);
-  const cs = Math.cos(h);
-  const sn = Math.sin(h);
-  const K = MODEL_SCALE;
-  const level = c.fogLevel(dist);
-  const toWorld = (pts: ArrayLike<readonly number[]>): number => {
-    const n = pts.length;
-    for (let i = 0; i < n; i++) {
-      const p = pts[i]!;
-      wx[i] = ox + (p[0]! * cs - p[1]! * sn) * K;
-      wy[i] = oy + (p[0]! * sn + p[1]! * cs) * K;
-      wz[i] = p[2]! * K;
-    }
-    return n;
-  };
-  const faces = carFaces(car.colorIdx)
-    .map((face) => {
-      const nx = face.normal[0] * cs - face.normal[1] * sn;
-      const ny = face.normal[0] * sn + face.normal[1] * cs;
-      const nz = face.normal[2];
-      let mx = 0;
-      let my = 0;
-      let mz = 0;
-      for (const p of face.pts) {
-        mx += p[0] * cs - p[1] * sn;
-        my += p[0] * sn + p[1] * cs;
-        mz += p[2];
-      }
-      const n = face.pts.length;
-      const fx = ox + (mx / n) * K;
-      const fy = oy + (my / n) * K;
-      const fz = (mz / n) * K;
-      const facing = nx * (c.x - fx) + ny * (c.y - fy) + nz * (c.z - fz);
-      return { face, facing, depth: c.depth(fx, fy), light: Math.max(0, nx * LIGHT[0] + ny * LIGHT[1] + nz * LIGHT[2]) };
-    })
-    .filter((x) => x.facing > 0)
-    .sort((a, b) => b.depth - a.depth);
-  for (const { face, light } of faces) {
-    const k = face.flat ? -0.15 : -0.45 + 0.45 * light;
-    fillProjected(g, clipProject(c, wx, wy, wz, toWorld(face.pts)), lit(face.color, k, level, c.fog));
-    if (dist > 260) continue;
-    for (const d of face.decals ?? []) {
-      fillProjected(g, clipProject(c, wx, wy, wz, toWorld(d.pts)), lit(d.color, d.flat ? -0.15 : -0.45 + 0.45 * light, level, c.fog));
-    }
-  }
-  const toCam = (lx: number) => lx * cs * (c.x - ox) + lx * sn * (c.y - oy) > 0;
-  const lamp = (lx: number, ly0: number, ly1: number, z0: number, z1: number, color: string) => {
-    const quad = [
-      [lx, ly0, z0],
-      [lx, ly1, z0],
-      [lx, ly1, z1],
-      [lx, ly0, z1],
-    ];
-    fillProjected(g, clipProject(c, wx, wy, wz, toWorld(quad)), color);
-  };
-  const glowAt = (lx: number, ly: number, z: number, r: number, color: string) =>
-    drawGlow(g, c, { x: ox + (lx * cs - ly * sn) * K, y: oy + (lx * sn + ly * cs) * K, z, r, color });
-  if (toCam(-1)) {
-    for (const side of [-1, 1]) {
-      lamp(-2.02, side * 0.42, side * 0.78, 0.44, 0.58, car.braking ? '#FF5A46' : '#B81E18');
-      glowAt(-2.1, side * 0.6, 5, car.braking ? 7 : 4.5, '255,60,40');
-    }
-  }
-  if (toCam(1)) {
-    for (const side of [-1, 1]) {
-      lamp(2.02, side * 0.4, side * 0.75, 0.4, 0.52, '#FFF6DA');
-      glowAt(2.1, side * 0.57, 4.6, 8, '255,244,210');
-    }
-  }
+  drawCarModel(g, c, car.colorIdx, f.ix(car), f.iy(car), f.ih(car), dist, car.braking);
 }
 
 function drawOilSlicks(g: CanvasRenderingContext2D, c: Camera, race: Race, far: number): void {

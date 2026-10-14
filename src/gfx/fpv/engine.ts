@@ -219,3 +219,19 @@ export function glowSprite(color: string): HTMLCanvasElement {
   }
   return c;
 }
+
+// Additive light glow centred on a world point, r in world units.
+export function drawGlowAt(g: CanvasRenderingContext2D, c: Camera, x: number, y: number, z: number, r: number, color: string): void {
+  const dx = x - c.x;
+  const dy = y - c.y;
+  const depth = dx * c.cos + dy * c.sin;
+  if (depth < NEAR * 2 || depth > c.far) return;
+  const lat = -dx * c.sin + dy * c.cos;
+  const rr = (c.focal * r) / depth;
+  if (rr < 0.8) return;
+  const sx = c.ox + (c.flip * c.focal * lat) / depth;
+  const sy = c.oy - (c.focal * (z - c.z)) / depth;
+  g.globalCompositeOperation = 'lighter';
+  g.drawImage(glowSprite(color), sx - rr, sy - rr, rr * 2, rr * 2);
+  g.globalCompositeOperation = 'source-over';
+}
