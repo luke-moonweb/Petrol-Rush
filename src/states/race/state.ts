@@ -5,7 +5,6 @@ import { Particles } from '../../gfx/particles';
 import { drawCars, drawOil, trackCanvas } from '../../gfx/world';
 import { keyLabel } from '../../input';
 import { inFrame, layout } from '../../layout';
-import { savePrefs } from '../../prefs';
 import { type Car, lapsCompleted } from '../../race/car';
 import { cornerAssist, type DriveInput, SteerRamp, skidWarning } from '../../race/physics';
 import { NUM_COLORS, Race } from '../../race/race';
@@ -94,6 +93,8 @@ export class RaceState implements State {
     this.sound = new RaceSound(this.game.audio);
     this.lightsShown = 0;
     const prefs = this.game.prefs;
+    // Every race starts with the top-down camera; the cockpit is chosen per race.
+    prefs.camera = 'top';
     this.notice = null;
     this.penaltyMsg = 0;
     return new Race(this.opts, this.seed++, false, { penalties: prefs.penalties, collisions: prefs.collisions });
@@ -138,7 +139,6 @@ export class RaceState implements State {
     if (input.pressed('camera')) {
       const prefs = this.game.prefs;
       prefs.camera = prefs.camera === 'top' ? 'cockpit' : 'top';
-      savePrefs(prefs);
       this.game.audio.ui('move');
     }
     if (this.game.params.debug && input.pressed('debugSpeed')) {
