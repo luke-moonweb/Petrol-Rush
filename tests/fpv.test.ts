@@ -1,16 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { CONFIG, DEFAULT_OPTIONS } from '../src/config';
-import {
-  type CabinInput,
-  cabinFor,
-  cabinReadout,
-  JOLT_GAP_S,
-  joltOffset,
-  LED_COUNT,
-  RING_SEGS,
-  ringColor,
-  stepCabin,
-} from '../src/gfx/fpv/cabin';
+import { type CabinInput, cabinFor, cabinReadout, JOLT_GAP_S, joltOffset, LED_COUNT, stepCabin } from '../src/gfx/fpv/cabin';
 import { Camera, clipProject, outX, outY } from '../src/gfx/fpv/engine';
 import { upright } from '../src/gfx/fpv/geom';
 import { buildScene } from '../src/gfx/fpv/scene';
@@ -189,36 +179,21 @@ describe('cockpit readout', () => {
     expect(lit({ lights: { lit: 0, out: true, since: 0.5 } })).toBe(0);
   });
 
-  it('shows the speed on an 18 segment ring that turns red as soon as it passes 150', () => {
-    expect(read({ speed: 0 }).ring).toBe(0);
-    expect(read({ speed: 95 }).ring).toBe(10);
-    expect(read({ speed: 150 }).ring).toBe(15);
-    expect(ringColor(read({ speed: 151 }).ring - 1)).toBe(PR.red);
-    expect(read({ speed: 180 }).ring).toBe(RING_SEGS);
-    expect(read({ speed: -12, reverse: true }).digits).toBe('R12');
-    expect(ringColor(10)).toBe(PR.teal);
-    expect(ringColor(14)).toBe(PR.amber);
-  });
-
   it('warns about fuel only when a stop is close', () => {
     const full = read({ fuel: 1, lapsToGo: 18 });
-    expect(full.fuelColor).toBe(PR.teal);
     expect(full.lamps.fuel).toBe(false);
     expect(full.podBottom).toBe('+0.42');
     const half = read({ fuel: 0.5, lapsToGo: 8 });
     expect(half.fuelLaps).toBeCloseTo(6);
-    expect(half.fuelColor).toBe(PR.teal);
     const soon = read({ fuel: 0.2, lapsToGo: 8 });
-    expect(soon.fuelColor).toBe(PR.amber);
     expect(soon.lamps.fuel).toBe(false);
     expect(soon).toMatchObject({ podBottom: 'PIT 2', podColor: PR.amber });
-    expect(read({ fuel: 0.2, lapsToGo: 2 }).fuelColor).toBe(PR.teal);
+    expect(read({ fuel: 0.2, lapsToGo: 2 }).podBottom).toBe('+0.42');
     expect(read({ fuel: 0.13, lapsToGo: 8 })).toMatchObject({ podBottom: 'PIT 1', podColor: PR.amber });
     expect(read({ fuel: 0.07, lapsToGo: 8 })).toMatchObject({ podBottom: 'PIT NOW', podColor: PR.red });
     expect(read({ fuel: 0.121, lapsToGo: 8 }).lamps.fuel).toBe(true);
-    expect(read({ fuel: 0.15, lapsToGo: 8 }).fuelColor).not.toBe(PR.red);
+    expect(read({ fuel: 0.15, lapsToGo: 8 }).podColor).toBe(PR.amber);
     const low = read({ fuel: CONFIG.LOW_FUEL - 0.01, time: 0.1 });
-    expect(low.fuelColor).toBe(PR.red);
     expect(low.lamps.fuel).toBe(true);
     expect(read({ fuel: CONFIG.LOW_FUEL - 0.01, time: 0.4 }).lamps.fuel).toBe(false);
   });

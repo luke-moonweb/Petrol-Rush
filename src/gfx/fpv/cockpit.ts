@@ -1,9 +1,10 @@
 import type { Car } from '../../race/car';
 import type { Race } from '../../race/race';
 import { createRng } from '../../sim/rng';
+import { drawFuelGauge, drawSpeedo } from '../../ui/hud';
 import { FONT_BLACK, PR } from '../../ui/theme';
 import { CAR_SCHEMES } from '../vehicles';
-import { cabinFor, cabinReadout, FUEL_SEGS, joltOffset, LED_COUNT, type Readout, RING_SEGS, ringColor } from './cabin';
+import { cabinFor, cabinReadout, joltOffset, LED_COUNT, type Readout } from './cabin';
 import { glowSprite, hexRgb } from './engine';
 
 export interface Streak {
@@ -25,11 +26,11 @@ export interface CabinView {
 const INK = '#0A0912';
 const SHELL = '#07060E';
 const UNLIT = '#1E1B2C';
-const UNLIT_RED = '#2E1A24';
 const LCD = '#0E1A18';
 const PAD = 4;
-const RING_DEG = 240;
-const RING_FROM = 150;
+// Radii the top-down HUD draws its speedo and fuel gauge at; the dash scales them by Geom.dialK.
+const SPEEDO_R = 54;
+const FUEL_R = 34;
 const WARM = '#FFD68C';
 export const ROOF_FLOOD = 0.2;
 export const PILLAR_FLOOD = 0.14;
@@ -72,12 +73,10 @@ interface Geom {
   ledY: number;
   ledPitch: number;
   ledR: number;
-  ringCy: number;
-  ringR: number;
-  ringW: number;
+  dialCy: number;
+  dialK: number;
   podY: number;
   fuelCx: number;
-  fuelR: number;
   podCx: number;
   lcdW: number;
   lcdH: number;
@@ -108,6 +107,15 @@ function geom(w: number, h: number, touch: boolean): Geom {
   const bead = new Path2D();
   bead.moveTo(w * 0.08, top * 0.72);
   bead.quadraticCurveTo(w * 0.5, dip - h * 0.022, w * 0.92, top * 0.72);
+  const ledBot = h * 0.618 + 6;
+  const lampTop = h * 0.772 - 11 / 2;
+  // The speedo's dial top sits at cy - 54k and its MPH caption ends near cy + 10k.
+  const dialK = Math.min(
+    1.4,
+    (lampTop - ledBot - 6) / (SPEEDO_R + 10),
+    (binW * 0.33 - 4) / (SPEEDO_R + FUEL_R),
+    (binW * 0.17 - 4) / FUEL_R,
+  );
   const lip = new Path2D();
   lip.moveTo(-PAD, h * 0.75);
   lip.bezierCurveTo(w * 0.25, h * 0.75, w * 0.36, h * 0.69, cx, h * 0.69);
@@ -123,12 +131,10 @@ function geom(w: number, h: number, touch: boolean): Geom {
     ledY: h * 0.618,
     ledPitch: binW * 0.04,
     ledR: 3,
-    ringCy: h * 0.712,
-    ringR: Math.max(30, 32 * u),
-    ringW: 5,
+    dialCy: lampTop - 2 - 10 * dialK,
+    dialK,
     podY: h * 0.708,
     fuelCx: cx - binW * 0.33,
-    fuelR: Math.max(20, 21 * u),
     podCx: cx + binW * 0.33,
     lcdW: Math.max(56, 64 * u),
     lcdH: Math.max(30, 34 * u),
@@ -341,39 +347,6 @@ function drawDash(g: CanvasRenderingContext2D, gm: Geom): void {
   g.stroke(gm.lip);
 }
 
-function ringSeg(k: number): [number, number] {
-  const step = RING_DEG / RING_SEGS;
-  return [rad(RING_FROM + k * step + 1), rad(RING_FROM + (k + 1) * step - 1)];
-}
-
-function fuelSeg(k: number): [number, number] {
-  const step = 180 / FUEL_SEGS;
-  return [rad(180 + k * step + 1), rad(180 + (k + 1) * step - 1)];
-}
-
-function bezel(g: CanvasRenderingContext2D, x: number, y: number, r: number, glow: string): void {
-  g.save();
-  g.shadowColor = glow;
-  g.shadowBlur = r * 0.5;
-  g.fillStyle = '#1A1824';
-  g.beginPath();
-  g.arc(x, y, r + 3, 0, Math.PI * 2);
-  g.fill();
-  g.restore();
-  const metal = g.createLinearGradient(x, y - r, x, y + r);
-  metal.addColorStop(0, '#6A6678');
-  metal.addColorStop(0.5, '#2E2A3A');
-  metal.addColorStop(1, '#121018');
-  g.fillStyle = metal;
-  g.beginPath();
-  g.arc(x, y, r + 2.5, 0, Math.PI * 2);
-  g.fill();
-  g.fillStyle = '#07060C';
-  g.beginPath();
-  g.arc(x, y, r - 0.5, 0, Math.PI * 2);
-  g.fill();
-}
-
 function caption(g: CanvasRenderingContext2D, text: string, x: number, y: number, color: string, px = 8): void {
   g.font = `bold ${px}px ${FONT_BLACK}`;
   g.textAlign = 'center';
@@ -435,28 +408,6 @@ function drawBinnacle(g: CanvasRenderingContext2D, gm: Geom, colorIdx: number): 
     g.arc(cx + (i - half) * gm.ledPitch, gm.ledY, gm.ledR, 0, Math.PI * 2);
     g.fill();
   }
-
-  bezel(g, cx, gm.ringCy, gm.ringR, rgba(PR.amber, 0.35));
-  g.lineWidth = gm.ringW;
-  for (let k = 0; k < RING_SEGS; k++) {
-    const [a0, a1] = ringSeg(k);
-    g.strokeStyle = ringColor(k) === PR.red ? UNLIT_RED : UNLIT;
-    g.beginPath();
-    g.arc(cx, gm.ringCy, gm.ringR - gm.ringW / 2 - 1, a0, a1);
-    g.stroke();
-  }
-  if (gm.captions) caption(g, 'MPH', cx, gm.ringCy + 15, PR.muted);
-
-  bezel(g, gm.fuelCx, gm.podY, gm.fuelR, rgba(PR.teal, 0.35));
-  g.lineWidth = 4;
-  g.strokeStyle = UNLIT;
-  for (let k = 0; k < FUEL_SEGS; k++) {
-    const [a0, a1] = fuelSeg(k);
-    g.beginPath();
-    g.arc(gm.fuelCx, gm.podY, gm.fuelR - 3, a0, a1);
-    g.stroke();
-  }
-  caption(g, 'LAPS', gm.fuelCx, gm.podY + gm.fuelR * 0.68, PR.muted, gm.captions ? 8 : 9);
 
   const lx = gm.podCx - gm.lcdW / 2;
   const ly = gm.podY - gm.lcdH / 2;
@@ -806,55 +757,20 @@ function drawLeds(g: CanvasRenderingContext2D, gm: Geom, leds: Readout['leds']):
   }
 }
 
-function drawSpeed(g: CanvasRenderingContext2D, gm: Geom, r: Readout): void {
-  g.lineWidth = gm.ringW;
-  for (const color of [PR.teal, PR.amber, PR.red]) {
-    g.beginPath();
-    for (let k = 0; k < r.ring; k++) {
-      if (ringColor(k) !== color) continue;
-      const [a0, a1] = ringSeg(k);
-      const rr = gm.ringR - gm.ringW / 2 - 1;
-      g.moveTo(gm.cx + Math.cos(a0) * rr, gm.ringCy + Math.sin(a0) * rr);
-      g.arc(gm.cx, gm.ringCy, rr, a0, a1);
-    }
-    g.strokeStyle = color;
-    g.stroke();
-  }
-  const gr = gm.ringR * 0.9;
-  g.globalCompositeOperation = 'lighter';
-  g.globalAlpha = 0.35;
-  g.drawImage(glowOf(r.digitsColor), gm.cx - gr, gm.ringCy - 2 - gr, gr * 2, gr * 2);
-  g.globalAlpha = 1;
-  g.globalCompositeOperation = 'source-over';
-  caption(g, r.digits, gm.cx, gm.ringCy - 2, r.digitsColor, Math.max(20, Math.round(20 * gm.u)));
+function drawDial(g: CanvasRenderingContext2D, gm: Geom, cx: number, draw: () => void): void {
+  g.save();
+  g.translate(cx, gm.dialCy);
+  g.scale(gm.dialK, gm.dialK);
+  draw();
+  g.restore();
 }
 
-function drawFuel(g: CanvasRenderingContext2D, gm: Geom, r: Readout): void {
-  const rr = gm.fuelR - 3;
-  if (r.fuelOn) {
-    g.lineWidth = 4;
-    g.strokeStyle = r.fuelColor;
-    const full = Math.floor(r.fuelLaps);
-    for (let k = 0; k <= full && k < FUEL_SEGS; k++) {
-      const [a0, a1] = fuelSeg(k);
-      g.globalAlpha = k < full ? 1 : r.fuelLaps - full;
-      g.beginPath();
-      g.arc(gm.fuelCx, gm.podY, rr, a0, a1);
-      g.stroke();
-    }
-    g.globalAlpha = 1;
-  }
-  if (r.fuelTick >= 0) {
-    const a = rad(180 + (r.fuelTick / FUEL_SEGS) * 180);
-    g.strokeStyle = PR.tealLight;
-    g.lineWidth = 2;
-    g.beginPath();
-    g.moveTo(gm.fuelCx + Math.cos(a) * (rr - 4), gm.podY + Math.sin(a) * (rr - 4));
-    g.lineTo(gm.fuelCx + Math.cos(a) * (rr + 3), gm.podY + Math.sin(a) * (rr + 3));
-    g.stroke();
-  }
-  const text = r.fuelColor === PR.teal ? PR.tealLight : r.fuelColor;
-  caption(g, r.fuelLaps.toFixed(1), gm.fuelCx, gm.podY + 1, text, 11);
+function drawSpeed(g: CanvasRenderingContext2D, gm: Geom, mph: number): void {
+  drawDial(g, gm, gm.cx, () => drawSpeedo(g, mph, 0, 0, SPEEDO_R));
+}
+
+function drawFuel(g: CanvasRenderingContext2D, gm: Geom, fuel: number, time: number): void {
+  drawDial(g, gm, gm.fuelCx, () => drawFuelGauge(g, fuel, time, 0, 0, FUEL_R));
 }
 
 function drawPod(g: CanvasRenderingContext2D, gm: Geom, r: Readout): void {
@@ -972,8 +888,8 @@ export function drawCockpit(g: CanvasRenderingContext2D, w: number, h: number, f
   }
   drawFlecks(g, gm, cabin.oil, cabin.grit);
   drawLeds(g, gm, r.leds);
-  drawSpeed(g, gm, r);
-  drawFuel(g, gm, r);
+  drawSpeed(g, gm, p.speed);
+  drawFuel(g, gm, p.fuel, race.time);
   drawPod(g, gm, r);
   drawLamps(g, gm, r);
 

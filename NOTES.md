@@ -12,9 +12,9 @@ Quality gate: see `CABIN_QUALITY.md` (Done-when playtester questions).
 4. Cold playtest checklist:
    - Do you feel **inside** a car? Roof header, A-pillars, livery hood, binnacle on the dash, wheel with gloves at 10 and 2.
    - Can you still see the **track and rivals** clearly? The centre lane and the race-info corridor under the mirror stay clear; flecks sit at the edges.
-   - Do the **gauges** look intentional? LED strip, segmented speed ring, fuel-laps pod, race pod (position + interval ahead) and tell-tales.
+   - Do the **gauges** look intentional? LED strip, HUD speedo and fuel gauge (moved from the left panel), race pod (position + interval ahead) and tell-tales.
 5. Stress the cabin: drive through an **oil** slick (dark smears build up on the lower glass) and hit a wall (grit specks plus a small cabin jolt that the mirror follows). Go over 150 mph in a turn: LED strip and SKID lamp blink together with the HUD SKID lamp.
-6. Confirm **mirror** + **minimap** are still usable; the wheel follows steer; spin yaw recovery is unchanged (`cameraYaw`).
+6. Confirm **mirror** + **minimap** are still usable; the wheel follows steer; during a spin the view turns exactly with the car.
 
 ## Acceptance (Done when)
 

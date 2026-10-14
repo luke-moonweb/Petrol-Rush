@@ -405,7 +405,7 @@ export class RaceState implements State {
     }
 
     drawHudTop(g, race, this.notice);
-    drawHudPanel(g, race);
+    drawHudPanel(g, race, !cockpit);
     if (!cockpit) drawSkidLamp(g, skid, race.time, view.x + view.w - 6, view.y + 6);
     const msg = this.message();
     const low = Math.round(view.h * 0.22);

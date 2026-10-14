@@ -155,7 +155,8 @@ function gapLabel(race: Race, i: number, list: ReturnType<Race['standings']>): s
   return gap === null ? '—' : `+${gap.toFixed(2)}`;
 }
 
-export function drawHudPanel(g: CanvasRenderingContext2D, race: Race): void {
+/** `gauges` is false in the cockpit, whose dash carries the speedo and fuel gauge itself. */
+export function drawHudPanel(g: CanvasRenderingContext2D, race: Race, gauges = true): void {
   const b = layout.panel;
   g.fillStyle = PR.night;
   g.fillRect(b.x, b.y, b.w, b.h);
@@ -164,12 +165,17 @@ export function drawHudPanel(g: CanvasRenderingContext2D, race: Race): void {
   if (layout.mode === 'wide') {
     g.fillRect(b.x + b.w - 1, b.y, 1, b.h);
     drawTower(g, race, { x: b.x, y: b.y, w: b.w, h: b.h }, 1);
+    if (!gauges) return;
     drawSpeedo(g, p.speed, b.x + 62, b.y + 372, 54);
     drawFuelGauge(g, p.fuel, race.time, b.x + 62, b.y + 432, 34);
     return;
   }
-  const gaugeW = 132;
   g.fillRect(b.x, b.y, b.w, 1);
+  if (!gauges) {
+    drawTower(g, race, { x: b.x, y: b.y, w: b.w, h: b.h }, 2);
+    return;
+  }
+  const gaugeW = 132;
   g.fillRect(b.x + gaugeW, b.y, 1, b.h);
   drawSpeedo(g, p.speed, b.x + gaugeW / 2, b.y + 72, 54);
   drawFuelGauge(g, p.fuel, race.time, b.x + gaugeW / 2, b.y + 146, 34);
