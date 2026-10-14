@@ -151,6 +151,16 @@ const az = new Float32Array(CAP);
 export const outX = new Float32Array(CAP * 2);
 export const outY = new Float32Array(CAP * 2);
 
+let outN = 0;
+let projCam: Camera;
+
+function emitPoint(x: number, y: number, z: number): void {
+  const c = projCam;
+  outX[outN] = c.ox + (c.flip * c.focal * x) / z;
+  outY[outN] = c.oy - (c.focal * y) / z;
+  outN++;
+}
+
 export function clipProject(cam: Camera, xs: ArrayLike<number>, ys: ArrayLike<number>, zs: ArrayLike<number>, n: number): number {
   for (let i = 0; i < n; i++) {
     const dx = xs[i]! - cam.x;
@@ -159,24 +169,19 @@ export function clipProject(cam: Camera, xs: ArrayLike<number>, ys: ArrayLike<nu
     ax[i] = -dx * cam.sin + dy * cam.cos;
     ay[i] = zs[i]! - cam.z;
   }
-  let m = 0;
-  const f = cam.focal;
-  const emit = (x: number, y: number, z: number) => {
-    outX[m] = cam.ox + (cam.flip * f * x) / z;
-    outY[m] = cam.oy - (f * y) / z;
-    m++;
-  };
+  outN = 0;
+  projCam = cam;
   for (let i = 0; i < n; i++) {
     const p = (i + n - 1) % n;
     const inC = az[i]! >= NEAR;
     const inP = az[p]! >= NEAR;
     if (inC !== inP) {
       const t = (NEAR - az[p]!) / (az[i]! - az[p]!);
-      emit(ax[p]! + (ax[i]! - ax[p]!) * t, ay[p]! + (ay[i]! - ay[p]!) * t, NEAR);
+      emitPoint(ax[p]! + (ax[i]! - ax[p]!) * t, ay[p]! + (ay[i]! - ay[p]!) * t, NEAR);
     }
-    if (inC) emit(ax[i]!, ay[i]!, az[i]!);
+    if (inC) emitPoint(ax[i]!, ay[i]!, az[i]!);
   }
-  return m;
+  return outN;
 }
 
 export function fillProjected(g: CanvasRenderingContext2D, m: number, style: string): void {
