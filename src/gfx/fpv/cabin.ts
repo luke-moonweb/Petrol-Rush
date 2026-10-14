@@ -5,7 +5,6 @@ import type { Race } from '../../race/race';
 import { PR } from '../../ui/theme';
 
 export const LED_COUNT = 9;
-export const RING_SEGS = 18;
 export const FUEL_SEGS = CONFIG.FUEL_RANGE_LAPS;
 export const LED_GREEN = '#52E252';
 export const JOLT_PX = 3;
@@ -128,13 +127,7 @@ export interface Lamps {
 
 export interface Readout {
   leds: (string | null)[];
-  ring: number;
-  digits: string;
-  digitsColor: string;
   fuelLaps: number;
-  fuelColor: string;
-  fuelOn: boolean;
-  fuelTick: number;
   lamps: Lamps;
   podTop: string;
   podBottom: string;
@@ -185,11 +178,6 @@ function leds(s: CabinInput, mph: number): (string | null)[] {
   return out;
 }
 
-export function ringColor(seg: number): string {
-  const top = (seg + 1) * 10;
-  return top <= 110 ? PR.teal : top <= CONFIG.SPIN_MPH ? PR.amber : PR.red;
-}
-
 export function cabinReadout(s: CabinInput): Readout {
   const mph = Math.round(Math.abs(s.speed));
   const t = s.time;
@@ -229,13 +217,7 @@ export function cabinReadout(s: CabinInput): Readout {
   }
   return {
     leds: leds(s, mph),
-    ring: Math.min(RING_SEGS, Math.ceil(mph / 10)),
-    digits: s.reverse ? `R${mph}` : String(mph),
-    digitsColor: s.skid >= 1 && !s.reverse ? PR.red : PR.amber,
     fuelLaps,
-    fuelColor: low ? PR.red : soon ? PR.amber : PR.teal,
-    fuelOn: !low || on(t, 1.5),
-    fuelTick: s.refueling ? (t % 1) * FUEL_SEGS : -1,
     lamps,
     podTop,
     podBottom,
