@@ -290,10 +290,14 @@ describe('cockpit car order between cars', () => {
 
   type Pack = { d: number; car: object; x: number; y: number; h: number; wallLo?: number }[];
   // Pairs drawn in the wrong order that really overlap on screen (angularly, from the camera).
-  async function wrongOverlaps(list: Pack): Promise<number> {
+  type Cam = InstanceType<typeof import('../src/gfx/fpv/engine').Camera>;
+  async function wrongOverlaps(list: Pack, cam?: Cam): Promise<number> {
     const { Camera } = await import('../src/gfx/fpv/engine');
-    const c = new Camera();
-    c.set(0, 0, 9.2, 0);
+    let c = cam;
+    if (!c) {
+      c = new Camera();
+      c.set(0, 0, 9.2, 0);
+    }
     const lo = new Float64Array(list.length);
     const hi = new Float64Array(list.length);
     const sorted = list.slice().sort((a, b) => b.d - a.d);
@@ -303,8 +307,9 @@ describe('cockpit car order between cars', () => {
       for (let j = i + 1; j < sorted.length; j++) {
         const a = sorted[i]!;
         const b = sorted[j]!;
+        if (hi[i]! - lo[i]! > Math.PI || hi[j]! - lo[j]! > Math.PI) continue;
         if (lo[i]! >= hi[j]! || lo[j]! >= hi[i]!) continue;
-        if (carPaintOrder(a.x, a.y, a.h, b.x, b.y, b.h, 0, 0) < 0) bad++;
+        if (carPaintOrder(a.x, a.y, a.h, b.x, b.y, b.h, c.x, c.y) < 0) bad++;
       }
     }
     return bad;
@@ -327,11 +332,9 @@ describe('cockpit car order between cars', () => {
     expect(await wrongOverlaps(list)).toBe(0);
   });
 
-  it('leaves no wrong visible overlap in random packs of 3 to 6 cars', async () => {
+  it('leaves no wrong visible overlap in random packs, for any camera yaw, the mirror and wall bounds', async () => {
     const { orderCarsAgainstCars } = await import('../src/gfx/fpv/view');
     const { Camera } = await import('../src/gfx/fpv/engine');
-    const c = new Camera();
-    c.set(0, 0, 9.2, 0);
     let seed = 12345;
     const rnd = () => {
       seed = (seed * 1103515245 + 12345) % 2147483648;
@@ -339,22 +342,104 @@ describe('cockpit car order between cars', () => {
     };
     let packs = 0;
     let wrong = 0;
+    let belowWall = 0;
     while (packs < 3000) {
+      const c = new Camera();
+      const yaw = (rnd() - 0.5) * 2 * Math.PI;
+      const mirror = rnd() < 0.3;
+      c.set(-200 + rnd() * 400, -200 + rnd() * 400, 9.2, mirror ? yaw + Math.PI : yaw);
+      if (mirror) c.flip = -1;
       const k = 3 + Math.floor(rnd() * 4);
       const list: Pack = [];
       for (let tries = 0; list.length < k && tries < 500; tries++) {
-        const x = 40 + rnd() * 80;
-        const y = -50 + rnd() * 100;
-        const h = (rnd() - 0.5) * 1.2;
-        if (list.some((o) => carPaintOrder(o.x, o.y, o.h, x, y, h, 0, 0) === 0)) continue;
+        // Bearing mostly ahead; one pack in ten also puts cars near ±π (behind the camera).
+        const bear = rnd() < 0.1 ? Math.PI * (rnd() < 0.5 ? 1 : -1) + (rnd() - 0.5) * 0.6 : (rnd() - 0.5) * 1.6;
+        const dist = 30 + rnd() * 90;
+        const a = Math.atan2(c.sin, c.cos) + bear;
+        const x = c.x + Math.cos(a) * dist;
+        const y = c.y + Math.sin(a) * dist;
+        const h = a + (rnd() - 0.5) * 1.2;
+        if (list.some((o) => carPaintOrder(o.x, o.y, o.h, x, y, h, c.x, c.y) === 0)) continue;
         list.push({ d: c.depth(x, y), car: {}, x, y, h });
       }
       if (list.length < k) continue;
+      // Some cars stand in front of a wall well below the pack, so their window never closes.
+      const minD = Math.min(...list.map((o) => o.d));
+      for (const o of list) if (rnd() < 0.4) o.wallLo = minD - 1 - rnd() * 20;
       packs++;
       orderCarsAgainstCars(c, list as unknown as Parameters<typeof orderCarsAgainstCars>[1]);
-      if ((await wrongOverlaps(list)) > 0) wrong++;
+      if ((await wrongOverlaps(list, c)) > 0) wrong++;
+      for (const o of list) if (o.wallLo !== undefined && o.d <= o.wallLo) belowWall++;
     }
     expect(wrong).toBe(0);
+    expect(belowWall).toBe(0);
+  });
+
+  it('measures footprint angles like an independent bearing computation', async () => {
+    const { Camera } = await import('../src/gfx/fpv/engine');
+    let seed = 99;
+    const rnd = () => {
+      seed = (seed * 1103515245 + 12345) % 2147483648;
+      return seed / 2147483648;
+    };
+    const lo = new Float64Array(1);
+    const hi = new Float64Array(1);
+    const wrap = (a: number) => Math.atan2(Math.sin(a), Math.cos(a));
+    for (let n = 0; n < 500; n++) {
+      const c = new Camera();
+      const yaw = (rnd() - 0.5) * 2 * Math.PI;
+      c.set(rnd() * 100, rnd() * 100, 9.2, yaw);
+      const bear = (rnd() - 0.5) * 2.4;
+      const x = c.x + Math.cos(yaw + bear) * (40 + rnd() * 200);
+      const y = c.y + Math.sin(yaw + bear) * (40 + rnd() * 200);
+      const h = rnd() * 6.28;
+      footprintAngles(c, x, y, h, lo, hi, 0);
+      let a0 = Infinity;
+      let a1 = -Infinity;
+      for (const [u, v] of [
+        [1, 1],
+        [1, -1],
+        [-1, 1],
+        [-1, -1],
+      ] as const) {
+        const cx = x + u * 20.8 * Math.cos(h) - v * 9 * Math.sin(h);
+        const cy = y + u * 20.8 * Math.sin(h) + v * 9 * Math.cos(h);
+        const b = wrap(Math.atan2(cy - c.y, cx - c.x) - yaw);
+        a0 = Math.min(a0, b);
+        a1 = Math.max(a1, b);
+      }
+      expect(lo[0]).toBeCloseTo(a0, 9);
+      expect(hi[0]).toBeCloseTo(a1, 9);
+    }
+  });
+
+  it('keeps two cars behind the same wall in their order', async () => {
+    const { orderCarsAgainstCars } = await import('../src/gfx/fpv/view');
+    const { Camera } = await import('../src/gfx/fpv/engine');
+    const c = new Camera();
+    c.set(0, 0, 9.2, 0);
+    // The wall pass raised both to just above the wall (d 100); the inner car must still be drawn last.
+    const inner = { d: 100.01, car: {}, x: 90, y: 13, h: 0, wallLo: 100 };
+    const outer = { d: 100.01, car: {}, x: 90, y: 39, h: 0, wallLo: 100 };
+    expect(carPaintOrder(outer.x, outer.y, 0, inner.x, inner.y, 0, 0, 0)).toBe(1);
+    orderCarsAgainstCars(c, [inner, outer] as unknown as Parameters<typeof orderCarsAgainstCars>[1]);
+    expect(inner.d).toBeLessThan(outer.d);
+    expect(inner.d).toBeGreaterThan(inner.wallLo);
+  });
+
+  it('does not order a rival that wraps round the camera', async () => {
+    const { orderCarsAgainstCars } = await import('../src/gfx/fpv/view');
+    const { Camera } = await import('../src/gfx/fpv/engine');
+    const c = new Camera();
+    c.set(0, 0, 9.2, 0);
+    // A rival on top of the player's car spans more than half a turn around the eye.
+    // Depths are set so that ordering the pair would move one of them; skipping it leaves both alone.
+    const onTop = { d: 1, car: {}, x: 1, y: 0, h: 0 };
+    const ahead = { d: 0.5, car: {}, x: 60, y: 0, h: 0 };
+    expect(carPaintOrder(ahead.x, ahead.y, 0, onTop.x, onTop.y, 0, 0, 0)).toBe(1);
+    orderCarsAgainstCars(c, [onTop, ahead] as unknown as Parameters<typeof orderCarsAgainstCars>[1]);
+    expect(onTop.d).toBe(1);
+    expect(ahead.d).toBe(0.5);
   });
 
   it('never moves a car behind a wall it stands in front of', async () => {
