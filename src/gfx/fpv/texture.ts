@@ -106,29 +106,40 @@ function toCamera(c: Camera, p: P3, i: number): void {
   cb[i] = p[2] - c.z;
 }
 
+let clipN = 0;
+let clipCam: Camera;
+
+function emitCell(a: number, b: number, d: number, u: number, v: number): void {
+  const c = clipCam;
+  sx[clipN] = c.ox + (c.flip * c.focal * a) / d;
+  sy[clipN] = c.oy - (c.focal * b) / d;
+  us[clipN] = u;
+  vs[clipN] = v;
+  clipN++;
+}
+
 // Clips the cell against the near plane (keeping the texture coordinates) and projects it into sx/sy/us/vs.
 // Returns the number of points (0, or 3 to 5).
 function clipCell(c: Camera): number {
-  let m = 0;
-  const emit = (a: number, b: number, d: number, u: number, v: number) => {
-    sx[m] = c.ox + (c.flip * c.focal * a) / d;
-    sy[m] = c.oy - (c.focal * b) / d;
-    us[m] = u;
-    vs[m] = v;
-    m++;
-  };
+  clipN = 0;
+  clipCam = c;
   for (let i = 0; i < 4; i++) {
     const p = (i + 3) % 4;
     const inC = cd[i]! >= NEAR;
     const inP = cd[p]! >= NEAR;
     if (inC !== inP) {
       const t = (NEAR - cd[p]!) / (cd[i]! - cd[p]!);
-      const lerp = (x: number, y: number) => x + (y - x) * t;
-      emit(lerp(ca[p]!, ca[i]!), lerp(cb[p]!, cb[i]!), NEAR, lerp(cu[p]!, cu[i]!), lerp(cv[p]!, cv[i]!));
+      emitCell(
+        ca[p]! + (ca[i]! - ca[p]!) * t,
+        cb[p]! + (cb[i]! - cb[p]!) * t,
+        NEAR,
+        cu[p]! + (cu[i]! - cu[p]!) * t,
+        cv[p]! + (cv[i]! - cv[p]!) * t,
+      );
     }
-    if (inC) emit(ca[i]!, cb[i]!, cd[i]!, cu[i]!, cv[i]!);
+    if (inC) emitCell(ca[i]!, cb[i]!, cd[i]!, cu[i]!, cv[i]!);
   }
-  return m;
+  return clipN;
 }
 
 function tri(g: CanvasRenderingContext2D, img: HTMLCanvasElement, i0: number, i1: number, i2: number, u: number[], v: number[]): void {
@@ -173,64 +184,89 @@ const MIN_PX = 5;
 const us = [0, 0, 0, 0, 0, 0, 0, 0];
 const vs = [0, 0, 0, 0, 0, 0, 0, 0];
 
+// A cell that reaches behind the near plane is cut into SPLIT × SPLIT smaller cells before clipping, so the
+// affine mapping of each piece spans a short depth range and the texture does not skew next to the camera.
+const SPLIT = 4;
+let curQ: TexQuad;
+let curImg: HTMLCanvasElement;
+let curFade = 1;
+
+function cornerAt(out: P3, s: number, t: number): void {
+  const [tl, tr, br, bl] = curQ.pts;
+  for (let k = 0; k < 3; k++) {
+    const top = tl[k]! + (tr[k]! - tl[k]!) * s;
+    const bot = bl[k]! + (br[k]! - bl[k]!) * s;
+    out[k] = top + (bot - top) * t;
+  }
+}
+
+function drawCell(g: CanvasRenderingContext2D, c: Camera, s0: number, s1: number, t0: number, t1: number, split: boolean): void {
+  cornerAt(cell[0]!, s0, t0);
+  cornerAt(cell[1]!, s1, t0);
+  cornerAt(cell[2]!, s1, t1);
+  cornerAt(cell[3]!, s0, t1);
+  let behind = 0;
+  for (let k = 0; k < 4; k++) {
+    toCamera(c, cell[k]!, k);
+    if (cd[k]! < NEAR) behind++;
+  }
+  if (behind === 4) return;
+  if (behind > 0 && split) {
+    for (let j = 0; j < SPLIT; j++) {
+      for (let i = 0; i < SPLIT; i++) {
+        const a0 = s0 + ((s1 - s0) * i) / SPLIT;
+        const a1 = s0 + ((s1 - s0) * (i + 1)) / SPLIT;
+        const b0 = t0 + ((t1 - t0) * j) / SPLIT;
+        const b1 = t0 + ((t1 - t0) * (j + 1)) / SPLIT;
+        drawCell(g, c, a0, a1, b0, b1, false);
+      }
+    }
+    return;
+  }
+  const W = curImg.width;
+  const H = curImg.height;
+  const du = curQ.u1 - curQ.u0;
+  const ua = (curQ.u0 + du * s0) * W;
+  const ub = (curQ.u0 + du * s1) * W;
+  cu[0] = ua;
+  cu[1] = ub;
+  cu[2] = ub;
+  cu[3] = ua;
+  cv[0] = t0 * H;
+  cv[1] = t0 * H;
+  cv[2] = t1 * H;
+  cv[3] = t1 * H;
+  const m = clipCell(c);
+  if (m < 3) return;
+  let x0 = Infinity;
+  let x1 = -Infinity;
+  let y0 = Infinity;
+  let y1 = -Infinity;
+  for (let k = 0; k < m; k++) {
+    x0 = Math.min(x0, sx[k]!);
+    x1 = Math.max(x1, sx[k]!);
+    y0 = Math.min(y0, sy[k]!);
+    y1 = Math.max(y1, sy[k]!);
+  }
+  // Pieces of a split cell are judged by the size of the whole cell, so they do not drop out one by one.
+  const lod = split ? Math.min(1, Math.max((y1 - y0) / MIN_PX - 1, (x1 - x0) / (MIN_PX * 4) - 1)) : 1;
+  if (lod <= 0) return;
+  g.globalAlpha = curFade * lod;
+  for (let k = 1; k < m - 1; k++) tri(g, curImg, 0, k, k + 1, us, vs);
+}
+
 export function drawTexQuad(g: CanvasRenderingContext2D, c: Camera, q: TexQuad, dist: number): void {
   if (!texFacing(q, c)) return;
   const fade = dist > c.fogNear ? Math.max(0, 1 - (dist - c.fogNear) / (q.far - c.fogNear)) : 1;
   if (fade <= 0.02) return;
-  const img = q.tex();
-  const [tl, tr, br, bl] = q.pts;
-  const W = img.width;
-  const H = img.height;
-  const at = (out: P3, s: number, t: number) => {
-    for (let k = 0; k < 3; k++) {
-      const top = tl[k]! + (tr[k]! - tl[k]!) * s;
-      const bot = bl[k]! + (br[k]! - bl[k]!) * s;
-      out[k] = top + (bot - top) * t;
-    }
-  };
+  curQ = q;
+  curImg = q.tex();
+  curFade = fade;
   const smooth = g.imageSmoothingEnabled;
   g.imageSmoothingEnabled = true;
   g.globalAlpha = fade;
-  const du = q.u1 - q.u0;
   for (let j = 0; j < q.rows; j++) {
-    for (let i = 0; i < q.cols; i++) {
-      const s0 = i / q.cols;
-      const s1 = (i + 1) / q.cols;
-      const t0 = j / q.rows;
-      const t1 = (j + 1) / q.rows;
-      at(cell[0]!, s0, t0);
-      at(cell[1]!, s1, t0);
-      at(cell[2]!, s1, t1);
-      at(cell[3]!, s0, t1);
-      const ua = (q.u0 + du * s0) * W;
-      const ub = (q.u0 + du * s1) * W;
-      cu[0] = ua;
-      cu[1] = ub;
-      cu[2] = ub;
-      cu[3] = ua;
-      cv[0] = t0 * H;
-      cv[1] = t0 * H;
-      cv[2] = t1 * H;
-      cv[3] = t1 * H;
-      for (let k = 0; k < 4; k++) toCamera(c, cell[k]!, k);
-      // A cell reaching behind the near plane is clipped instead of dropped, so signs do not vanish up close.
-      const m = clipCell(c);
-      if (m < 3) continue;
-      let x0 = Infinity;
-      let x1 = -Infinity;
-      let y0 = Infinity;
-      let y1 = -Infinity;
-      for (let k = 0; k < m; k++) {
-        x0 = Math.min(x0, sx[k]!);
-        x1 = Math.max(x1, sx[k]!);
-        y0 = Math.min(y0, sy[k]!);
-        y1 = Math.max(y1, sy[k]!);
-      }
-      const lod = Math.min(1, Math.max((y1 - y0) / MIN_PX - 1, (x1 - x0) / (MIN_PX * 4) - 1));
-      if (lod <= 0) continue;
-      g.globalAlpha = fade * lod;
-      for (let k = 1; k < m - 1; k++) tri(g, img, 0, k, k + 1, us, vs);
-    }
+    for (let i = 0; i < q.cols; i++) drawCell(g, c, i / q.cols, (i + 1) / q.cols, j / q.rows, (j + 1) / q.rows, true);
   }
   g.globalAlpha = 1;
   g.imageSmoothingEnabled = smooth;
