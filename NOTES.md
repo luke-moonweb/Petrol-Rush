@@ -32,6 +32,10 @@ Quality gate: see `CABIN_QUALITY.md` (Done-when playtester questions).
 - Wheel and gloves are a flat 2D sprite.
 - fps at the target sizes was not read live (hidden browser pane); overlay cost was measured with `performance.now()` and a GPU-synced A/B instead.
 
+## Round 2 (rival cars)
+
+Rivals seen from the seat use their own closed model with the livery on the rear, nose and sides (`src/gfx/carFpv.ts`, drawn by `src/gfx/fpv/cars.ts`); top-down sprites are pixel-identical. Details, hole counts and timings: `CABIN_QUALITY.md`, "Round 2".
+
 ## Scope
 
 Cabin drawing in `src/gfx/fpv/cockpit.ts`, readout and per-race cabin state in `src/gfx/fpv/cabin.ts` (tests in `tests/fpv.test.ts`), frame plumbing in `src/states/race/state.ts`, shared `CONFIG.LOW_FUEL`. No speed-warp, G-force roll, or chase-cam.
