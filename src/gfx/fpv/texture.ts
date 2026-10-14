@@ -82,8 +82,8 @@ export function texFacing(q: TexQuad, c: Camera): boolean {
   return q.normal[0] * (c.x - q.cx) + q.normal[1] * (c.y - q.cy) + q.normal[2] * (c.z - q.cz) > 0;
 }
 
-const sx = new Float32Array(4);
-const sy = new Float32Array(4);
+const sx = new Float32Array(8);
+const sy = new Float32Array(8);
 const cell: P3[] = [
   [0, 0, 0],
   [0, 0, 0],
@@ -91,15 +91,44 @@ const cell: P3[] = [
   [0, 0, 0],
 ];
 
-function toScreen(c: Camera, p: P3, i: number): boolean {
+// Camera-space corners of the current cell (lateral, height, depth) with their texture coordinates.
+const ca = new Float32Array(4);
+const cb = new Float32Array(4);
+const cd = new Float32Array(4);
+const cu = [0, 0, 0, 0];
+const cv = [0, 0, 0, 0];
+
+function toCamera(c: Camera, p: P3, i: number): void {
   const dx = p[0] - c.x;
   const dy = p[1] - c.y;
-  const cz = dx * c.cos + dy * c.sin;
-  if (cz < NEAR) return false;
-  const cx = -dx * c.sin + dy * c.cos;
-  sx[i] = c.ox + (c.flip * c.focal * cx) / cz;
-  sy[i] = c.oy - (c.focal * (p[2] - c.z)) / cz;
-  return true;
+  cd[i] = dx * c.cos + dy * c.sin;
+  ca[i] = -dx * c.sin + dy * c.cos;
+  cb[i] = p[2] - c.z;
+}
+
+// Clips the cell against the near plane (keeping the texture coordinates) and projects it into sx/sy/us/vs.
+// Returns the number of points (0, or 3 to 5).
+function clipCell(c: Camera): number {
+  let m = 0;
+  const emit = (a: number, b: number, d: number, u: number, v: number) => {
+    sx[m] = c.ox + (c.flip * c.focal * a) / d;
+    sy[m] = c.oy - (c.focal * b) / d;
+    us[m] = u;
+    vs[m] = v;
+    m++;
+  };
+  for (let i = 0; i < 4; i++) {
+    const p = (i + 3) % 4;
+    const inC = cd[i]! >= NEAR;
+    const inP = cd[p]! >= NEAR;
+    if (inC !== inP) {
+      const t = (NEAR - cd[p]!) / (cd[i]! - cd[p]!);
+      const lerp = (x: number, y: number) => x + (y - x) * t;
+      emit(lerp(ca[p]!, ca[i]!), lerp(cb[p]!, cb[i]!), NEAR, lerp(cu[p]!, cu[i]!), lerp(cv[p]!, cv[i]!));
+    }
+    if (inC) emit(ca[i]!, cb[i]!, cd[i]!, cu[i]!, cv[i]!);
+  }
+  return m;
 }
 
 function tri(g: CanvasRenderingContext2D, img: HTMLCanvasElement, i0: number, i1: number, i2: number, u: number[], v: number[]): void {
@@ -141,8 +170,8 @@ function tri(g: CanvasRenderingContext2D, img: HTMLCanvasElement, i0: number, i1
 }
 
 const MIN_PX = 5;
-const us = [0, 0, 0, 0];
-const vs = [0, 0, 0, 0];
+const us = [0, 0, 0, 0, 0, 0, 0, 0];
+const vs = [0, 0, 0, 0, 0, 0, 0, 0];
 
 export function drawTexQuad(g: CanvasRenderingContext2D, c: Camera, q: TexQuad, dist: number): void {
   if (!texFacing(q, c)) return;
@@ -173,26 +202,34 @@ export function drawTexQuad(g: CanvasRenderingContext2D, c: Camera, q: TexQuad, 
       at(cell[1]!, s1, t0);
       at(cell[2]!, s1, t1);
       at(cell[3]!, s0, t1);
-      let ok = true;
-      for (let k = 0; k < 4; k++) ok = toScreen(c, cell[k]!, k) && ok;
-      if (!ok) continue;
-      const hgt = Math.max(sy[0]!, sy[1]!, sy[2]!, sy[3]!) - Math.min(sy[0]!, sy[1]!, sy[2]!, sy[3]!);
-      const wid = Math.max(sx[0]!, sx[1]!, sx[2]!, sx[3]!) - Math.min(sx[0]!, sx[1]!, sx[2]!, sx[3]!);
-      const lod = Math.min(1, Math.max(hgt / MIN_PX - 1, wid / (MIN_PX * 4) - 1));
-      if (lod <= 0) continue;
-      g.globalAlpha = fade * lod;
       const ua = (q.u0 + du * s0) * W;
       const ub = (q.u0 + du * s1) * W;
-      us[0] = ua;
-      us[1] = ub;
-      us[2] = ub;
-      us[3] = ua;
-      vs[0] = t0 * H;
-      vs[1] = t0 * H;
-      vs[2] = t1 * H;
-      vs[3] = t1 * H;
-      tri(g, img, 0, 1, 2, us, vs);
-      tri(g, img, 0, 2, 3, us, vs);
+      cu[0] = ua;
+      cu[1] = ub;
+      cu[2] = ub;
+      cu[3] = ua;
+      cv[0] = t0 * H;
+      cv[1] = t0 * H;
+      cv[2] = t1 * H;
+      cv[3] = t1 * H;
+      for (let k = 0; k < 4; k++) toCamera(c, cell[k]!, k);
+      // A cell reaching behind the near plane is clipped instead of dropped, so signs do not vanish up close.
+      const m = clipCell(c);
+      if (m < 3) continue;
+      let x0 = Infinity;
+      let x1 = -Infinity;
+      let y0 = Infinity;
+      let y1 = -Infinity;
+      for (let k = 0; k < m; k++) {
+        x0 = Math.min(x0, sx[k]!);
+        x1 = Math.max(x1, sx[k]!);
+        y0 = Math.min(y0, sy[k]!);
+        y1 = Math.max(y1, sy[k]!);
+      }
+      const lod = Math.min(1, Math.max((y1 - y0) / MIN_PX - 1, (x1 - x0) / (MIN_PX * 4) - 1));
+      if (lod <= 0) continue;
+      g.globalAlpha = fade * lod;
+      for (let k = 1; k < m - 1; k++) tri(g, img, 0, k, k + 1, us, vs);
     }
   }
   g.globalAlpha = 1;

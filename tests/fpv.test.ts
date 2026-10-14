@@ -14,7 +14,7 @@ import {
 import { Camera, clipProject, outX, outY } from '../src/gfx/fpv/engine';
 import { upright } from '../src/gfx/fpv/geom';
 import { buildScene } from '../src/gfx/fpv/scene';
-import { texFacing, texQuad } from '../src/gfx/fpv/texture';
+import { drawTexQuad, texFacing, texQuad } from '../src/gfx/fpv/texture';
 import type { Car } from '../src/race/car';
 import { Race } from '../src/race/race';
 import { PR } from '../src/ui/theme';
@@ -72,6 +72,37 @@ describe('first-person renderer', () => {
     expect(texFacing(q, c)).toBe(true);
     c.set(10, -30, 3, Math.PI / 2);
     expect(texFacing(q, c)).toBe(false);
+  });
+
+  it('clips a sign that reaches behind the camera instead of dropping it', () => {
+    const img = { width: 64, height: 32 } as HTMLCanvasElement;
+    const q = texQuad(upright(0, 10, 20, 10, 0, 5), () => img);
+    let drawn = 0;
+    const noop = () => {};
+    const g = {
+      imageSmoothingEnabled: false,
+      globalAlpha: 1,
+      save: noop,
+      restore: noop,
+      beginPath: noop,
+      moveTo: noop,
+      lineTo: noop,
+      closePath: noop,
+      clip: noop,
+      transform: noop,
+      drawImage: () => drawn++,
+    } as unknown as CanvasRenderingContext2D;
+    const c = camera();
+    // Looking along the sign from 1 unit off its near end: that end is closer than the near plane.
+    c.set(21, 12, 3, Math.PI);
+    expect(texFacing(q, c)).toBe(true);
+    drawTexQuad(g, c, q, 10);
+    expect(drawn).toBeGreaterThan(0);
+    // Wholly in front, a cell is still drawn as two triangles.
+    drawn = 0;
+    c.set(10, 60, 3, -Math.PI / 2);
+    drawTexQuad(g, c, q, 50);
+    expect(drawn).toBe(2);
   });
 });
 
