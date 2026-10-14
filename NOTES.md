@@ -8,7 +8,7 @@ Quality gate: see `CABIN_QUALITY.md` (Done-when playtester questions).
 
 1. From this worktree: `npm install` (if needed) then `npm run dev`.
 2. Start a race at night (default oval night look).
-3. Toggle **cockpit camera** with **KeyC** (or prefs camera = cockpit). Top-down still works — toggle back to compare.
+3. Toggle **cockpit camera** with **KeyC** (every new race starts top-down). Top-down still works — toggle back to compare.
 4. Cold playtest checklist:
    - Do you feel **inside** a car? Roof header, A-pillars, livery hood, binnacle on the dash, wheel with gloves at 10 and 2.
    - Can you still see the **track and rivals** clearly? The centre lane and the race-info corridor under the mirror stay clear; flecks sit at the edges.

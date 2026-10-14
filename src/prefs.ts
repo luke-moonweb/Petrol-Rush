@@ -9,6 +9,7 @@ export interface Prefs {
   camera: CameraMode;
 }
 
+// `camera` is not restored: every race starts top-down (see RaceState.newRace).
 export const DEFAULT_PREFS: Prefs = { penalties: true, speedBar: true, collisions: 'realistic', camera: 'top' };
 
 const STORAGE_KEY = 'petrolrush.prefs';
@@ -22,7 +23,6 @@ export function loadPrefs(): Prefs {
     if (typeof o.penalties === 'boolean') p.penalties = o.penalties;
     if (typeof o.speedBar === 'boolean') p.speedBar = o.speedBar;
     if (o.collisions === 'realistic' || o.collisions === 'classic') p.collisions = o.collisions;
-    if (o.camera === 'top' || o.camera === 'cockpit') p.camera = o.camera;
   } catch {}
   return p;
 }
