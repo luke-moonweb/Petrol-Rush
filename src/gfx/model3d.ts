@@ -15,11 +15,27 @@ export const PITCH = (45 * Math.PI) / 180;
 const SIN_P = Math.sin(PITCH);
 const COS_P = Math.cos(PITCH);
 const TO_CAMERA: Vec3 = [0, COS_P, SIN_P];
-const LIGHT = normalize([-0.35, 0.55, 0.76]);
+// Sun direction shared by the top-down sprites and the cockpit rival cars.
+export const LIGHT = normalize([-0.35, 0.55, 0.76]);
 
 function normalize(v: Vec3): Vec3 {
   const l = Math.hypot(v[0], v[1], v[2]);
   return [v[0] / l, v[1] / l, v[2] / l];
+}
+
+// Polygon normal from its winding (Newell's method): counter-clockwise seen from outside points outward.
+export function newellNormal(pts: readonly Vec3[]): Vec3 {
+  let nx = 0;
+  let ny = 0;
+  let nz = 0;
+  for (let i = 0; i < pts.length; i++) {
+    const a = pts[i]!;
+    const b = pts[(i + 1) % pts.length]!;
+    nx += (a[1] - b[1]) * (a[2] + b[2]);
+    ny += (a[2] - b[2]) * (a[0] + b[0]);
+    nz += (a[0] - b[0]) * (a[1] + b[1]);
+  }
+  return normalize([nx, ny, nz]);
 }
 
 function rotZ(p: Vec3, c: number, s: number): Vec3 {

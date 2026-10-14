@@ -181,6 +181,10 @@ function nightLighting(g: CanvasRenderingContext2D, rng: Rng): void {
     mast(x, CY - R_OUT - 2);
     mast(x + 100, CY + R_OUT + 14);
   }
+  for (const cx of [CX_L, CX_R]) {
+    const s = cx === CX_R ? 1 : -1;
+    for (let a = -1.2; a <= 1.21; a += 0.6) mast(cx + s * Math.cos(a) * (R_OUT + 14), CY + Math.sin(a) * (R_OUT + 14));
+  }
   for (let i = 0; i < 40; i++) {
     const x = rng() * WORLD_W;
     const y = rng() * H;

@@ -4,6 +4,7 @@ import { aiInput } from '../src/race/ai';
 import { type Car, initProgress, lapsCompleted, updateProgress } from '../src/race/car';
 import { NO_INPUT } from '../src/race/physics';
 import { Race } from '../src/race/race';
+import { NUM_SECTORS } from '../src/track/common';
 import {
   CY,
   PIT_LINE_IN_X,
@@ -49,6 +50,19 @@ describe('lap counting by sectors', () => {
     drive(car, -SECTOR_LEN * 0.5, 100, 5);
     expect(car.sectorsPassed).toBe(before);
     expect(lapsCompleted(car)).toBe(0);
+  });
+});
+
+describe('shown position', () => {
+  it('uses the classification once the car has finished and road order before', () => {
+    const race = new Race({ ...DEFAULT_OPTIONS, cars: 3 }, 1);
+    const p = race.player;
+    expect(race.shownPosition(p)).toBe(race.position(p));
+    p.finished = true;
+    p.finalSectors = race.laps * NUM_SECTORS;
+    p.finalProgress = -1e9;
+    expect(race.position(p)).toBe(3);
+    expect(race.shownPosition(p)).toBe(1);
   });
 });
 

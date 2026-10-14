@@ -4,7 +4,7 @@ import { shade } from '../../sprites';
 import { drawHauler3d } from '../../vehicles';
 import { COL, FONT_BLACK } from '../style';
 
-const TEAMS = [
+export const TEAMS = [
   { name: 'ROSSETTI', a: '#D8141E', b: '#FFD200', t: '#FFF8E8' },
   { name: 'RAGING BULL', a: '#1A2A6C', b: '#E8202A', t: '#FFD200' },
   { name: 'SILBERPFEIL', a: '#B8BCC4', b: '#00A19B', t: '#17142B' },
@@ -25,17 +25,17 @@ export const STAND_X0 = FINISH_X - 215;
 export const STAND_X1 = FINISH_X + 215;
 export const STAND_TOP = CY - 77;
 const ROOF_FRONT = CY - 39;
-const PAD_TOP = CY - 89;
-const UNIT_TOP = CY - 29;
-const RC_TOP = CY - 61;
-const RC_X0 = STAND_X1 + 15;
-const RC_X1 = RC_X0 + 100;
-const PAD_L0 = 440;
+export const PAD_TOP = CY - 89;
+export const UNIT_TOP = CY - 29;
+export const RC_TOP = CY - 61;
+export const RC_X0 = STAND_X1 + 15;
+export const RC_X1 = RC_X0 + 100;
+export const PAD_L0 = 440;
 const PAD_R0 = RC_X1 + 18;
-const UNIT_W = 72;
-const UNIT_GAP = 3;
+export const UNIT_W = 72;
+export const UNIT_GAP = 3;
 
-function unitXs(): number[] {
+export function unitXs(): number[] {
   const xs: number[] = [];
   for (let i = 0; i < 6; i++) xs.push(PAD_L0 + i * (UNIT_W + UNIT_GAP));
   for (let i = 0; i < 4; i++) xs.push(PAD_R0 + i * (UNIT_W + UNIT_GAP) + 4);

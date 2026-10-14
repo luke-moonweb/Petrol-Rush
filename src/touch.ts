@@ -46,6 +46,7 @@ const LAYOUTS: Record<TouchLayout, { left: ButtonSpec[][]; right: ButtonSpec[][]
       [
         { action: 'mute', kind: 'tap', html: ICON.sound, cls: 'tc-small tc-sound' },
         { action: 'fullscreen', kind: 'tap', html: ICON.fullscreen, cls: 'tc-small tc-fs' },
+        { action: 'camera', kind: 'tap', html: 'CAM', cls: 'tc-small tc-text' },
       ],
       [
         { action: 'left', kind: 'hold', html: ICON.left, cls: 'tc-big', group: 'steer' },
@@ -279,8 +280,9 @@ export class TouchControls {
     for (const a of this.holdActions) this.input.setVirtual(a, actions.has(a));
   }
 
-  update(layout: TouchLayout): void {
+  update(layout: TouchLayout, camera = true): void {
     this.root.classList.toggle('tc-muted', this.isMuted());
+    this.root.classList.toggle('tc-nocam', !camera);
     if (layout === this.layout) return;
     this.releaseAll();
     this.layout = layout;

@@ -71,7 +71,7 @@ export function islandOutline(dy: number): [number, number][] {
   return pts;
 }
 
-function islandHull(): [number, number][] {
+export function islandHull(): [number, number][] {
   const roadY = CY + ISLE_ROAD_R + CURB_H;
   const pts: [number, number][] = [
     [CX_L, CY - ISLE_R],

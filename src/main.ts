@@ -109,7 +109,7 @@ function frame(now: number): void {
     steps++;
   }
   if (steps >= maxSteps) acc = 0;
-  touch?.update(game.state.touchLayout?.() ?? 'menu');
+  touch?.update(game.state.touchLayout?.() ?? 'menu', game.state.touchCamera?.() ?? true);
   ctx.setTransform(renderScale, 0, 0, renderScale, 0, 0);
   ctx.imageSmoothingEnabled = false;
   clearHits(renderScale);
