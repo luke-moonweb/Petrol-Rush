@@ -248,7 +248,8 @@ function drawCell(g: CanvasRenderingContext2D, c: Camera, s0: number, s1: number
     y0 = Math.min(y0, sy[k]!);
     y1 = Math.max(y1, sy[k]!);
   }
-  // Pieces of a split cell are judged by the size of the whole cell, so they do not drop out one by one.
+  // Pieces of a split cell are always drawn in full: the cell reaches past the near plane, so it is large on
+  // screen, and judging each piece on its own would make pieces drop out one by one.
   const lod = split ? Math.min(1, Math.max((y1 - y0) / MIN_PX - 1, (x1 - x0) / (MIN_PX * 4) - 1)) : 1;
   if (lod <= 0) return;
   g.globalAlpha = curFade * lod;
