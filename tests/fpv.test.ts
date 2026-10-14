@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { CONFIG, DEFAULT_OPTIONS } from '../src/config';
 import {
   type CabinInput,
@@ -76,59 +76,89 @@ describe('first-person renderer', () => {
 });
 
 describe('cockpit camera', () => {
+  const race = {} as Race;
   it('stays locked to the heading while driving and limits the turn during a spin', async () => {
-    const { cameraYaw } = await import('../src/gfx/fpv/view');
+    const { cameraYaw, syncCameraYaw } = await import('../src/gfx/fpv/view');
+    syncCameraYaw({} as Race, 0);
     const car = { spinTime: 0, speed: 120, moveAngle: 0 } as unknown as Car;
-    for (let i = 0; i < 30; i++) expect(cameraYaw(car, i * 0.05)).toBe(i * 0.05);
+    for (let i = 0; i < 30; i++) expect(cameraYaw(car, i * 0.05, i * 0.016)).toBe(i * 0.05);
     const spin = { spinTime: 1, speed: 120, moveAngle: 0 } as unknown as Car;
     for (let i = 0; i < 30; i++) {
-      const yaw = cameraYaw(spin, i * 0.4);
+      const yaw = cameraYaw(spin, i * 0.4, 1 + i * 0.016);
       expect(Math.abs(Math.atan2(Math.sin(yaw), Math.cos(yaw)))).toBeLessThanOrEqual(1.6);
     }
   });
 
-  it('eases back to the heading after a spin without a final jump', async () => {
-    const { cameraYaw } = await import('../src/gfx/fpv/view');
-    let now = 1000;
-    const clock = vi.spyOn(performance, 'now').mockImplementation(() => now);
+  it('eases back to the heading after a spin without a final jump, on race time', async () => {
+    const { cameraYaw, syncCameraYaw } = await import('../src/gfx/fpv/view');
+    let now = 100;
+    syncCameraYaw(race, now);
     const spin = { spinTime: 1, speed: 60, moveAngle: 0 } as unknown as Car;
     for (let i = 0; i < 40; i++) {
-      now += 16;
-      cameraYaw(spin, i * 0.12);
+      now += 0.016;
+      cameraYaw(spin, i * 0.12, now);
     }
     const done = { spinTime: 0, speed: 20, moveAngle: 0 } as unknown as Car;
-    let prev = cameraYaw(done, 2.98);
+    let prev = cameraYaw(done, 2.98, now);
     let maxStep = 0;
     for (let i = 0; i < 200; i++) {
-      now += 16;
-      const yaw = cameraYaw(done, 2.98);
+      now += 0.016;
+      const yaw = cameraYaw(done, 2.98, now);
       maxStep = Math.max(maxStep, Math.abs(Math.atan2(Math.sin(yaw - prev), Math.cos(yaw - prev))));
       prev = yaw;
     }
-    clock.mockRestore();
     expect(prev).toBe(2.98);
     expect(maxStep).toBeLessThanOrEqual(2.5 * 0.016 + 1e-9);
   });
 
   it('catches up with the heading when a corner follows a spin', async () => {
-    const { cameraYaw } = await import('../src/gfx/fpv/view');
-    let now = 5000;
-    const clock = vi.spyOn(performance, 'now').mockImplementation(() => now);
+    const { cameraYaw, syncCameraYaw } = await import('../src/gfx/fpv/view');
+    let now = 200;
+    syncCameraYaw(race, now);
     const spin = { spinTime: 1, speed: 60, moveAngle: 0 } as unknown as Car;
     for (let i = 0; i < 40; i++) {
-      now += 16;
-      cameraYaw(spin, i * 0.12);
+      now += 0.016;
+      cameraYaw(spin, i * 0.12, now);
     }
     const done = { spinTime: 0, speed: 60, moveAngle: 0 } as unknown as Car;
     let heading = 1;
     let yaw = 0;
     for (let i = 0; i < 180; i++) {
-      now += 16;
+      now += 0.016;
       heading += 1.4 * 0.016;
-      yaw = cameraYaw(done, heading);
+      yaw = cameraYaw(done, heading, now);
     }
-    clock.mockRestore();
     expect(yaw).toBe(heading);
+  });
+
+  it('drops a leftover spin swing after a camera switch, a restart or a new race', async () => {
+    const { cameraYaw, cockpitCameraYaw, syncCameraYaw } = await import('../src/gfx/fpv/view');
+    const spin = { spinTime: 1, speed: 60, moveAngle: 0 } as unknown as Car;
+    const done = { spinTime: 0, speed: 60, moveAngle: 0 } as unknown as Car;
+    const swing = (r: Race, t0: number) => {
+      syncCameraYaw(r, t0);
+      for (let i = 0; i < 40; i++) cameraYaw(spin, 1.5, t0 + i * 0.016);
+      return t0 + 40 * 0.016;
+    };
+    // Paused: race time stands still, the swing is kept.
+    let t = swing(race, 300);
+    syncCameraYaw(race, t);
+    expect(cameraYaw(done, 1.5, t)).not.toBe(1.5);
+    expect(cockpitCameraYaw(race)).not.toBe(1.5);
+    // Top-down shown for a second: the cockpit starts on the heading.
+    t = swing(race, 400);
+    syncCameraYaw(race, t + 1);
+    expect(cameraYaw(done, 1.5, t + 1)).toBe(1.5);
+    // Restart: race time goes back.
+    t = swing(race, 500);
+    syncCameraYaw(race, 0);
+    expect(cameraYaw(done, 1.5, 0)).toBe(1.5);
+    // A new race.
+    t = swing(race, 600);
+    const other = {} as Race;
+    expect(Number.isNaN(cockpitCameraYaw(other))).toBe(true);
+    syncCameraYaw(other, t);
+    expect(cameraYaw(done, 1.5, t)).toBe(1.5);
   });
 });
 
