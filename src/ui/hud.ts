@@ -77,7 +77,7 @@ export function drawHudTop(g: CanvasRenderingContext2D, race: Race, notice: { te
   x += label(g, 'BEHIND', x, y) + 5;
   x += glowText(g, String(race.lapsBehind(p)), x, y, `13px ${FONT_BLACK}`, PR.tealLight, 'rgba(18,181,166,0.9)');
 
-  const pos = String(race.position(p));
+  const pos = String(race.shownPosition(p));
   const of = `/${race.cars.length}`;
   g.font = `16px ${FONT_BLACK}`;
   const wPos = g.measureText(pos).width;
@@ -155,7 +155,8 @@ function gapLabel(race: Race, i: number, list: ReturnType<Race['standings']>): s
   return gap === null ? '—' : `+${gap.toFixed(2)}`;
 }
 
-export function drawHudPanel(g: CanvasRenderingContext2D, race: Race): void {
+/** `gauges` is false in the cockpit, whose dash carries the speedo and fuel gauge itself. */
+export function drawHudPanel(g: CanvasRenderingContext2D, race: Race, gauges = true): void {
   const b = layout.panel;
   g.fillStyle = PR.night;
   g.fillRect(b.x, b.y, b.w, b.h);
@@ -164,12 +165,17 @@ export function drawHudPanel(g: CanvasRenderingContext2D, race: Race): void {
   if (layout.mode === 'wide') {
     g.fillRect(b.x + b.w - 1, b.y, 1, b.h);
     drawTower(g, race, { x: b.x, y: b.y, w: b.w, h: b.h }, 1);
+    if (!gauges) return;
     drawSpeedo(g, p.speed, b.x + 62, b.y + 372, 54);
     drawFuelGauge(g, p.fuel, race.time, b.x + 62, b.y + 432, 34);
     return;
   }
-  const gaugeW = 132;
   g.fillRect(b.x, b.y, b.w, 1);
+  if (!gauges) {
+    drawTower(g, race, { x: b.x, y: b.y, w: b.w, h: b.h }, 2);
+    return;
+  }
+  const gaugeW = 132;
   g.fillRect(b.x + gaugeW, b.y, 1, b.h);
   drawSpeedo(g, p.speed, b.x + gaugeW / 2, b.y + 72, 54);
   drawFuelGauge(g, p.fuel, race.time, b.x + gaugeW / 2, b.y + 146, 34);
@@ -354,7 +360,7 @@ export function drawFuelGauge(g: CanvasRenderingContext2D, fuel: number, time: n
   g.strokeStyle = PR.red;
   g.lineWidth = 3;
   g.beginPath();
-  g.arc(cx, cy, r - 8, ang(0), ang(0.12));
+  g.arc(cx, cy, r - 8, ang(0), ang(CONFIG.LOW_FUEL));
   g.stroke();
   g.strokeStyle = PR.amber;
   for (let k = 0; k <= 4; k++) {
@@ -374,7 +380,7 @@ export function drawFuelGauge(g: CanvasRenderingContext2D, fuel: number, time: n
   g.fillText('½', cx, cy - r + 15);
   g.fillText('F', cx + r - 9, cy - 3);
   needle(g, cx, cy, ang(f), r - 7);
-  const lit = f < 0.12 && Math.floor(time * 3) % 2 === 0;
+  const lit = f < CONFIG.LOW_FUEL && Math.floor(time * 3) % 2 === 0;
   const ic = lit ? PR.amber : PR.muted;
   if (lit) {
     g.shadowColor = PR.amber;

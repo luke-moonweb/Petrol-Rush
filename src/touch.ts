@@ -46,6 +46,7 @@ const LAYOUTS: Record<TouchLayout, { left: ButtonSpec[][]; right: ButtonSpec[][]
       [
         { action: 'mute', kind: 'tap', html: ICON.sound, cls: 'tc-small tc-sound' },
         { action: 'fullscreen', kind: 'tap', html: ICON.fullscreen, cls: 'tc-small tc-fs' },
+        { action: 'camera', kind: 'tap', html: 'CAM', cls: 'tc-small tc-text' },
       ],
       [
         { action: 'left', kind: 'hold', html: ICON.left, cls: 'tc-big', group: 'steer' },
