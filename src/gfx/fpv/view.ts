@@ -28,6 +28,8 @@ export interface CockpitFrame {
   skid: 0 | 1 | 2;
   lights?: CabinView['lights'];
   particles?: Particles;
+  // Device px per canvas unit (DPR × layout scale); the car level of detail counts device px.
+  pixelScale?: number;
 }
 
 const EYE_BACK = -2;
@@ -770,7 +772,7 @@ export function drawCockpitView(g: CanvasRenderingContext2D, f: CockpitFrame): v
   g.clip();
   cam.set(ex, ey, EYE_Z + shake, yaw);
   // The car LOD counts device pixels (DPR and layout scale included).
-  setCarPixelScale(g.getTransform().a);
+  setCarPixelScale(f.pixelScale ?? 1);
   carMs = 0;
   cam.focal = Math.max(v.h * 0.62, Math.min(v.h * 0.9, v.w * 0.55)) * (1 - 0.08 * Math.min(1, speed / 180));
   cam.ox = v.w / 2;

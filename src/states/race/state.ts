@@ -384,7 +384,21 @@ export class RaceState implements State {
         ? { lit: out ? 0 : Math.min(LIGHTS_COUNT, Math.floor(lt.t / LIGHT_INTERVAL_S)), out, since: lt.t - lt.outAt }
         : undefined;
       const touch = this.game.touch;
-      drawCockpitView(g, { race, view, ix, iy, ih, steer: this.steerVis, time: race.time, touch, skid, lights, particles: this.particles });
+      const pixelScale = g.canvas.width / layout.w;
+      drawCockpitView(g, {
+        race,
+        view,
+        ix,
+        iy,
+        ih,
+        steer: this.steerVis,
+        time: race.time,
+        touch,
+        skid,
+        lights,
+        particles: this.particles,
+        pixelScale,
+      });
     } else {
       this.renderTopDown(g, race, ix, iy, ih);
       noteTopDownFrame();
