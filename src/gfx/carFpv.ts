@@ -20,6 +20,8 @@ export interface FpvFace {
   flat: boolean;
   // Small decals (number blocks, grille, hubs) that are dropped once the car is small on screen.
   detail: boolean;
+  // Large rear and nose livery areas, still drawn when the car is tiny.
+  broad: boolean;
   // Lies inside or on another piece, so it can never be seen. Kept for the closed-mesh check, never drawn.
   hidden: boolean;
   decals: FpvFace[];
@@ -31,9 +33,13 @@ export interface FpvPiece {
 }
 
 export interface FpvModel {
-  // Tyres: [rear left, front left, rear right, front right] (left is −y).
+  // Tyres: [rear left, front left, rear right, front right] (left is −y). The part inside the body width.
   tyres: FpvPiece[];
+  // Outer slices of the same tyres (|y| BODY_W..TYRE_OUT), same order: outside the body, carrying the rims.
+  wheels: FpvPiece[];
   floor: FpvPiece;
+  // Dark block under the body that stands in for tyres and floor when the car is tiny on screen.
+  skirt: FpvPiece;
   body: FpvPiece;
   cabin: FpvPiece;
   wing: FpvPiece;
@@ -52,6 +58,10 @@ export const WING_SPLIT_X = -1.4;
 export const WING_HW = 0.84;
 export const FLOOR_HW = 0.55;
 export const TYRE_X = 1.3;
+// Outer tread face: a little outside the body so a sliver of tyre shows from straight behind or ahead.
+export const TYRE_OUT = 0.88;
+// Lowest point of the spoiler (end plate feet). Piece order assumes every eye is above it.
+export const PLATE_Z0 = 0.9;
 const TYRE_R = 0.3;
 const TYRE_Z = 0.3;
 const TYRE_IN = 0.62;
@@ -113,6 +123,7 @@ interface FaceOpts {
   flat?: boolean;
   detail?: boolean;
   hidden?: boolean;
+  broad?: boolean;
 }
 
 function makeFace(pts: Vec3[], color: string, o: FaceOpts = {}): FpvFace {
@@ -131,6 +142,7 @@ function makeFace(pts: Vec3[], color: string, o: FaceOpts = {}): FpvFace {
     flat: o.flat ?? false,
     detail: o.detail ?? false,
     hidden: o.hidden ?? false,
+    broad: o.broad ?? false,
     decals: [],
   };
 }
@@ -306,7 +318,7 @@ export function carModelFpv(sc: CarScheme, livery: Livery): FpvModel {
 
   // Spoiler: a closed wing box between two end plates that stand on the deck.
   const wing = box(-2.0, -1.8, -WING_HW, WING_HW, 1.0, 1.06, roof, { outline: true });
-  const plates = [-1, 1].map((s) => box(-2.0, -1.8, s * WING_HW, s * (WING_HW + 0.04), 0.9, 1.08, roof, { outline: true }));
+  const plates = [-1, 1].map((s) => box(-2.0, -1.8, s * WING_HW, s * (WING_HW + 0.04), PLATE_Z0, 1.08, roof, { outline: true }));
 
   // Tyres: octagonal prisms. Tread faces that lie inside the body can never be seen and are not drawn.
   const tyreProfile = ring(0, TYRE_Z, TYRE_R, 8);
@@ -322,16 +334,31 @@ export function carModelFpv(sc: CarScheme, livery: Livery): FpvModel {
       ),
     ),
   );
+  // The outer slice of each tyre lies outside the body, so it is a separate piece; its cap carries the rim.
+  const wheels = [-1, 1].flatMap((s) =>
+    [-TYRE_X, TYRE_X].map((tx) => {
+      const w = prism(
+        tyreProfile.map(([x, z]) => [x + tx, z] as [number, number]),
+        s * BODY_W,
+        s * TYRE_OUT,
+        TREAD,
+        { flat: true },
+      );
+      const cap = faceAlong(w, [0, s, 0]);
+      const onCap = (xz: [number, number][]) => xz.map(([x, z]) => [x, s * TYRE_OUT, z] as Vec3);
+      decal(cap, onCap(ring(tx, TYRE_Z, 0.13, 8)), RIM, { flat: true });
+      decal(cap, onCap(ring(tx, TYRE_Z, 0.05, 6)), HUB, { flat: true, detail: true });
+      return w;
+    }),
+  );
   const floor = box(-1.85, 1.85, -FLOOR_HW, FLOOR_HW, 0.04, BODY_ZB, FLOOR);
   for (const f of floor.faces) if (f.normal[2] > 0.9) f.hidden = true;
+  const skirt = box(-TYRE_X - 0.3, TYRE_X + 0.3, -BODY_W, BODY_W, 0.02, BODY_ZB, TREAD_FACE);
+  for (const f of skirt.faces) if (f.normal[2] > 0.9) f.hidden = true;
 
   // Sides: white squares, livery, wheel arches and wheels, number roundel.
   for (const [k, side] of sides.entries()) {
     const s = k === 0 ? -1 : 1;
-    for (let i = 0; i < 3; i++) {
-      for (let j = 0; j < 2; j++)
-        decal(side, onSide(s, rect(0.5 + j * 0.2, 0.59 + j * 0.2, 0.3 + i * 0.1, 0.36 + i * 0.1)), WHITE, { flat: true, detail: true });
-    }
     if (livery === 'stripes') {
       decal(side, onSide(s, rect(-1.96, 1.97, 0.6, 0.64)), roof);
       decal(side, onSide(s, rect(-1.96, 1.85, 0.68, 0.72)), roof);
@@ -381,14 +408,16 @@ export function carModelFpv(sc: CarScheme, livery: Livery): FpvModel {
       );
     }
     if (livery === 'band') decal(side, onSide(s, rect(-1.92, 1.96, 0.4, 0.64)), roof);
+    // White squares over the livery so flames and band do not hide them.
+    for (let i = 0; i < 3; i++) {
+      for (let j = 0; j < 2; j++)
+        decal(side, onSide(s, rect(0.5 + j * 0.2, 0.59 + j * 0.2, 0.3 + i * 0.1, 0.36 + i * 0.1)), WHITE, { flat: true, detail: true });
+    }
     for (const tx of [-TYRE_X, TYRE_X]) {
       const arch = ring(tx, TYRE_Z, 0.36, 6, 0, Math.PI);
       arch.unshift([tx + 0.36, BODY_ZB]);
       arch.push([tx - 0.36, BODY_ZB]);
       decal(side, onSide(s, arch), hexDarken(body, -0.65), { flat: true });
-      decal(side, onSide(s, ring(tx, TYRE_Z, TYRE_R, 8)), TREAD, { flat: true });
-      decal(side, onSide(s, ring(tx, TYRE_Z, 0.13, 8)), RIM, { flat: true });
-      decal(side, onSide(s, ring(tx, TYRE_Z, 0.05, 6)), HUB, { flat: true, detail: true });
     }
     decal(side, onSide(s, ring(-0.25, 0.5, 0.15, 8)), WHITE, { flat: true });
     decal(side, onSide(s, ring(-0.25, 0.5, 0.105, 8)), sc.number, { flat: true, detail: true });
@@ -438,8 +467,9 @@ export function carModelFpv(sc: CarScheme, livery: Livery): FpvModel {
   }
   // The band runs above the tail lamps here so they do not cut it in three.
   if (livery === 'band') decal(rear, onRear(rect(-BODY_W, BODY_W, 0.62, 0.8)), roof);
-  const plate = decal(rear, onRear(rect(-0.25, 0.25, 0.31, 0.43)), sc.number, { flat: true, detail: true });
-  for (const y0 of [-0.18, 0.04]) decal(plate, onRear(rect(y0, y0 + 0.14, 0.35, 0.39)), WHITE, { flat: true, detail: true });
+  // Number plate between the stripes (|y| ≤ 0.12), so the stripes stay whole.
+  const plate = decal(rear, onRear(rect(-0.12, 0.12, 0.31, 0.43)), sc.number, { flat: true, detail: true });
+  for (const y0 of [-0.09, 0.01]) decal(plate, onRear(rect(y0, y0 + 0.08, 0.35, 0.39)), WHITE, { flat: true, detail: true });
 
   // Nose: grille, livery.
   decal(front, onFront(rect(-0.36, 0.36, 0.2, 0.3)), DARK, { detail: true });
@@ -533,7 +563,9 @@ export function carModelFpv(sc: CarScheme, livery: Livery): FpvModel {
     );
   }
 
-  return { tyres, floor, body: bodyPiece, cabin, wing, plates };
+  for (const f of [rear, front]) for (const d of f.decals) d.broad = !d.detail;
+
+  return { tyres, wheels, floor, skirt, body: bodyPiece, cabin, wing, plates };
 }
 
 const fpvCache = new Map<number, FpvModel>();
@@ -548,16 +580,22 @@ export function carFacesFpv(colorIdx: number): FpvModel {
 }
 
 export function fpvPieces(m: FpvModel): FpvPiece[] {
-  return [...m.tyres, m.floor, m.body, m.cabin, m.wing, ...m.plates];
+  return [...m.tyres, ...m.wheels, m.floor, m.skirt, m.body, m.cabin, m.wing, ...m.plates];
 }
 
-// How much of a car is drawn, from its length on screen in px: 0 everything, 1 without small details,
-// 2 only body, greenhouse and spoiler.
+// How much of a car is drawn, from its length on screen in device px: 0 everything, 1 without small details,
+// 2 body, greenhouse, spoiler, a dark underside and the broad rear and nose livery.
 export const LOD_DETAIL_PX = 110;
 export const LOD_LIVERY_PX = 30;
+// A car switches tier only once it is this far past a threshold, so it does not flicker on the boundary.
+export const LOD_HYSTERESIS = 0.07;
 
-export function carLod(lengthPx: number): 0 | 1 | 2 {
-  if (lengthPx >= LOD_DETAIL_PX) return 0;
-  if (lengthPx >= LOD_LIVERY_PX) return 1;
+export function carLod(lengthPx: number, prev: -1 | 0 | 1 | 2 = -1): 0 | 1 | 2 {
+  const h = prev < 0 ? 0 : LOD_HYSTERESIS;
+  // Leaving a finer tier needs the size to drop below the threshold by h; entering one, to exceed it by h.
+  const detail = LOD_DETAIL_PX * (prev === 0 ? 1 - h : 1 + h);
+  const livery = LOD_LIVERY_PX * (prev === 2 ? 1 + h : 1 - h);
+  if (lengthPx >= detail) return 0;
+  if (lengthPx >= livery) return 1;
   return 2;
 }

@@ -9,7 +9,7 @@ import { PR } from '../../ui/theme';
 import type { Particles } from '../particles';
 import { CAR_SCHEMES, driverName } from '../vehicles';
 import { trackCanvas } from '../world';
-import { drawCarModel } from './cars';
+import { carPaintOrder, drawCarModel, setCarPixelScale } from './cars';
 import { type CabinView, cockpitUsed, drawCockpit, prewarmCockpit, reducedMotion, type Streak, wheelRadius } from './cockpit';
 import { Camera, clipProject, drawGlowAt, drawPoly, FOG_LEVELS, fillProjected, NEAR, type Poly, visible } from './engine';
 import { setPylonNames } from './landmarks';
@@ -32,7 +32,11 @@ export interface CockpitFrame {
 
 const EYE_BACK = -2;
 const EYE_SIDE = -3.6;
-const EYE_Z = 9.2;
+export const EYE_Z = 9.2;
+// Mirror eye height above the driver's eye.
+export const MIRROR_RISE = 1;
+// Largest vertical speed shake of the cockpit camera (world units).
+export const SHAKE_AMP = 0.12;
 const MIRROR_FAR = 600;
 const SKY_TOP = '#05040C';
 const SKY_HORIZON = '#221C3C';
@@ -53,13 +57,20 @@ const OVERLAY_SAMPLES = 60;
 let scene: Scene | null = null;
 const cam = new Camera();
 const mirrorCam = new Camera();
+// One fog colour for both cameras, so the car style cache is shared.
+mirrorCam.fog = cam.fog;
+// Last LOD tier of each rival car (by colorIdx), per camera, for the LOD hysteresis.
+const lodMain = new Int8Array(64);
+const lodMirror = new Int8Array(64);
+// Time spent drawing rival cars this frame, main view and mirror together.
+let carMs = 0;
 let camYaw = Number.NaN;
 let camClock = 0;
 let recovering = false;
 let camOff = 0;
 let camRace: Race | null = null;
-// A longer gap in race time between two cockpit frames means the top-down camera was shown meanwhile.
-const CAM_RESET_GAP_S = 0.25;
+// Set when a frame was rendered without the cockpit (top-down camera).
+let cockpitSkipped = false;
 
 interface Star {
   a: number;
@@ -129,8 +140,32 @@ function drawGlow(g: CanvasRenderingContext2D, c: Camera, gl: Glow): void {
   drawGlowAt(g, c, gl.x, gl.y, gl.z, gl.r, gl.color);
 }
 
-function drawCar(g: CanvasRenderingContext2D, c: Camera, car: Car, f: CockpitFrame, dist: number): void {
-  drawCarModel(g, c, car.colorIdx, f.ix(car), f.iy(car), f.ih(car), dist, car.braking);
+function drawCar(g: CanvasRenderingContext2D, c: Camera, it: Item): void {
+  const car = it.car!;
+  drawCarModel(g, c, car.colorIdx, it.x!, it.y!, it.h!, it.dist!, car.braking, c === mirrorCam ? lodMirror : lodMain);
+}
+
+// Centre depth alone can paint a car over the one beside it. For cars close together, a vertical plane
+// between their footprints decides: the car on the camera's side is drawn later.
+const carItems: Item[] = [];
+const CAR_PAIR_DIST = 80;
+
+export function orderCarsAgainstCars(c: Camera, list: Item[]): void {
+  carItems.length = 0;
+  for (const it of list) if (it.car) carItems.push(it);
+  for (let pass = 0; pass < 2; pass++) {
+    for (let i = 0; i < carItems.length; i++) {
+      const a = carItems[i]!;
+      for (let j = i + 1; j < carItems.length; j++) {
+        const b = carItems[j]!;
+        if (Math.abs(a.x! - b.x!) > CAR_PAIR_DIST || Math.abs(a.y! - b.y!) > CAR_PAIR_DIST) continue;
+        const o = carPaintOrder(a.x!, a.y!, a.h!, b.x!, b.y!, b.h!, c.x, c.y);
+        // Items are drawn in decreasing d: the later car needs the smaller d.
+        if (o > 0 && b.d >= a.d) b.d = a.d - 0.01;
+        else if (o < 0 && a.d >= b.d) a.d = b.d - 0.01;
+      }
+    }
+  }
 }
 
 function drawOilSlicks(g: CanvasRenderingContext2D, c: Camera, race: Race, far: number): void {
@@ -204,6 +239,7 @@ interface Item {
   car?: Car;
   x?: number;
   y?: number;
+  h?: number;
   dist?: number;
   glow?: Glow;
   sign?: TexQuad;
@@ -359,6 +395,7 @@ function renderWorld(g: CanvasRenderingContext2D, c: Camera, f: CockpitFrame, ch
     if (dist > c.far || !c.inView(x, y, CAR_REACH)) continue;
     const it = addItem(c.depth(x, y));
     it.car = car;
+    it.h = f.ih(car);
     it.x = x;
     it.y = y;
     it.dist = dist;
@@ -368,23 +405,22 @@ function renderWorld(g: CanvasRenderingContext2D, c: Camera, f: CockpitFrame, ch
     f.particles.forEachLive(addPuff);
   }
   orderCarsAgainstWalls(c, items);
+  orderCarsAgainstCars(c, items);
   items.sort(byDepth);
-  let carMs = 0;
   for (const it of items) {
     if (it.poly) {
       const dist = c.dist(it.poly.cx, it.poly.cy);
       drawPoly(g, c, it.poly, dist);
-      if (!cheap) for (const q of it.poly.decals ?? []) if (dist - q.radius < q.far) drawTexQuad(g, c, q, c.dist(q.cx, q.cy));
+      if (!cheap) for (const q of it.poly.decals ?? NO_ITEMS) if (dist - q.radius < q.far) drawTexQuad(g, c, q, c.dist(q.cx, q.cy));
     } else if (it.car) {
       const t0 = performance.now();
-      drawCar(g, c, it.car, f, it.dist!);
+      drawCar(g, c, it);
       carMs += performance.now() - t0;
     } else if (it.glow) drawGlow(g, c, it.glow);
     else if (it.sign) drawTexQuad(g, c, it.sign, it.dist!);
     else if (it.bill) drawBillboard(g, c, it.bill, Math.max(0.15, 1 - c.fogLevel(it.dist!) / FOG_LEVELS));
     else if (it.puff) drawPuff(g, c, it.puff);
   }
-  if (!cheap) sample(carsMs, carMs);
 }
 
 let puffCam: Camera = cam;
@@ -507,7 +543,7 @@ function drawMirror(g: CanvasRenderingContext2D, w: number, h: number, f: Cockpi
   g.beginPath();
   g.roundRect(mx, my, mw, mh, mh * 0.35);
   g.clip();
-  mirrorCam.set(ex, ey, EYE_Z + 1, yaw + Math.PI);
+  mirrorCam.set(ex, ey, EYE_Z + MIRROR_RISE, yaw + Math.PI);
   mirrorCam.focal = mh * 2;
   mirrorCam.ox = mx + mw / 2;
   mirrorCam.oy = my + mh * 0.5;
@@ -533,9 +569,17 @@ function drawMirror(g: CanvasRenderingContext2D, w: number, h: number, f: Cockpi
   g.stroke();
 }
 
-// Forgets a leftover spin swing: on a new race, a restart, or when the cockpit was not drawn last frame.
+// The race state calls this for every frame it renders with the top-down camera.
+export function noteTopDownFrame(): void {
+  cockpitSkipped = true;
+}
+
+// Forgets a leftover spin swing: on a new race, a restart (race time goes back), or when the cockpit was
+// not drawn last frame.
 export function syncCameraYaw(race: Race, time: number): void {
-  if (race === camRace && time >= camClock && time - camClock <= CAM_RESET_GAP_S) return;
+  const keep = race === camRace && time >= camClock && !cockpitSkipped;
+  cockpitSkipped = false;
+  if (keep) return;
   camRace = race;
   camClock = time;
   camYaw = Number.NaN;
@@ -672,7 +716,7 @@ export function drawCockpitView(g: CanvasRenderingContext2D, f: CockpitFrame): v
   const ex = f.ix(p) + EYE_BACK * c - EYE_SIDE * s;
   const ey = f.iy(p) + EYE_BACK * s + EYE_SIDE * c;
   const speed = Math.abs(p.speed);
-  const shake = speed > 5 && !reducedMotion() ? Math.sin(f.time * 41) * 0.12 * (speed / 180) : 0;
+  const shake = speed > 5 && !reducedMotion() ? Math.sin(f.time * 41) * SHAKE_AMP * (speed / 180) : 0;
 
   g.save();
   g.translate(v.x, v.y);
@@ -680,6 +724,9 @@ export function drawCockpitView(g: CanvasRenderingContext2D, f: CockpitFrame): v
   g.rect(0, 0, v.w, v.h);
   g.clip();
   cam.set(ex, ey, EYE_Z + shake, yaw);
+  // The car LOD counts device pixels (DPR and layout scale included).
+  setCarPixelScale(g.getTransform().a);
+  carMs = 0;
   cam.focal = Math.max(v.h * 0.62, Math.min(v.h * 0.9, v.w * 0.55)) * (1 - 0.08 * Math.min(1, speed / 180));
   cam.ox = v.w / 2;
   cam.oy = Math.round(v.h * 0.42);
@@ -705,5 +752,6 @@ export function drawCockpitView(g: CanvasRenderingContext2D, f: CockpitFrame): v
   drawMinimap(g, v.w, v.h, wheelRadius(v.w), f, yaw);
   sample(cabinMs, t1 - t0);
   sample(mirrorMs, performance.now() - t1);
+  sample(carsMs, carMs);
   g.restore();
 }

@@ -2,6 +2,7 @@
 // Painter's order inside a car is decided per piece with planes that separate the pieces, so the faces of
 // one convex piece never overlap and no per-face sort is needed. Nothing here allocates per frame.
 import {
+  BODY_W,
   CABIN_SLOPE,
   CABIN_X0,
   CABIN_Z0,
@@ -9,7 +10,9 @@ import {
   carLod,
   FPV_PALETTE,
   type FpvFace,
+  type FpvModel,
   type FpvPiece,
+  TYRE_OUT,
   WING_HW,
   WING_SPLIT_X,
 } from '../carFpv';
@@ -25,16 +28,20 @@ const OUTLINE_KQ = -12;
 // Cars keep the sprite brightness with a slight blue night cast, so they stay brighter than the walls.
 const TINT: RGB = [0.85, 0.85, 0.95];
 const SHADOW_ALPHA = 0.42;
-const BODY_LEN_PX = 4 * K;
+const BODY_LEN = 4 * K;
+// Footprint half sizes in world units for ordering cars against each other (tyres and lamps included).
+const FOOT_HL = 2.02 * K;
+const FOOT_HW = TYRE_OUT * K;
 
-let styleFog: RGB | null = null;
-let styles: string[] = [];
+// One style cache per fog colour (main view and mirror may use different fog arrays).
+const styleCaches = new Map<RGB, string[]>();
 const shadowStyles: string[] = [];
 
 function style(cid: number, kq: number, level: number, fog: RGB): string {
-  if (fog !== styleFog) {
+  let styles = styleCaches.get(fog);
+  if (!styles) {
     styles = [];
-    styleFog = fog;
+    styleCaches.set(fog, styles);
   }
   const key = (cid * KQ_SLOTS + kq - KQ_MIN) * FOG_LEVELS + level;
   let s = styles[key];
@@ -48,7 +55,7 @@ function style(cid: number, kq: number, level: number, fog: RGB): string {
   return s;
 }
 
-const SHADOW = new Float32Array([2.2, -0.85, 1.95, -1.02, -1.95, -1.02, -2.2, -0.85, -2.2, 0.85, -1.95, 1.02, 1.95, 1.02, 2.2, 0.85]);
+const SHADOW = new Float32Array([2.2, -0.75, 1.95, -0.9, -1.95, -0.9, -2.2, -0.75, -2.2, 0.75, -1.95, 0.9, 1.95, 0.9, 2.2, 0.75]);
 const TAIL = [-1, 1].map(
   (s) => new Float32Array([-2.01, s * 0.42, 0.44, -2.01, s * 0.78, 0.44, -2.01, s * 0.78, 0.58, -2.01, s * 0.42, 0.58]),
 );
@@ -58,7 +65,7 @@ const wx = new Float32Array(32);
 const wy = new Float32Array(32);
 const wz = new Float32Array(32);
 
-// Per-car state, set by drawCarModel.
+// Per-car state, set by drawCarBody.
 let cam: Camera;
 let ox = 0;
 let oy = 0;
@@ -73,6 +80,12 @@ let ez = 0;
 let lx = 0;
 let ly = 0;
 let lz = 0;
+// Device px per canvas unit (DPR × layout scale); the LOD works on device px.
+let pixelScale = 1;
+
+export function setCarPixelScale(s: number): void {
+  pixelScale = s > 0 ? s : 1;
+}
 
 function project(xyz: Float32Array): number {
   const n = xyz.length / 3;
@@ -95,8 +108,9 @@ function drawFace(g: CanvasRenderingContext2D, f: FpvFace, kq: number, outline: 
       g.stroke();
     }
   }
-  if (tier === 2) return;
-  for (const d of f.decals) if (tier === 0 || !d.detail) drawFace(g, d, d.flat ? 0 : kq, false);
+  for (const d of f.decals) {
+    if (tier === 2 ? d.broad : tier === 0 || !d.detail) drawFace(g, d, d.flat ? 0 : kq, false);
+  }
 }
 
 function drawPiece(g: CanvasRenderingContext2D, p: FpvPiece): void {
@@ -105,29 +119,84 @@ function drawPiece(g: CanvasRenderingContext2D, p: FpvPiece): void {
     const n = f.normal;
     if (n[0] * ex + n[1] * ey + n[2] * ez <= f.d) continue;
     const kq = f.flat ? 0 : Math.round((-0.3 + 0.42 * Math.max(0, n[0] * lx + n[1] * ly + n[2] * lz)) * KQ);
-    drawFace(g, f, kq, tier < 2);
+    drawFace(g, f, kq, true);
   }
 }
 
-function drawSpoiler(g: CanvasRenderingContext2D, wing: FpvPiece, plates: FpvPiece[]): void {
-  // An end plate is separated from the wing by the plane y = ±WING_HW: the one on the eye's side goes last.
-  if (-ey <= WING_HW) drawPiece(g, plates[0]!);
-  if (ey <= WING_HW) drawPiece(g, plates[1]!);
-  drawPiece(g, wing);
-  if (-ey > WING_HW) drawPiece(g, plates[0]!);
-  if (ey > WING_HW) drawPiece(g, plates[1]!);
+// Painter's order of a car's pieces for an eye at (x, y, z) in model space. Fills `out`, returns the count.
+// - Tyres and floor lie partly inside the body: they go first and the body covers what it hides. The far
+//   side, the floor, then the near side; on each side the far axle first.
+// - The outer tyre slices lie outside the body; a slice whose side the eye is on goes after the body.
+// - The deck plane under the greenhouse separates body and greenhouse; x = WING_SPLIT_X separates greenhouse
+//   and spoiler; the spoiler stands on the body (plane z = PLATE_Z0), below every eye.
+// - Tiny cars (tier 2) draw a dark skirt instead of tyres and floor.
+let outArr: FpvPiece[] = [];
+let on = 0;
+function put(p: FpvPiece): void {
+  outArr[on++] = p;
 }
+
+function putSpoiler(m: FpvModel, y: number): void {
+  // An end plate is separated from the wing by the plane y = ±WING_HW: the one on the eye's side goes last.
+  if (-y <= WING_HW) put(m.plates[0]!);
+  if (y <= WING_HW) put(m.plates[1]!);
+  put(m.wing);
+  if (-y > WING_HW) put(m.plates[0]!);
+  if (y > WING_HW) put(m.plates[1]!);
+}
+
+export function pieceOrder(m: FpvModel, x: number, y: number, z: number, lod: 0 | 1 | 2, out: FpvPiece[]): number {
+  outArr = out;
+  on = 0;
+  const near = y >= 0 ? 2 : 0;
+  const far = 2 - near;
+  const back = x >= 0 ? 0 : 1;
+  const nearOutside = (near === 0 ? -y : y) > BODY_W;
+  if (lod < 2) {
+    put(m.wheels[far + back]!);
+    put(m.wheels[far + 1 - back]!);
+    if (!nearOutside) {
+      put(m.wheels[near + back]!);
+      put(m.wheels[near + 1 - back]!);
+    }
+    put(m.tyres[far + back]!);
+    put(m.tyres[far + 1 - back]!);
+    put(m.floor);
+    put(m.tyres[near + back]!);
+    put(m.tyres[near + 1 - back]!);
+  } else put(m.skirt);
+  const behindWing = x < WING_SPLIT_X;
+  const aboveDeck = z >= CABIN_Z0 + CABIN_SLOPE * (CABIN_X0 - x);
+  if (!aboveDeck) put(m.cabin);
+  put(m.body);
+  if (lod < 2 && nearOutside) {
+    put(m.wheels[near + back]!);
+    put(m.wheels[near + 1 - back]!);
+  }
+  if (!aboveDeck) putSpoiler(m, y);
+  else if (behindWing) {
+    put(m.cabin);
+    putSpoiler(m, y);
+  } else {
+    putSpoiler(m, y);
+    put(m.cabin);
+  }
+  return on;
+}
+
+const order: FpvPiece[] = [];
 
 function fillModelQuad(g: CanvasRenderingContext2D, xyz: Float32Array, color: string): void {
   fillProjected(g, project(xyz), color);
 }
 
-// Length of a car on screen in px at a distance, for the level of detail.
+// Length of a car on screen in device px at a distance, for the level of detail.
 export function carLengthPx(c: Camera, dist: number): number {
-  return (c.focal * BODY_LEN_PX) / Math.max(1, dist);
+  return (c.focal * BODY_LEN * pixelScale) / Math.max(1, dist);
 }
 
 // Shadow and pieces of a car, without its lamps (the hole check in the car lab draws only these).
+// `lod` remembers each car's last tier (index colorIdx, value tier + 1) for the hysteresis.
 export function drawCarBody(
   g: CanvasRenderingContext2D,
   c: Camera,
@@ -137,6 +206,7 @@ export function drawCarBody(
   heading: number,
   dist: number,
   shadow = true,
+  lod?: Int8Array,
 ): void {
   const m = carFacesFpv(colorIdx);
   cam = c;
@@ -146,7 +216,8 @@ export function drawCarBody(
   sn = Math.sin(heading);
   level = c.fogLevel(dist);
   const px = carLengthPx(c, dist);
-  tier = carLod(px);
+  tier = carLod(px, lod ? ((lod[colorIdx]! - 1) as -1 | 0 | 1 | 2) : -1);
+  if (lod) lod[colorIdx] = tier + 1;
   const dx = c.x - x;
   const dy = c.y - y;
   ex = (dx * cs + dy * sn) / K;
@@ -156,7 +227,7 @@ export function drawCarBody(
   ly = -LIGHT[0] * sn + LIGHT[1] * cs;
   lz = LIGHT[2];
 
-  if (tier < 2 && shadow) {
+  if (shadow) {
     let sh = shadowStyles[level];
     if (!sh) {
       sh = `rgba(0,0,0,${(SHADOW_ALPHA * (1 - level / FOG_LEVELS)).toFixed(3)})`;
@@ -172,40 +243,11 @@ export function drawCarBody(
     }
     fillProjected(g, clipProject(c, wx, wy, wz, n), sh);
   }
-  if (tier < 2) {
-    g.lineWidth = Math.max(0.75, Math.min(2, px / 160));
-    g.lineJoin = 'bevel';
-
-    // Tyres and floor lie partly inside the body, so they go first and the body covers what it hides.
-    // Among themselves: the far side, the floor, then the near side; on each side the far axle first.
-    const near = ey >= 0 ? 2 : 0;
-    const far = 2 - near;
-    const back = ex >= 0 ? 0 : 1;
-    drawPiece(g, m.tyres[far + back]!);
-    drawPiece(g, m.tyres[far + 1 - back]!);
-    if (tier === 0) drawPiece(g, m.floor);
-    drawPiece(g, m.tyres[near + back]!);
-    drawPiece(g, m.tyres[near + 1 - back]!);
-  }
-
-  // The deck plane under the greenhouse separates body and greenhouse; x = WING_SPLIT_X separates
-  // greenhouse and spoiler; the spoiler stands on the body, which is below any eye.
-  const behindWing = ex < WING_SPLIT_X;
-  const aboveDeck = ez >= CABIN_Z0 + CABIN_SLOPE * (CABIN_X0 - ex);
-  if (aboveDeck) {
-    drawPiece(g, m.body);
-    if (behindWing) {
-      drawPiece(g, m.cabin);
-      drawSpoiler(g, m.wing, m.plates);
-    } else {
-      drawSpoiler(g, m.wing, m.plates);
-      drawPiece(g, m.cabin);
-    }
-  } else {
-    drawPiece(g, m.cabin);
-    drawPiece(g, m.body);
-    drawSpoiler(g, m.wing, m.plates);
-  }
+  // Outline width in canvas units, from the size in device px.
+  g.lineWidth = Math.max(0.75, Math.min(2, px / 160)) / pixelScale;
+  g.lineJoin = 'bevel';
+  const n = pieceOrder(m, ex, ey, ez, tier, order);
+  for (let i = 0; i < n; i++) drawPiece(g, order[i]!);
   g.lineJoin = 'miter';
 }
 
@@ -218,8 +260,9 @@ export function drawCarModel(
   heading: number,
   dist: number,
   braking: boolean,
+  lod?: Int8Array,
 ): void {
-  drawCarBody(g, c, colorIdx, x, y, heading, dist);
+  drawCarBody(g, c, colorIdx, x, y, heading, dist, true, lod);
   if (ex < -2.01) {
     for (let i = 0; i < 2; i++) {
       fillModelQuad(g, TAIL[i]!, braking ? '#FF5A46' : '#B81E18');
@@ -231,7 +274,43 @@ export function drawCarModel(
     for (let i = 0; i < 2; i++) {
       fillModelQuad(g, HEAD[i]!, '#FFF6DA');
       const ly0 = i === 0 ? -0.57 : 0.57;
-      drawGlowAt(g, c, x + (2.1 * cs - ly0 * sn) * K, y + (2.1 * sn + ly0 * cs) * K, 4.6, 8, '255,244,210');
+      drawGlowAt(g, c, x + (2.1 * cs - ly0 * sn) * K, y + (2.1 * sn + ly0 * cs) * K, 4.6, 6, '255,244,210');
     }
   }
+}
+
+// Which of two cars must be painted later, from a vertical plane that separates their footprints
+// (±FOOT_HL × ±FOOT_HW around each centre, turned by the heading): the car on the camera's side of it.
+// Returns 1 when b goes after a, −1 when a goes after b, 0 when no such plane exists (the cars touch).
+export function carPaintOrder(
+  ax: number,
+  ay: number,
+  ah: number,
+  bx: number,
+  by: number,
+  bh: number,
+  camX: number,
+  camY: number,
+): -1 | 0 | 1 {
+  const ac = Math.cos(ah);
+  const as = Math.sin(ah);
+  const bc = Math.cos(bh);
+  const bs = Math.sin(bh);
+  // Candidate axes: the length and width directions of each car.
+  for (let k = 0; k < 4; k++) {
+    const nx = k === 0 ? ac : k === 1 ? -as : k === 2 ? bc : -bs;
+    const ny = k === 0 ? as : k === 1 ? ac : k === 2 ? bs : bc;
+    const ra = FOOT_HL * Math.abs(nx * ac + ny * as) + FOOT_HW * Math.abs(-nx * as + ny * ac);
+    const rb = FOOT_HL * Math.abs(nx * bc + ny * bs) + FOOT_HW * Math.abs(-nx * bs + ny * bc);
+    const pa = nx * ax + ny * ay;
+    const pb = nx * bx + ny * by;
+    const gap = Math.abs(pb - pa) - ra - rb;
+    if (gap <= 0) continue;
+    // Separating line halfway through the gap; the camera's side of it decides.
+    const mid = pa < pb ? pa + ra + gap / 2 : pa - ra - gap / 2;
+    const pc = nx * camX + ny * camY;
+    const camOnB = pa < pb ? pc > mid : pc < mid;
+    return camOnB ? 1 : -1;
+  }
+  return 0;
 }

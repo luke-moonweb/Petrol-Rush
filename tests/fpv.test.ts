@@ -163,7 +163,7 @@ describe('cockpit camera', () => {
   });
 
   it('drops a leftover spin swing after a camera switch, a restart or a new race', async () => {
-    const { cameraYaw, cockpitCameraYaw, syncCameraYaw } = await import('../src/gfx/fpv/view');
+    const { cameraYaw, cockpitCameraYaw, noteTopDownFrame, syncCameraYaw } = await import('../src/gfx/fpv/view');
     const spin = { spinTime: 1, speed: 60, moveAngle: 0 } as unknown as Car;
     const done = { spinTime: 0, speed: 60, moveAngle: 0 } as unknown as Car;
     const swing = (r: Race, t0: number) => {
@@ -176,10 +176,15 @@ describe('cockpit camera', () => {
     syncCameraYaw(race, t);
     expect(cameraYaw(done, 1.5, t)).not.toBe(1.5);
     expect(cockpitCameraYaw(race)).not.toBe(1.5);
-    // Top-down shown for a second: the cockpit starts on the heading.
+    // Fast race time (debug x8): a long step between two cockpit frames keeps the swing.
+    t = swing(race, 350);
+    syncCameraYaw(race, t + 0.5);
+    expect(cameraYaw(done, 1.5, t + 0.5)).not.toBe(1.5);
+    // A frame with the top-down camera in between: the cockpit starts on the heading.
     t = swing(race, 400);
-    syncCameraYaw(race, t + 1);
-    expect(cameraYaw(done, 1.5, t + 1)).toBe(1.5);
+    noteTopDownFrame();
+    syncCameraYaw(race, t);
+    expect(cameraYaw(done, 1.5, t)).toBe(1.5);
     // Restart: race time goes back.
     t = swing(race, 500);
     syncCameraYaw(race, 0);
