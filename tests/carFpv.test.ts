@@ -10,7 +10,7 @@ import {
   LOD_LIVERY_PX,
   PLATE_Z0,
 } from '../src/gfx/carFpv';
-import { carPaintOrder, pieceOrder } from '../src/gfx/fpv/cars';
+import { carPaintOrder, footprintAngles, pieceOrder } from '../src/gfx/fpv/cars';
 import { EYE_Z as COCKPIT_EYE_Z, MIRROR_RISE, SHAKE_AMP } from '../src/gfx/fpv/view';
 import { renderModel, type Vec3 } from '../src/gfx/model3d';
 import { CAR_ANCHOR_X, CAR_ANCHOR_Y, CAR_DIRECTIONS, CAR_SCHEMES, carFaces, FLAME_OUT, LIVERIES, MODEL_SCALE } from '../src/gfx/vehicles';
@@ -286,6 +286,92 @@ describe('cockpit car order between cars', () => {
 
   it('gives no order when the footprints touch', () => {
     expect(carPaintOrder(90, 0, 0, 90 + 3 * K, 1.5 * K, 0, 0, 0)).toBe(0);
+  });
+
+  type Pack = { d: number; car: object; x: number; y: number; h: number; wallLo?: number }[];
+  // Pairs drawn in the wrong order that really overlap on screen (angularly, from the camera).
+  async function wrongOverlaps(list: Pack): Promise<number> {
+    const { Camera } = await import('../src/gfx/fpv/engine');
+    const c = new Camera();
+    c.set(0, 0, 9.2, 0);
+    const lo = new Float64Array(list.length);
+    const hi = new Float64Array(list.length);
+    const sorted = list.slice().sort((a, b) => b.d - a.d);
+    for (const [i, it] of sorted.entries()) footprintAngles(c, it.x, it.y, it.h, lo, hi, i);
+    let bad = 0;
+    for (let i = 0; i < sorted.length; i++) {
+      for (let j = i + 1; j < sorted.length; j++) {
+        const a = sorted[i]!;
+        const b = sorted[j]!;
+        if (lo[i]! >= hi[j]! || lo[j]! >= hi[i]!) continue;
+        if (carPaintOrder(a.x, a.y, a.h, b.x, b.y, b.h, 0, 0) < 0) bad++;
+      }
+    }
+    return bad;
+  }
+
+  it('orders a pack of five without the cycle that pairwise nudges ran into', async () => {
+    const { orderCarsAgainstCars } = await import('../src/gfx/fpv/view');
+    const { Camera } = await import('../src/gfx/fpv/engine');
+    const c = new Camera();
+    c.set(0, 0, 9.2, 0);
+    const cars: [number, number, number][] = [
+      [40.4, -21.4, -0.26],
+      [78.3, 3.8, 0.42],
+      [93.1, -20.8, -0.01],
+      [103.4, 49.5, -0.01],
+      [46.9, 43.4, -0.5],
+    ];
+    const list: Pack = cars.map(([x, y, h]) => ({ d: c.depth(x, y), car: {}, x, y, h }));
+    orderCarsAgainstCars(c, list as unknown as Parameters<typeof orderCarsAgainstCars>[1]);
+    expect(await wrongOverlaps(list)).toBe(0);
+  });
+
+  it('leaves no wrong visible overlap in random packs of 3 to 6 cars', async () => {
+    const { orderCarsAgainstCars } = await import('../src/gfx/fpv/view');
+    const { Camera } = await import('../src/gfx/fpv/engine');
+    const c = new Camera();
+    c.set(0, 0, 9.2, 0);
+    let seed = 12345;
+    const rnd = () => {
+      seed = (seed * 1103515245 + 12345) % 2147483648;
+      return seed / 2147483648;
+    };
+    let packs = 0;
+    let wrong = 0;
+    while (packs < 3000) {
+      const k = 3 + Math.floor(rnd() * 4);
+      const list: Pack = [];
+      for (let tries = 0; list.length < k && tries < 500; tries++) {
+        const x = 40 + rnd() * 80;
+        const y = -50 + rnd() * 100;
+        const h = (rnd() - 0.5) * 1.2;
+        if (list.some((o) => carPaintOrder(o.x, o.y, o.h, x, y, h, 0, 0) === 0)) continue;
+        list.push({ d: c.depth(x, y), car: {}, x, y, h });
+      }
+      if (list.length < k) continue;
+      packs++;
+      orderCarsAgainstCars(c, list as unknown as Parameters<typeof orderCarsAgainstCars>[1]);
+      if ((await wrongOverlaps(list)) > 0) wrong++;
+    }
+    expect(wrong).toBe(0);
+  });
+
+  it('never moves a car behind a wall it stands in front of', async () => {
+    const { orderCarsAgainstCars } = await import('../src/gfx/fpv/view');
+    const { Camera } = await import('../src/gfx/fpv/engine');
+    const c = new Camera();
+    c.set(0, 0, 9.2, 0);
+    // The inner car would have to go below the outer one, but a wall at d 90.1 must stay drawn after it.
+    const inner = { d: 90.2, car: {}, x: 90, y: 13, h: 0, wallLo: 90.1 };
+    const outer = { d: 90, car: {}, x: 90, y: 39, h: 0 };
+    orderCarsAgainstCars(c, [inner, outer] as unknown as Parameters<typeof orderCarsAgainstCars>[1]);
+    expect(inner.d).toBeGreaterThan(inner.wallLo);
+    // Without the wall the inner car does go below the outer one.
+    const free = { d: 90.2, car: {}, x: 90, y: 13, h: 0 };
+    const outer2 = { d: 90, car: {}, x: 90, y: 39, h: 0 };
+    orderCarsAgainstCars(c, [free, outer2] as unknown as Parameters<typeof orderCarsAgainstCars>[1]);
+    expect(free.d).toBeLessThan(outer2.d);
   });
 
   it('reorders draw items of side-by-side cars that centre depth gets wrong', async () => {
