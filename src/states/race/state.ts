@@ -1,4 +1,6 @@
 import { CONFIG, LAP_CHOICES, QUALIFYING_CHOICES, type RaceOptions } from '../../config';
+import { stepCabin } from '../../gfx/fpv/cabin';
+import { cockpitOverlayMs, drawCockpitView, prewarmCockpitView, prewarmScene } from '../../gfx/fpv/view';
 import { Particles } from '../../gfx/particles';
 import { drawCars, drawOil, trackCanvas } from '../../gfx/world';
 import { keyLabel } from '../../input';
@@ -55,6 +57,7 @@ export class RaceState implements State {
   private camOff = NaN;
   private readonly steerRamp = new SteerRamp();
   private reverseHint = 0;
+  private steerVis = 0;
   private notice: { text: string; age: number } | null = null;
   private radioCooldown = 0;
   private penaltyMsg = 0;
@@ -90,6 +93,8 @@ export class RaceState implements State {
     this.sound = new RaceSound(this.game.audio);
     this.lightsShown = 0;
     const prefs = this.game.prefs;
+    // Every race starts with the top-down camera; the cockpit is chosen per race.
+    prefs.camera = 'top';
     this.notice = null;
     this.penaltyMsg = 0;
     return new Race(this.opts, this.seed++, false, { penalties: prefs.penalties, collisions: prefs.collisions });
@@ -131,6 +136,11 @@ export class RaceState implements State {
 
   update(dt: number): void {
     const input = this.game.input;
+    if (input.pressed('camera')) {
+      const prefs = this.game.prefs;
+      prefs.camera = prefs.camera === 'top' ? 'cockpit' : 'top';
+      this.game.audio.ui('move');
+    }
     if (this.game.params.debug && input.pressed('debugSpeed')) {
       this.game.timeScale = this.game.timeScale === 1 ? 4 : this.game.timeScale === 4 ? 8 : 1;
     }
@@ -301,6 +311,8 @@ export class RaceState implements State {
       brake: input.isDown('brake'),
       toggleReverse: input.pressed('reverse'),
     };
+    const shownSteer = this.race.pitAuto ? this.race.playerDrive.steer : drive.steer;
+    this.steerVis += (shownSteer - this.steerVis) * Math.min(1, dt * 12);
     this.reverseHint = Math.max(0, this.reverseHint - dt);
     if (drive.toggleReverse && !this.race.pitAuto && !p0.reverse && Math.abs(p0.speed) > CONFIG.REVERSE_TOGGLE_MAX_MPH) {
       this.reverseHint = 1.5;
@@ -316,17 +328,19 @@ export class RaceState implements State {
       }
       if (this.lights.t >= this.lights.outAt + 1.5) this.lights = null;
       if (!this.race.started) {
+        prewarmScene();
         this.game.audio.setEngine(drive.gas ? 70 : 10, true, drive.gas);
         return;
       }
     }
     this.race.step(dt, drive);
+    stepCabin(this.race, dt);
     this.particles.emit(this.race.cars, dt);
     this.particles.update(dt);
     this.updateCamera(dt);
 
     const used = this.race.pitAuto ? this.race.playerDrive : drive;
-    this.sound.update(dt, this.race, used, this.camXFor(this.race.player.x));
+    this.sound.update(dt, this.race, used, this.camXFor(this.race.player.x), this.game.prefs.camera === 'cockpit');
     this.handleEvents(dt);
     const p = this.race.player;
 
@@ -360,6 +374,53 @@ export class RaceState implements State {
     const ix = (c: Car) => c.prevX + (c.x - c.prevX) * a;
     const iy = (c: Car) => c.prevY + (c.y - c.prevY) * a;
     const ih = (c: Car) => c.prevHeading + wrapAngle(c.heading - c.prevHeading) * a;
+    const view = layout.view;
+    const cockpit = this.game.prefs.camera === 'cockpit';
+    const skid = this.phase === 'running' && race.started ? skidWarning(race.player) : 0;
+    if (cockpit) {
+      const lt = this.lights;
+      const out = !!lt && lt.t >= lt.outAt;
+      const lights = lt
+        ? { lit: out ? 0 : Math.min(LIGHTS_COUNT, Math.floor(lt.t / LIGHT_INTERVAL_S)), out, since: lt.t - lt.outAt }
+        : undefined;
+      const touch = this.game.touch;
+      const pixelScale = g.canvas.width / layout.w;
+      drawCockpitView(g, {
+        race,
+        view,
+        ix,
+        iy,
+        ih,
+        steer: this.steerVis,
+        time: race.time,
+        touch,
+        skid,
+        lights,
+        particles: this.particles,
+        pixelScale,
+      });
+    } else {
+      this.renderTopDown(g, race, ix, iy, ih);
+      prewarmCockpitView(g, view, race.player.colorIdx, this.game.touch);
+    }
+
+    drawHudTop(g, race, this.notice);
+    drawHudPanel(g, race, !cockpit);
+    if (!cockpit) drawSkidLamp(g, skid, race.time, view.x + view.w - 6, view.y + 6);
+    const msg = this.message();
+    const low = Math.round(view.h * 0.22);
+    if (msg) drawRaceMessage(g, msg, cockpit ? low + 30 : 44);
+    if (this.lights && this.phase !== 'choose' && this.phase !== 'options') drawStartLights(g, this.lights, cockpit ? low : 12);
+    this.renderPhase(g);
+  }
+
+  private renderTopDown(
+    g: CanvasRenderingContext2D,
+    race: Race,
+    ix: (c: Car) => number,
+    iy: (c: Car) => number,
+    ih: (c: Car) => number,
+  ): void {
     const camX = this.camXFor(Math.round(ix(race.player)));
     g.save();
     const view = layout.view;
@@ -384,14 +445,10 @@ export class RaceState implements State {
     g.fill();
     if (this.game.prefs.speedBar && this.phase !== 'results') drawSpeedBar(g, race.player, race.pitAuto, px, py + 8);
     g.restore();
+  }
 
-    drawHudTop(g, race, this.notice);
-    drawHudPanel(g, race);
-    drawSkidLamp(g, this.phase === 'running' && race.started ? skidWarning(race.player) : 0, race.time, view.x + view.w - 6, view.y + 6);
-    const msg = this.message();
-    if (msg) drawRaceMessage(g, msg);
-    if (this.lights && this.phase !== 'choose' && this.phase !== 'options') drawStartLights(g, this.lights);
-
+  private renderPhase(g: CanvasRenderingContext2D): void {
+    const race = this.race;
     switch (this.phase) {
       case 'choose':
         this.renderChoose(g);
@@ -510,11 +567,16 @@ export class RaceState implements State {
     if (p.fuel <= 0 && Math.abs(p.speed) < 1) return this.game.touch ? 'OUT OF FUEL  –  open MENU' : 'OUT OF FUEL  –  press ESC';
     if (p.refueling) return 'REFUELING...';
     if (this.race.pitAuto) return 'PIT LANE  –  AUTO';
-    if (p.fuel < 0.12 && Math.floor(this.race.time * 2) % 2 === 0) return 'LOW FUEL';
+    if (p.fuel < CONFIG.LOW_FUEL && Math.floor(this.race.time * 2) % 2 === 0) return 'LOW FUEL';
     if (this.penaltyMsg > 0) return `PENALTY +${CONFIG.PENALTY_S} S  –  YOU CAUSED A CRASH`;
     if (this.reverseHint > 0) return 'STOP TO ENGAGE REVERSE';
     if (p.reverse) return 'REVERSE';
     return null;
+  }
+
+  private overlayLine(): string {
+    const ms = cockpitOverlayMs();
+    return `cabin ${ms.cabin.toFixed(2)} ms · mirror ${ms.mirror.toFixed(2)} ms · cars ${ms.cars.toFixed(2)} ms (median 60)`;
   }
 
   private debugLines(): string[] {
@@ -524,6 +586,7 @@ export class RaceState implements State {
       `x ${p.x.toFixed(0)} y ${p.y.toFixed(0)}  s ${p.s.toFixed(0)} d ${p.d.toFixed(1)}`,
       `mph ${p.speed.toFixed(1)}  fuel ${(p.fuel * 100).toFixed(1)}%  spin ${p.spinTime.toFixed(2)}`,
       `sector ${p.lastSector} passed ${p.sectorsPassed}  t ${this.race.time.toFixed(1)}`,
+      ...(this.game.prefs.camera === 'cockpit' ? [this.overlayLine()] : []),
     ];
   }
 }

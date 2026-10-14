@@ -67,10 +67,10 @@ export const CAR_ANCHOR_Y = 36;
 const GLASS = '#b8c4d0';
 const WHITE = '#f4f4f4';
 
-type Livery = 'stripes' | 'arrow' | 'flames' | 'band';
-const LIVERIES: Livery[] = ['stripes', 'arrow', 'flames', 'band'];
-const FLAME_OUT = '#FFC21A';
-const FLAME_IN = '#E63B2E';
+export type Livery = 'stripes' | 'arrow' | 'flames' | 'band';
+export const LIVERIES: Livery[] = ['stripes', 'arrow', 'flames', 'band'];
+export const FLAME_OUT = '#FFC21A';
+export const FLAME_IN = '#E63B2E';
 
 function topDecal(xy: [number, number][], z: (x: number) => number, color: string, normal: Vec3): Face {
   return { pts: xy.map(([x, y]) => [x, y, z(x) + 0.006] as Vec3), color, normal, flat: false };
@@ -259,6 +259,19 @@ function carModel(sc: CarScheme, livery: Livery): Face[] {
     { pts: rf, color: sc.roof, normal: [0, 0, 1], outline: true, decals: roofDecals },
   ];
 }
+
+const faceCache = new Map<number, Face[]>();
+
+export function carFaces(colorIdx: number): Face[] {
+  let f = faceCache.get(colorIdx);
+  if (!f) {
+    f = carModel(CAR_SCHEMES[colorIdx % CAR_SCHEMES.length]!, LIVERIES[colorIdx % LIVERIES.length]!);
+    faceCache.set(colorIdx, f);
+  }
+  return f;
+}
+
+export const MODEL_SCALE = CAR_SCALE;
 
 const carCache = new Map<string, HTMLCanvasElement>();
 

@@ -67,7 +67,7 @@ function drawKeysTab(g: CanvasRenderingContext2D, v: SettingsView): void {
   const px = KEYS_X;
   const py = 80;
   const pw = 560;
-  const rowH = 25;
+  const rowH = 23;
   const ph = 22 + BINDABLE.length * (rowH + 3) + 20;
   darkPanel(g, px, py, pw, ph);
   const cAction = KEYS_C_ACTION;
