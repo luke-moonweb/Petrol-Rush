@@ -562,7 +562,7 @@ export class RaceState implements State {
 
   private overlayLine(): string {
     const ms = cockpitOverlayMs();
-    return `cabin ${ms.cabin.toFixed(2)} ms · mirror ${ms.mirror.toFixed(2)} ms (median 60)`;
+    return `cabin ${ms.cabin.toFixed(2)} ms · mirror ${ms.mirror.toFixed(2)} ms · cars ${ms.cars.toFixed(2)} ms (median 60)`;
   }
 
   private debugLines(): string[] {

@@ -175,7 +175,7 @@ function drawPools(g: CanvasRenderingContext2D, c: Camera, sc: Scene, far: numbe
     if (d - p.r > far || !c.inView(p.x, p.y, p.r)) continue;
     const fade = d > c.fogNear ? Math.max(0, 1 - (d - c.fogNear) / (far - c.fogNear)) : 1;
     g.globalAlpha = 0.045 * fade;
-    for (const k of [1, 0.6]) {
+    for (const k of POOL_RINGS) {
       for (let i = 0; i < 16; i++) {
         const t = (i / 16) * Math.PI * 2;
         wx[i] = p.x + Math.cos(t) * p.r * k;
@@ -189,6 +189,15 @@ function drawPools(g: CanvasRenderingContext2D, c: Camera, sc: Scene, far: numbe
   g.globalCompositeOperation = 'source-over';
 }
 
+interface Puff {
+  x: number;
+  y: number;
+  z: number;
+  r: number;
+  a: number;
+  spark: boolean;
+}
+
 interface Item {
   d: number;
   poly?: Poly;
@@ -199,13 +208,40 @@ interface Item {
   glow?: Glow;
   sign?: TexQuad;
   bill?: Billboard;
-  puff?: { x: number; y: number; z: number; r: number; a: number; spark: boolean };
+  puff?: Puff;
+  // Pooled storage behind `puff`.
+  puffData: Puff;
+}
+
+// Draw list, reused every frame (the mirror reuses it after the main view): no per-frame garbage.
+const items: Item[] = [];
+const itemPool: Item[] = [];
+const walls: Item[] = [];
+const NO_ITEMS: never[] = [];
+const byDepth = (a: Item, b: Item) => b.d - a.d;
+
+function addItem(d: number): Item {
+  let it = itemPool[items.length];
+  if (!it) {
+    it = { d, puffData: { x: 0, y: 0, z: 0, r: 0, a: 0, spark: false } };
+    itemPool.push(it);
+  }
+  it.d = d;
+  it.poly = undefined;
+  it.car = undefined;
+  it.glow = undefined;
+  it.sign = undefined;
+  it.bill = undefined;
+  it.puff = undefined;
+  items.push(it);
+  return it;
 }
 
 // Centroid depth alone misplaces a car next to a wall piece. For walls close to a car, the side of the
 // wall plane the car is on (compared with the camera) decides which of the two must be drawn first.
 function orderCarsAgainstWalls(c: Camera, items: Item[]): void {
-  const walls = items.filter((it) => it.poly?.plane);
+  walls.length = 0;
+  for (const it of items) if (it.poly?.plane) walls.push(it);
   for (const it of items) {
     if (!it.car) continue;
     const x = it.x!;
@@ -244,7 +280,7 @@ function smokeSprite(): HTMLCanvasElement {
   return smoke;
 }
 
-function drawPuff(g: CanvasRenderingContext2D, c: Camera, p: NonNullable<Item['puff']>): void {
+function drawPuff(g: CanvasRenderingContext2D, c: Camera, p: Puff): void {
   const dx = p.x - c.x;
   const dy = p.y - c.y;
   const z = dx * c.cos + dy * c.sin;
@@ -291,24 +327,28 @@ function renderWorld(g: CanvasRenderingContext2D, c: Camera, f: CockpitFrame, ch
   }
   drawPools(g, c, scene, cheap ? 300 : 900, true);
 
-  const items: Item[] = [];
+  items.length = 0;
   for (const p of scene.solids) {
     if (visible(p, c) < 0) continue;
-    items.push({ d: c.depth(p.cx, p.cy), poly: p });
+    addItem(c.depth(p.cx, p.cy)).poly = p;
   }
-  for (const q of cheap ? [] : scene.signs) {
+  for (const q of cheap ? NO_ITEMS : scene.signs) {
     const dist = c.dist(q.cx, q.cy);
     if (dist - q.radius > q.far || !c.inView(q.cx, q.cy, q.radius)) continue;
-    items.push({ d: c.depth(q.cx, q.cy) - 0.3, sign: q, dist });
+    const it = addItem(c.depth(q.cx, q.cy) - 0.3);
+    it.sign = q;
+    it.dist = dist;
   }
-  for (const b of cheap ? [] : scene.billboards) {
+  for (const b of cheap ? NO_ITEMS : scene.billboards) {
     const dist = c.dist(b.x, b.y);
     if (dist > c.far || c.depth(b.x, b.y) < NEAR * 2 || !c.inView(b.x, b.y, b.w)) continue;
-    items.push({ d: c.depth(b.x, b.y), bill: b, dist });
+    const it = addItem(c.depth(b.x, b.y));
+    it.bill = b;
+    it.dist = dist;
   }
   for (const gl of scene.glows) {
     const d = c.depth(gl.x, gl.y);
-    if (d > NEAR * 2 && d < c.far && c.inView(gl.x, gl.y, gl.r)) items.push({ d: d - 0.5, glow: gl });
+    if (d > NEAR * 2 && d < c.far && c.inView(gl.x, gl.y, gl.r)) addItem(d - 0.5).glow = gl;
   }
   const player = f.race.player;
   for (const car of f.race.cars) {
@@ -317,34 +357,60 @@ function renderWorld(g: CanvasRenderingContext2D, c: Camera, f: CockpitFrame, ch
     const y = f.iy(car);
     const dist = c.dist(x, y);
     if (dist > c.far || !c.inView(x, y, CAR_REACH)) continue;
-    items.push({ d: c.depth(x, y), car, x, y, dist });
+    const it = addItem(c.depth(x, y));
+    it.car = car;
+    it.x = x;
+    it.y = y;
+    it.dist = dist;
   }
-  if (!cheap) {
-    f.particles?.forEachLive((spark, x, y, t, size) => {
-      const d = c.dist(x, y);
-      if (d > 500 || (!spark && d < OWN_SMOKE) || !c.inView(x, y, 10)) return;
-      const puff = spark
-        ? { x, y, z: 2 + (1 - t) * 3, r: size * 0.5, a: 1 - t, spark }
-        : { x, y, z: 4 + t * 8, r: size * (1 + t * 2.2), a: 0.45 * (1 - t), spark };
-      items.push({ d: c.depth(x, y) - 0.2, puff });
-    });
+  if (!cheap && f.particles) {
+    puffCam = c;
+    f.particles.forEachLive(addPuff);
   }
   orderCarsAgainstWalls(c, items);
-  items.sort((a, b) => b.d - a.d);
+  items.sort(byDepth);
+  let carMs = 0;
   for (const it of items) {
     if (it.poly) {
       const dist = c.dist(it.poly.cx, it.poly.cy);
       drawPoly(g, c, it.poly, dist);
       if (!cheap) for (const q of it.poly.decals ?? []) if (dist - q.radius < q.far) drawTexQuad(g, c, q, c.dist(q.cx, q.cy));
-    } else if (it.car) drawCar(g, c, it.car, f, it.dist!);
-    else if (it.glow) drawGlow(g, c, it.glow);
+    } else if (it.car) {
+      const t0 = performance.now();
+      drawCar(g, c, it.car, f, it.dist!);
+      carMs += performance.now() - t0;
+    } else if (it.glow) drawGlow(g, c, it.glow);
     else if (it.sign) drawTexQuad(g, c, it.sign, it.dist!);
     else if (it.bill) drawBillboard(g, c, it.bill, Math.max(0.15, 1 - c.fogLevel(it.dist!) / FOG_LEVELS));
     else if (it.puff) drawPuff(g, c, it.puff);
   }
+  if (!cheap) sample(carsMs, carMs);
+}
+
+let puffCam: Camera = cam;
+function addPuff(spark: boolean, x: number, y: number, t: number, size: number): void {
+  const c = puffCam;
+  const d = c.dist(x, y);
+  if (d > 500 || (!spark && d < OWN_SMOKE) || !c.inView(x, y, 10)) return;
+  const it = addItem(c.depth(x, y) - 0.2);
+  const p = it.puffData;
+  p.x = x;
+  p.y = y;
+  p.spark = spark;
+  if (spark) {
+    p.z = 2 + (1 - t) * 3;
+    p.r = size * 0.5;
+    p.a = 1 - t;
+  } else {
+    p.z = 4 + t * 8;
+    p.r = size * (1 + t * 2.2);
+    p.a = 0.45 * (1 - t);
+  }
+  it.puff = p;
 }
 
 const MAP_H = CY + R_OUT + 12;
+const POOL_RINGS = [1, 0.6];
 
 function stadiumPath(g: CanvasRenderingContext2D, r: number, kx: number, ky: number, x0: number, y0: number): void {
   g.beginPath();
@@ -511,8 +577,12 @@ export function cameraYaw(p: Car, heading: number, time: number): number {
   return camYaw;
 }
 
+const streaks: Streak[] = [];
+const streakPool: Streak[] = Array.from({ length: MAX_STREAKS }, () => ({ x: 0, k: 0 }));
+
+// The strongest floodlight masts just ahead, strongest first. The returned list is reused every frame.
 export function floodStreaks(c: Camera, glows: Glow[]): Streak[] {
-  const out: Streak[] = [];
+  streaks.length = 0;
   for (const gl of glows) {
     if (!gl.flood) continue;
     const dx = gl.x - c.x;
@@ -521,13 +591,29 @@ export function floodStreaks(c: Camera, glows: Glow[]): Streak[] {
     const lat = -dx * c.sin + dy * c.cos;
     if (d <= 0 || d >= FLOOD_DEPTH || Math.abs(lat) >= FLOOD_SIDE) continue;
     const t = 1 - d / FLOOD_DEPTH;
-    out.push({ x: c.ox + (c.focal * lat) / d, k: t * t * (3 - 2 * t) });
+    const k = t * t * (3 - 2 * t);
+    // Insert into the sorted top list, dropping the weakest when it is full.
+    let i = streaks.length;
+    if (i === MAX_STREAKS) {
+      if (k <= streaks[i - 1]!.k) continue;
+      i--;
+    } else streaks.push(streakPool[i]!);
+    const slot = streaks[i]!;
+    while (i > 0 && streaks[i - 1]!.k < k) {
+      streaks[i] = streaks[i - 1]!;
+      i--;
+    }
+    streaks[i] = slot;
+    slot.x = c.ox + (c.focal * lat) / d;
+    slot.k = k;
   }
-  return out.sort((a, b) => b.k - a.k).slice(0, MAX_STREAKS);
+  return streaks;
 }
 
 const cabinMs: number[] = [];
 const mirrorMs: number[] = [];
+const carsMs: number[] = [];
+const sortScratch: number[] = [];
 
 function sample(list: number[], ms: number): void {
   list.push(ms);
@@ -535,12 +621,14 @@ function sample(list: number[], ms: number): void {
 }
 
 function median(list: number[]): number {
-  const sorted = [...list].sort((a, b) => a - b);
-  return sorted[Math.floor(sorted.length / 2)] ?? 0;
+  sortScratch.length = 0;
+  for (const v of list) sortScratch.push(v);
+  sortScratch.sort((a, b) => a - b);
+  return sortScratch[Math.floor(sortScratch.length / 2)] ?? 0;
 }
 
-export function cockpitOverlayMs(): { cabin: number; mirror: number } {
-  return { cabin: median(cabinMs), mirror: median(mirrorMs) };
+export function cockpitOverlayMs(): { cabin: number; mirror: number; cars: number } {
+  return { cabin: median(cabinMs), mirror: median(mirrorMs), cars: median(carsMs) };
 }
 
 // The 3D scene takes a few hundred ms to build; the race state calls this during the start lights.
@@ -557,10 +645,23 @@ export function prewarmCockpitView(g: CanvasRenderingContext2D, view: Box, color
   if (cockpitUsed()) prewarmCockpit(g, view.w, view.h, colorIdx, touch);
 }
 
+const pylonTop = [-1, -1, -1, -1];
+
+// The pylon texture shows the first four; rebuild its names only when they change.
+function updatePylon(standings: Car[]): void {
+  let same = true;
+  for (let i = 0; i < 4; i++) if (pylonTop[i] !== (standings[i]?.colorIdx ?? -1)) same = false;
+  if (same) return;
+  for (let i = 0; i < 4; i++) pylonTop[i] = standings[i]?.colorIdx ?? -1;
+  setPylonNames(standings.slice(0, 4).map((car) => driverName(car.colorIdx).slice(0, 3)));
+}
+
+const cabinIn: CabinView = { race: null as unknown as Race, steer: 0, time: 0, touch: false, skid: 0, standings: [], streaks: [] };
+
 export function drawCockpitView(g: CanvasRenderingContext2D, f: CockpitFrame): void {
   if (stars.length === 0) initSky();
   const standings = f.race.standings();
-  setPylonNames(standings.slice(0, 4).map((car) => driverName(car.colorIdx).slice(0, 3)));
+  updatePylon(standings);
   const v = f.view;
   const p = f.race.player;
   const heading = f.ih(p);
@@ -589,7 +690,15 @@ export function drawCockpitView(g: CanvasRenderingContext2D, f: CockpitFrame): v
   drawSky(g, cam, v.w, yaw);
   renderWorld(g, cam, f, false);
   const t0 = performance.now();
-  const jolt = drawCockpit(g, v.w, v.h, { ...f, standings, streaks: floodStreaks(cam, scene!.glows) });
+  cabinIn.race = f.race;
+  cabinIn.steer = f.steer;
+  cabinIn.time = f.time;
+  cabinIn.touch = f.touch;
+  cabinIn.skid = f.skid;
+  cabinIn.lights = f.lights;
+  cabinIn.standings = standings;
+  cabinIn.streaks = floodStreaks(cam, scene!.glows);
+  const jolt = drawCockpit(g, v.w, v.h, cabinIn);
   const t1 = performance.now();
   g.translate(jolt.x, jolt.y);
   drawMirror(g, v.w, v.h, f, ex, ey, yaw);
