@@ -57,6 +57,9 @@ let camYaw = Number.NaN;
 let camClock = 0;
 let recovering = false;
 let camOff = 0;
+let camRace: Race | null = null;
+// A longer gap in race time between two cockpit frames means the top-down camera was shown meanwhile.
+const CAM_RESET_GAP_S = 0.25;
 
 interface Star {
   a: number;
@@ -356,7 +359,7 @@ function stadiumPath(g: CanvasRenderingContext2D, r: number, kx: number, ky: num
   g.closePath();
 }
 
-function drawMinimap(g: CanvasRenderingContext2D, w: number, h: number, wheelR: number, f: CockpitFrame): void {
+function drawMinimap(g: CanvasRenderingContext2D, w: number, h: number, wheelR: number, f: CockpitFrame, camYawNow: number): void {
   const pad = 6;
   const room = w / 2 - wheelR - 16;
   const mw = Math.round(Math.max(90, Math.min(340, w * 0.24, room - pad * 2)));
@@ -394,16 +397,17 @@ function drawMinimap(g: CanvasRenderingContext2D, w: number, h: number, wheelR: 
   g.fillRect(x0 + (WORLD_W / 2) * kx - 1, y0 + (CY + R_IN) * ky, 2, (R_OUT - R_IN) * ky);
 
   const p = f.race.player;
-  const yaw = f.ih(p);
   const px = x0 + f.ix(p) * kx;
   const py = y0 + f.iy(p) * ky;
-  const vx = Math.cos(yaw) * kx;
-  const vy = Math.sin(yaw) * ky;
-  const ang = Math.atan2(vy, vx);
+  // On the squashed map an angle is mapped through the axis scales.
+  const mapAngle = (a: number) => Math.atan2(Math.sin(a) * ky, Math.cos(a) * kx);
+  // The wedge shows where the camera looks (it differs from the heading during a spin), the arrow the car.
+  const look = mapAngle(camYawNow);
+  const ang = mapAngle(f.ih(p));
   g.fillStyle = 'rgba(127,227,217,0.25)';
   g.beginPath();
   g.moveTo(px, py);
-  g.arc(px, py, mh * 0.6, ang - 0.5, ang + 0.5);
+  g.arc(px, py, mh * 0.6, look - 0.5, look + 0.5);
   g.closePath();
   g.fill();
   for (const car of f.race.cars) {
@@ -463,13 +467,28 @@ function drawMirror(g: CanvasRenderingContext2D, w: number, h: number, f: Cockpi
   g.stroke();
 }
 
+// Forgets a leftover spin swing: on a new race, a restart, or when the cockpit was not drawn last frame.
+export function syncCameraYaw(race: Race, time: number): void {
+  if (race === camRace && time >= camClock && time - camClock <= CAM_RESET_GAP_S) return;
+  camRace = race;
+  camClock = time;
+  camYaw = Number.NaN;
+  recovering = false;
+  camOff = 0;
+}
+
+// Direction the cockpit camera looks in for this race, or NaN when the cockpit has not drawn it.
+// During a spin it differs from the car heading, so the sound uses it to pan rivals.
+export function cockpitCameraYaw(race: Race): number {
+  return race === camRace ? camYaw : Number.NaN;
+}
+
 // During a spin the camera keeps looking roughly where the car travels instead of turning with it.
 // Afterwards it follows the car's heading and only its leftover offset fades out, so turning into the
 // rest of a corner does not leave it trailing. In normal driving it is locked to the heading.
-export function cameraYaw(p: Car, heading: number): number {
-  const now = performance.now() / 1000;
-  const dt = Math.max(0, Math.min(0.1, now - camClock));
-  camClock = now;
+export function cameraYaw(p: Car, heading: number, time: number): number {
+  const dt = Math.max(0, Math.min(0.1, time - camClock));
+  camClock = time;
   const ease = Math.min(1, dt / CAM_EASE_S);
   if (p.spinTime > 0 && Math.abs(p.speed) > 2) {
     const off = wrapAngle(heading - p.moveAngle);
@@ -545,7 +564,8 @@ export function drawCockpitView(g: CanvasRenderingContext2D, f: CockpitFrame): v
   const v = f.view;
   const p = f.race.player;
   const heading = f.ih(p);
-  const yaw = cameraYaw(p, heading);
+  syncCameraYaw(f.race, f.time);
+  const yaw = cameraYaw(p, heading, f.time);
   const c = Math.cos(heading);
   const s = Math.sin(heading);
   const ex = f.ix(p) + EYE_BACK * c - EYE_SIDE * s;
@@ -573,7 +593,7 @@ export function drawCockpitView(g: CanvasRenderingContext2D, f: CockpitFrame): v
   const t1 = performance.now();
   g.translate(jolt.x, jolt.y);
   drawMirror(g, v.w, v.h, f, ex, ey, yaw);
-  drawMinimap(g, v.w, v.h, wheelRadius(v.w), f);
+  drawMinimap(g, v.w, v.h, wheelRadius(v.w), f, yaw);
   sample(cabinMs, t1 - t0);
   sample(mirrorMs, performance.now() - t1);
   g.restore();
