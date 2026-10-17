@@ -120,8 +120,8 @@ browser does not support it (iPhone Safari).
 - **Corners are taken at 150 mph or less.** Go a little faster and the car slides wide and scrubs
   speed; go much faster and it spins. The **SKID** lamp (top right) and the red-dashed zone on the
   speedometer warn you, and an optional bar above your car shows how far over the limit you are.
-- **Throttle works like cruise control** – release it and the car holds its speed. Braking is
-  stronger at high speed and never engages reverse by itself.
+- **Hold the throttle to keep your speed** – release it and the car slowly coasts down, like
+  lifting off the pedal. Braking is stronger at high speed.
 - **Overtake on the straights.** Steering builds up while you hold a key: tap for small corrections,
   hold for a full turn.
 - **The car ahead has right of way.** If you run into a car in front of you – even one that just
