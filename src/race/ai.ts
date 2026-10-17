@@ -22,6 +22,7 @@ import {
   S_BOTTOM,
   S_TURN1,
   S_TURN2,
+  TRACK_LEN,
   TURN_LEN,
   trackCurves,
   trackHeadingAt,
@@ -103,10 +104,17 @@ export function aiInput(car: Car, view: AiView, dt: number): DriveInput {
   if (ai.pitPhase === 'none' && decide) {
     const fuelLaps = car.fuel * CONFIG.FUEL_RANGE_LAPS;
     const lapsLeft = view.laps - lapsCompleted(car);
-    if (car.finished || (fuelLaps < ai.pitFuelLaps && fuelLaps < lapsLeft + 0.3)) ai.pitPhase = 'entering';
+    // Grip model: the decision comes up to PIT_DECIDE_FROM before turn 2, so also stop when the fuel
+    // would not reach the box from the next decision point a lap later.
+    const low = fuelLaps < ai.pitFuelLaps || (grip && fuelLaps < 1 + PIT_REACH_LAPS + PIT_FUEL_MARGIN_LAPS);
+    if (car.finished || (low && fuelLaps < lapsLeft + 0.3)) ai.pitPhase = 'entering';
   }
 
   if (ai.pitPhase === 'none' && car.pitSide && car.wasInPit && car.y > CY && car.x < WALL_X1) ai.pitPhase = 'exiting';
+  if (ai.pitPhase !== 'exiting') {
+    ai.merging = false;
+    ai.mergeWait = 0;
+  }
 
   switch (ai.pitPhase) {
     case 'entering': {
@@ -126,23 +134,28 @@ export function aiInput(car: Car, view: AiView, dt: number): DriveInput {
           target = Math.min(target, Math.sqrt(Math.max(0, CONFIG.BRAKE_MPH_S * dist) / pxm) * 1.2);
           if (dist < 8 && Math.abs(car.speed) < CONFIG.PIT_STOP_MPH && inPitBox(car.x, car.y)) {
             ai.pitPhase = car.finished ? 'parked' : 'fueling';
+            ai.skipped = false;
           }
         }
       } else {
         laneD = PIT_APPROACH_D;
         if (grip && Math.abs(car.d - laneD) > 6) {
-          // Someone alongside on the inside: hold the line until the way is clear, dropping in
-          // behind a car that is level or ahead (one coming from behind is let by).
+          // A car may skip the stop for a lap only if its fuel surely lasts another lap to the box,
+          // and never twice running.
+          const fuelLaps = car.fuel * CONFIG.FUEL_RANGE_LAPS;
+          const canSkip = !ai.skipped && fuelLaps > 1 + PIT_REACH_LAPS + PIT_FUEL_MARGIN_LAPS;
+          // Someone alongside on the inside: drop in behind a car that is level or ahead (one coming
+          // from behind is let by), holding the line meanwhile if the stop could still be skipped;
+          // otherwise move over anyway (racing cars allow for a car heading for the pit entry).
           const block = sideBlockers(car, laneD, view.cars);
           if (block.length > 0) {
-            laneD = car.d;
+            if (canSkip) laneD = car.d;
             for (const o of block) if (deltaS(car.s, o.s) > -10) target = Math.min(target, Math.max(0, o.speed - 8));
           }
-          // Still held out wide as turn 2 arrives: skip the pits this lap rather than dive across
-          // the corner, if the fuel lasts another lap.
-          const fuelLaps = car.fuel * CONFIG.FUEL_RANGE_LAPS;
-          if (car.s > S_TURN2 - PIT_GIVE_UP_PX && car.s < S_TURN2 && car.d > PIT_APPROACH_D + PIT_GIVE_UP_D && fuelLaps > 1.2) {
+          // Still held out wide as turn 2 arrives: skip the pits this lap rather than dive across the corner.
+          if (car.s > S_TURN2 - PIT_GIVE_UP_PX && car.s < S_TURN2 && car.d > PIT_APPROACH_D + PIT_GIVE_UP_D && canSkip) {
             ai.pitPhase = 'none';
+            ai.skipped = true;
             break;
           }
         }
@@ -181,10 +194,23 @@ export function aiInput(car: Car, view: AiView, dt: number): DriveInput {
         }
         // Grip model: give way at the end of the pit road until the inside lane is clear, instead
         // of merging into turn 1 alongside (or just ahead of) a car that cannot slow down in time.
+        // After MERGE_MAX_WAIT_S stopped it goes as soon as nobody is alongside, after MERGE_FORCE_S
+        // in any case; once it goes it
+        // is committed (racing cars allow for it and it no longer gives way). Not for the player
+        // under the pit autopilot, who merges by hand after the hand-back.
         if (grip && car.x > WALL_X1 - MERGE_YIELD_PX) {
-          if (!mergeClear(car, LANES[0]!, view.cars, true)) {
-            const room = Math.max(0, WALL_X1 - MERGE_STOP_PX - car.x);
-            target = Math.min(target, Math.sqrt((2 * CONFIG.BRAKE_MPH_S * 0.7 * room) / pxm));
+          if (!ai.merging && !car.isPlayer) {
+            const clear =
+              ai.mergeWait >= MERGE_FORCE_S ||
+              (ai.mergeWait >= MERGE_MAX_WAIT_S
+                ? mergeClear(car, LANES[0]!, view.cars, false, 0)
+                : mergeClear(car, LANES[0]!, view.cars, true));
+            if (clear) ai.merging = true;
+            else {
+              const room = Math.max(0, WALL_X1 - MERGE_STOP_PX - car.x);
+              target = Math.min(target, Math.sqrt((2 * CONFIG.BRAKE_MPH_S * 0.7 * room) / pxm));
+              if (Math.abs(car.speed) < 3) ai.mergeWait += dt;
+            }
           }
           // and do not run into a car that has just merged (it is no longer in the pit lane)
           const ahead = exitRoadAhead(car, view.cars);
@@ -195,7 +221,9 @@ export function aiInput(car: Car, view: AiView, dt: number): DriveInput {
           }
         }
       } else {
-        laneD = mergeClear(car, LANES[0]!, view.cars, grip) ? LANES[0]! : EXIT_D;
+        // (grip: while the lane is not clear it keeps to the inside rather than easing out to EXIT_D,
+        // which overlaps a car on the inside lane)
+        laneD = mergeClear(car, LANES[0]!, view.cars) ? LANES[0]! : grip ? Math.max(EXIT_D_MIN, Math.min(car.d, EXIT_D)) : EXIT_D;
         if (Math.abs(car.d - LANES[0]!) < 5 || car.y < CY) {
           ai.pitPhase = 'none';
           ai.lane = LANES[0]!;
@@ -303,7 +331,8 @@ export function aiInput(car: Car, view: AiView, dt: number): DriveInput {
       // (grip: a much slower car counts from further across, as the pursuit line drifts into corners)
       const wide = grip ? Math.min(FOLLOW_WIDE_PX, Math.max(0, car.speed - o.speed - 20) / 5) : 0;
       const near = (d: number) => Math.abs(d - car.d) < 17 + wide || (ds > 40 && Math.abs(d - laneD) < 16 + wide);
-      if (near(o.d) || (jd !== o.d && near(jd))) {
+      // (counted on its new line only once clearly ahead: one level with us gives way to us instead)
+      if (near(o.d) || (jd !== o.d && ds > JOIN_AHEAD_PX && near(jd))) {
         if (ds < gap) {
           gap = ds;
           ahead = o;
@@ -443,6 +472,8 @@ function isServicing(o: Car): boolean {
 const AI_RECOVER_MPH = 10;
 
 const EXIT_D = -HALF_W + 13;
+/** Grip model: the innermost line a merging car keeps to while the lane is not clear (clear of the island). */
+const EXIT_D_MIN = -HALF_W + 9;
 /** Line of a car heading for the pit entry, before it dives off turn 2. */
 const PIT_APPROACH_D = -HALF_W + 9;
 // Grip model: a car more than PIT_GIVE_UP_D px out from that line PIT_GIVE_UP_PX before turn 2 gives the stop up.
@@ -458,17 +489,26 @@ const PIT_DIVE_AT = 0.6;
 // Grip model: the pit decision window ends this far before turn 2 (px), and starts PIT_DECIDE_FROM before it.
 const PIT_DECIDE_FROM = 700;
 const PIT_DECIDE_TO = 250;
+/** Fuel (laps) from the pit decision window to the far end of the pit lane, and a margin on top. */
+const PIT_REACH_LAPS = (PIT_DECIDE_FROM + TURN_LEN + (PIT_X1 - CX_L)) / TRACK_LEN;
+const PIT_FUEL_MARGIN_LAPS = 0.15;
 const LANE_CHANGE_CLEAR = 160;
 // Grip model pit exit: give way from this far before the end of the pit road, stopping this far
 // before it; racing cars up to MERGE_BACK_PX behind count, with a reaction of MERGE_REACT_S.
 const MERGE_YIELD_PX = 260;
 /** Grip model: extra lateral reach (px) of the follow logic for a car 60+ mph slower. */
 const FOLLOW_WIDE_PX = 8;
-/** A car leaving the pits this close to the end of the pit road is merging (racing cars allow for it). */
-const MERGE_COMMIT_PX = 4;
+/** A car moving to a new line (pit entry or exit) counts there for cars this far behind it or more. */
+const JOIN_AHEAD_PX = 30;
+/** A merging car is counted by racing cars once it does more than this. */
+const MERGE_SEEN_MPH = 15;
+/** Stopped this long at the end of the pit road, a car merges as soon as nobody is alongside. */
+const MERGE_MAX_WAIT_S = 2.5;
+/** ...and after this long it goes regardless (racing cars allow for it once it moves). */
+const MERGE_FORCE_S = 4;
 const MERGE_STOP_PX = 12;
-const MERGE_BACK_PX = 700;
-const MERGE_REACT_S = 0.4;
+const MERGE_BACK_PX = 450;
+const MERGE_REACT_S = 0.25;
 const MERGE_GAIN_MPH = 20;
 
 function freeBox(car: Car, cars: Car[]): number {
@@ -487,7 +527,7 @@ function freeBox(car: Car, cars: Car[]): number {
  * car's speed after a reaction, at the follow-logic braking rate (it may be carrying more speed
  * into turn 1 than the merging car will have).
  */
-function mergeClear(car: Car, lane: number, cars: Car[], brakeRoom = false): boolean {
+function mergeClear(car: Car, lane: number, cars: Car[], brakeRoom = false, closeS = 1.5): boolean {
   const pxm = CONFIG.PX_PER_MPH;
   return cars.every((o) => {
     if (o === car || Math.abs(o.d - lane) > 17) return true;
@@ -497,12 +537,12 @@ function mergeClear(car: Car, lane: number, cars: Car[], brakeRoom = false): boo
       const vo = o.speed * pxm;
       // the merging car keeps accelerating out of the pit road
       const vc = Math.min(vo, (Math.max(0, car.speed) + MERGE_GAIN_MPH) * pxm);
-      const b = CONFIG.BRAKE_MPH_S * 0.6 * pxm;
+      const b = CONFIG.BRAKE_MPH_S * 0.7 * pxm;
       if (-ds < (vo * vo - vc * vc) / (2 * b) + vo * MERGE_REACT_S + 46) return false;
     }
     if (ds <= -30 && ds > -300) {
       const closing = (o.speed - car.speed) * pxm;
-      if (closing > 0 && (-ds - 40) / closing < 1.5) return false;
+      if (closing > 0 && (-ds - 40) / closing < closeS) return false;
     }
     return true;
   });
@@ -513,16 +553,17 @@ function mergeClear(car: Car, lane: number, cars: Car[], brakeRoom = false): boo
  * pit road joins at EXIT_D or further out, one heading for the pit entry moves to the inside.
  */
 function joiningD(o: Car): number {
-  if (o.ai.pitPhase === 'exiting' && o.x > WALL_X1 - MERGE_COMMIT_PX) return Math.max(o.d, EXIT_D);
+  // (only a merging car on the move: racing cars never stop on the track for a car still on the pit road)
+  if (o.ai.pitPhase === 'exiting' && o.ai.merging && o.speed > MERGE_SEEN_MPH) return Math.max(o.d, EXIT_D);
   if (o.ai.pitPhase === 'entering' && o.y < CY + 40 && o.s >= S_TURN2 - PIT_DECIDE_FROM) return Math.min(o.d, PIT_APPROACH_D);
   return o.d;
 }
 
-/** Grip model: the nearest car straight ahead of a car at the end of the pit road (any phase). */
+/** Grip model: the nearest car straight ahead of a car at the end of the pit road, also leaving the pits. */
 function exitRoadAhead(car: Car, cars: Car[]): { car: Car; gap: number } | null {
   let best: { car: Car; gap: number } | null = null;
   for (const o of cars) {
-    if (o === car) continue;
+    if (o === car || !o.pitSide || o.ai.pitPhase !== 'exiting') continue;
     const dx = o.x - car.x;
     if (dx <= 0 || dx > 150 || Math.abs(o.y - car.y) > 16) continue;
     if (!best || dx < best.gap) best = { car: o, gap: dx };
