@@ -64,6 +64,8 @@ export const CONFIG = {
     /** Full lock only from OVERDRIVE_OVER + OVERDRIVE_FULL over; less excess opens it partly. */
     OVERDRIVE_FULL: 0.3,
     OVERDRIVE_S: 0.5,
+    /** Push time lost per second while the key is released. */
+    OVERDRIVE_DECAY: 2,
     OVERDRIVE_RAMP_S: 0.5,
     MIN_V: 20,
     /** Rear stress builds while the demand is above U_REAR; the rear lets go at 1. */
