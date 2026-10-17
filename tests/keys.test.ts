@@ -3,7 +3,7 @@ import { CONFIG, type DriveModel } from '../src/config';
 import { limitMph } from '../src/race/physics';
 import { laneCurvature } from '../src/track/curvature';
 import { RC, S_TOP, S_TURN1, TRACK_LEN } from '../src/track/oval';
-import { OVAL_TRACK, runCurve } from './sim/drivers';
+import { OVAL_TRACK, type RunOpts, runCurve } from './sim/drivers';
 
 // Keyboard / touch player on the oval with the realistic key driver ('human': holds the key while
 // the aim point is off the nose, 0.18 s reaction), through the game's own PlayerSteering.
@@ -70,7 +70,7 @@ describe('keys: driving at the limit (designer H2)', () => {
  * Turn 1 from 700 px before it to `after` px after it (default 500; the end of the next straight
  * is 1600), entering at f x the lane limit (capped at 180).
  */
-function entry(d: number, f: number, opts: { noCatch?: boolean; insist?: boolean } = {}, after = 500) {
+function entry(d: number, f: number, opts: Partial<RunOpts> = {}, after = 500) {
   const mph = Math.min(CONFIG.MAX_MPH, limitMph(laneCurvature(-1 / RC, d)) * f);
   return runCurve(
     OVAL_TRACK,
@@ -114,5 +114,50 @@ describe('keys: braking matters (designer H1, M3)', () => {
     for (const d of [-28.5, -9.5]) expect(entry(d, 1.2, { insist: true }).spun, `d ${d} x1.2`).toBe(true);
     // one who lets go of the key without countersteering survives a moderate step-out
     expect(entry(0, 1.15, { noCatch: true }).spun).toBe(false);
+  });
+});
+
+describe('keys: lifting off at a small excess (T1)', () => {
+  /** Turn 1 entered at f x the lane limit, lifting `lift` s after turn-in; key held into the bend or line tracking. */
+  function lift(d: number, f: number, at: number, insist: boolean) {
+    const mph = Math.min(CONFIG.MAX_MPH, limitMph(laneCurvature(-1 / RC, d)) * f);
+    return runCurve(
+      OVAL_TRACK,
+      { mph: 180, approachMph: mph, driver: 'human', d, walls: 'oval', T: 12, gas: 'hold', liftAfter: at, insist, stopAtFinish: true },
+      S_TOP + 300,
+      S_TURN1 - 700,
+    );
+  }
+
+  it('at 1.0-1.10 x, lifting at turn-in or mid-corner: no spin, slip under 5 deg by the exit', () => {
+    // (holding the key on the inside lane tightens the line into the inner wall: a wall hit, not T1)
+    for (const insist of [false, true])
+      for (const d of insist ? [-9.5, 0, 9.5, 28.5] : [-28.5, -9.5, 0, 9.5, 28.5])
+        for (const at of [0, 0.5])
+          for (const f of [1, 1.05, 1.1]) {
+            const r = lift(d, f, at, insist);
+            const tag = `${insist ? 'key held' : 'tracking'} d ${d} lift ${at} s x${f}`;
+            expect(r.spun, tag).toBe(false);
+            expect(r.exitSlipDeg, tag).toBeGreaterThanOrEqual(0);
+            expect(r.exitSlipDeg, tag).toBeLessThan(5);
+          }
+  });
+
+  it('at 1.25 x or more while insisting it still spins', () => {
+    for (const d of [-28.5, -9.5, 0])
+      for (const at of [0, 0.5]) for (const f of [1.25, 1.3]) expect(lift(d, f, at, true).spun, `d ${d} lift ${at} s x${f}`).toBe(true);
+  });
+});
+
+describe('keys: flat out is not free along the wall (T4)', () => {
+  it('a driver who only asks what a held key asks (no overdrive) and rides the outer wall loses at least 0.5 s on turn 1 and the top straight', () => {
+    const lines: string[] = [];
+    for (const d of [-28.5, -9.5, 0]) {
+      const braked = entry(d, 1, { driver: 'capped' }, 1600);
+      const flat = entry(d, 2, { driver: 'capped' }, 1600);
+      lines.push(`d ${d}: braked ${braked.time.toFixed(2)} s, flat out ${flat.time.toFixed(2)} s (wall hits ${flat.wallHits})`);
+      expect(flat.time - braked.time, `d ${d}`).toBeGreaterThanOrEqual(0.5);
+    }
+    console.log(lines.join('\n'));
   });
 });

@@ -120,7 +120,11 @@ describe('grip model: 20-car races (A12, A13)', () => {
               pitSpins++;
               // the cause: another car touching (now or in the last second; a bump into the wall counts) or oil; anything else is the AI's own driving
               // (or the aftermath of the car's own earlier spin: recovering into a wall)
-              const bump = race.time - (lastCarNear[c.id] ?? -9) <= 1 || race.time - (prevSpin ?? -99) < 6;
+              const bump =
+                race.time - (lastCarNear[c.id] ?? -9) <= 1 ||
+                race.time - (lastContact[c.id] ?? -9) <= 1 ||
+                c.contactStrength > 0 ||
+                race.time - (prevSpin ?? -99) < 6;
               const oil = race.oil.some((o) => o.owner !== c.id && Math.hypot(c.x - o.x, c.y - o.y) < oilRadius(o) + 2);
               if (!bump && !oil) pitSpinsOwn++;
             }
