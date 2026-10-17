@@ -89,7 +89,7 @@ export const CONFIG = {
     LOOSE_GAIN: 3,
     SPIN_SLIP: 0.75,
     SCRUB: 0.25,
-    SLIP_DRAG: 0.35,
+    SLIP_DRAG: 0.6,
     SLIDE_OVER_MIN: 0.05,
     SLIDE_SLIP_MIN: 0.08,
     /** Grip use above which a rear hit spins at REAR_SPIN_TURN_MPH. */
