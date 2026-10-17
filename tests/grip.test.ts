@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { CONFIG, type DriveModel } from '../src/config';
 import { limitMph, stepCar } from '../src/race/physics';
-import { CurveTrack, circle } from './sim/curves';
+import { CurveTrack, chicane, circle, hairpin, sBend } from './sim/curves';
 import { type DriverKind, firstCurveS, freshCar, type Gas, runCurve } from './sim/drivers';
 
 // Grip model acceptance on open-plane fixtures (spec section 6.2, with the user's graded decision:
@@ -167,4 +167,33 @@ describe('grip model: a slide costs time (A9)', () => {
       expect(time(1.1), `r ${r}`).toBeGreaterThanOrEqual(time(1.0) - 0.01);
     }
   });
+});
+
+describe('grip model: the AI planner on other track shapes (A8)', () => {
+  for (const [name, t] of [
+    ['chicane', chicane()],
+    ['hairpin', hairpin()],
+    ['s-bend', sBend()],
+    ['circle r 100', circle(100, 1)],
+  ] as const) {
+    it(`${name}: AI drives it with no spin, no wall contact, grip use <= 1`, () => {
+      for (const d of [-20, 0, 20])
+        for (const f of [0.884, 0.987]) {
+          let wall = 0;
+          const res = runCurve(
+            t,
+            { mph: 180, driver: 'ai', d, gripFrac: f, walls: [40, -40], T: 14, runUp: 600 },
+            t.len - 300,
+            undefined,
+            (_t, c) => {
+              if (c.wallImpact > 0) wall++;
+            },
+          );
+          expect(res.spun, `${name} d ${d}`).toBe(false);
+          expect(wall, `${name} d ${d}`).toBe(0);
+          expect(res.maxUse, `${name} d ${d}`).toBeLessThanOrEqual(1.0);
+          expect(res.time, `${name} d ${d}`).toBeLessThan(Infinity);
+        }
+    });
+  }
 });

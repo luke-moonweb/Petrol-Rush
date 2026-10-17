@@ -29,6 +29,9 @@ export interface DriveInput {
   straightTo?: number;
 }
 
+/** Grip model diagnostics: spins started by the grip step (slip) and by walls, for tests and labs. */
+export const GRIP_SPINS = { slip: 0, wall: 0 };
+
 export const NO_INPUT: DriveInput = { steer: 0, gas: false, brake: false, toggleReverse: false };
 
 function towards(v: number, target: number, step: number): number {
@@ -387,7 +390,7 @@ function gripStep(car: Car, input: DriveInput, dt: number, v: number, aLong: num
     }
   }
 
-  if (Math.abs(slip) > G.SPIN_SLIP) startSpin(car, C.SPIN_RATE, slip > 0 ? 1 : -1);
+  if (Math.abs(slip) > G.SPIN_SLIP && startSpin(car, C.SPIN_RATE, slip > 0 ? 1 : -1)) GRIP_SPINS.slip++;
 }
 
 function markContact(car: Car, x: number, y: number, strength: number): void {
@@ -470,7 +473,7 @@ function applyWallGrip(car: Car, n: WallNormal): void {
 
   if (car.spinTime <= 0 && car.speed > 0 && angle > g1 && -vn > G.WALL_SPIN_MPH) {
     const cross = Math.cos(car.heading) * n.ny - Math.sin(car.heading) * n.nx;
-    startSpin(car, C.SPIN_RATE * 0.8, cross >= 0 ? 1 : -1);
+    if (startSpin(car, C.SPIN_RATE * 0.8, cross >= 0 ? 1 : -1)) GRIP_SPINS.wall++;
   }
 
   if (car.spinTime > 0) {

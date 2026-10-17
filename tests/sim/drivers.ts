@@ -2,7 +2,8 @@
 // speed, the road ahead); the physics under test never reads the track.
 import { CONFIG, DEFAULT_OPTIONS } from '../../src/config';
 import type { Car } from '../../src/race/car';
-import { curvatureAssist, type DriveInput, maxCurvature, SteerRamp, stepCar } from '../../src/race/physics';
+import { brakeAt, curvatureAssist, type DriveInput, maxCurvature, SteerRamp, stepCar } from '../../src/race/physics';
+import { planSpeed } from '../../src/race/planner';
 import { Race } from '../../src/race/race';
 import type { CurvatureTable } from '../../src/track/curvature';
 import { laneCurvature } from '../../src/track/curvature';
@@ -68,8 +69,9 @@ export type Gas = 'hold' | 'full' | 'lift' | 'brake';
  * keys: keyboard player, pulses the key so the average steer follows the line (taps >= 70 ms).
  * keysHold: keyboard player who holds the key whenever the car is off line (panics).
  * keysCatch: keys, plus one countersteer tap of `tap` s after `react` s of slip.
+ * ai: the game AI's speed planner and pursuit steering (gas mode ignored).
  */
-export type DriverKind = 'ideal' | 'keys' | 'keysHold' | 'catch' | 'keysCatch' | 'lock';
+export type DriverKind = 'ideal' | 'keys' | 'keysHold' | 'catch' | 'keysCatch' | 'lock' | 'ai';
 
 export interface RunOpts {
   d?: number;
@@ -88,6 +90,8 @@ export interface RunOpts {
   holdMph?: number;
   /** Walls at these lateral offsets (right, left of the centre line), or 'oval' for the game walls; none when omitted. */
   walls?: [number, number] | 'oval';
+  /** Grip fraction for the 'ai' driver (default 0.987, the fastest AI). */
+  gripFrac?: number;
   /** Only measure wide / inside after this many seconds (skips the entry transient). */
   settle?: number;
   /** Brake to this speed before the first curve (planned at the given decel), instead of entering at `mph`. */
@@ -169,7 +173,23 @@ export function runCurve(
     } else slipSince = -1;
     const reacting = slipSince >= 0 && time - slipSince >= (o.react ?? 0.3);
     let steer: number;
+    let aiGas: boolean | null = null;
+    let aiBrake = false;
     switch (o.driver) {
+      case 'ai': {
+        // Same planner, pursuit and grip cap as src/race/ai.ts.
+        const target = planSpeed(t.table, st.s, st.d, d, o.gripFrac ?? 0.987, car.speed);
+        aiGas = car.speed < target - 0.5;
+        aiBrake = car.speed > target + 1.5;
+        const lookAi = 40 + Math.max(0, car.speed) * PXM * 0.22;
+        const q = t.pointAt(st.s + lookAi, d);
+        const diff = wrapAngle(Math.atan2(q.y - car.y, q.x - car.x) - car.heading);
+        const G = CONFIG.GRIP;
+        const fLong = aiBrake ? brakeAt(car.speed) / CONFIG.BRAKE_MPH_S_HIGH : 0;
+        const cap = Math.min(1, (G.GRIP * Math.sqrt(1 - (G.FC_K * fLong) ** 2)) / (v * v * maxCurvature(v)));
+        steer = Math.max(-cap, Math.min(cap, diff * 5));
+        break;
+      }
       case 'ideal':
         steer = want;
         break;
@@ -213,7 +233,11 @@ export function runCurve(
       brake: g === 'brake' && time - tIn < 0.4,
       toggleReverse: false,
     };
-    if (!entered) {
+    if (aiGas !== null) {
+      input.gas = aiGas;
+      input.brake = aiBrake;
+    }
+    if (!entered && aiGas === null) {
       // Approach: brake late (at 0.75 x the braking rate) to reach approachMph at the curve.
       const left = sCurve - st.s;
       if (left <= 0) {
