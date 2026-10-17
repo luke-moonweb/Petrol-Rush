@@ -119,13 +119,17 @@ browser does not support it (iPhone Safari).
 
 - **Corner speed depends on the radius.** The tyres have a fixed amount of grip: a tight corner or
   the inside lane needs less speed than a wide one (the centre of the oval goes at about 160 mph,
-  the outside lane at about 174). A little too fast and the car runs wide and scrubs speed; more and
-  the tail steps out – steer against it (a quick tap is enough for a small slide) or it spins.
-  Braking or lifting off in the corner uses grip too: the nose tucks in and the tail gets lighter.
+  the outside lane at about 174). A held steering key asks for about all the grip there is, so you
+  can drive right at the limit. A little too fast and the car runs wide and scrubs speed; keep
+  steering into a corner you are clearly too fast for and the tail steps out – steer against it (a
+  quick tap is enough for a small slide) or it spins. A slide costs more time than braking would
+  have. Braking or lifting off in the corner uses grip too: the nose tucks in and the tail gets
+  lighter.
 - **Warnings:** the red zone on the speedometer and an optional bar above your car show the limit
-  speed of the next corner; the cockpit LEDs show how much grip you use (teal, amber, red, all red
-  flashing when you are over the limit); the **SKID** lamp lights only when the car really slides
-  and blinks faster the more it slides.
+  speed of the next corner; the cockpit LEDs show how much grip your line needs at your speed (teal,
+  amber, red from 95 %, all red flashing when the tyres are overdriven or the tail steps out); the
+  **SKID** lamp lights only when the car really slides, blinks faster the more it slides and stays
+  lit through a spin.
 - **Hold the throttle to keep your speed** – release it and the car slowly coasts down, like
   lifting off the pedal. Braking is stronger at high speed.
 - **Overtake on the straights.** Steering builds up while you hold a key: tap for small corrections,

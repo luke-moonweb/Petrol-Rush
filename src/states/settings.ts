@@ -117,7 +117,7 @@ export class SettingsState implements State {
           value: on(prefs.speedBar),
           desc:
             CONFIG.DRIVE_MODEL === 'grip'
-              ? "Bar under your car's arrow when you are faster than the next corner allows: orange – runs wide, red – spins."
+              ? "Bar under your car's arrow when you are faster than the next corner allows: orange – runs wide, red – brake, or the tail steps out."
               : `Bar under your car's arrow above ${CONFIG.SPIN_MPH} MPH: orange – slide, red – spin in a corner.`,
         };
       case 'collisions':
