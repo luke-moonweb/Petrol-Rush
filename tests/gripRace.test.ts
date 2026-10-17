@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { CONFIG, DEFAULT_OPTIONS, type DriveModel } from '../src/config';
-import { GRIP_SPINS } from '../src/race/physics';
+import { GRIP_SPINS, stepCar } from '../src/race/physics';
 import { cornerMph, PLAN, planSpeed } from '../src/race/planner';
 import { Race } from '../src/race/race';
 import { CY, R_OUT, RC, S_TURN1, S_TURN2, TURN_LEN, trackCurves, WORLD_W } from '../src/track/track';
@@ -130,5 +130,31 @@ describe('grip model: pit entry', () => {
     expect(decidedAt.length).toBeGreaterThan(0);
     for (const s of decidedAt) expect(s).toBeLessThan(S_TURN2 - 200);
     expect(TURN_LEN).toBeGreaterThan(0);
+  });
+});
+
+describe('grip model: performance guard (A15, logged)', () => {
+  it('stepCar for 20 cars stays well under 50 us, the planner for 20 cars under 30 us', () => {
+    const r = runFor(99, 20, 6, 15);
+    const snap = r.cars.map((c) => ({ ...c }));
+    const inputs = r.cars.map((_, i) => ({ steer: i % 3 === 0 ? -0.6 : 0.2, gas: true, brake: i % 5 === 0, toggleReverse: false }));
+    const N = 5000;
+    const t0 = performance.now();
+    for (let k = 0; k < N; k++) {
+      for (let j = 0; j < 20; j++) stepCar(r.cars[j]!, inputs[j]!, 1 / 60);
+      if (k % 30 === 0) {
+        for (let j = 0; j < 20; j++) Object.assign(r.cars[j]!, snap[j]);
+      }
+    }
+    const step = ((performance.now() - t0) * 1000) / N;
+    const table = trackCurves();
+    const t1 = performance.now();
+    let acc = 0;
+    for (let k = 0; k < N; k++) for (const c of r.cars) acc += planSpeed(table, c.s, c.d, c.ai.lane, 0.9, 170);
+    const plan = ((performance.now() - t1) * 1000) / N;
+    console.log(`stepCar x20: ${step.toFixed(1)} us, planSpeed x20: ${plan.toFixed(1)} us`);
+    expect(acc).toBeGreaterThan(0);
+    expect(step).toBeLessThan(50);
+    expect(plan).toBeLessThan(30);
   });
 });
