@@ -308,16 +308,21 @@ describe('grip model: walls', () => {
     expect(r.spun).toBe(false);
   });
 
-  /** One step into the wall; returns the nose relative to the wall line (+ = away from the wall, rad). */
+  /**
+   * One step into the wall; returns where the contact turns the nose to, relative to the wall line
+   * (+ = away from the wall, rad). The nose gets there gradually (4 rad/s), never in one step.
+   */
   function kickOf(moveDeg: number, noseDeg: number, mph = 90) {
     const car = freshCar();
     const m = (moveDeg * Math.PI) / 180;
-    Object.assign(car, { x: 0, y: 299.5, heading: (noseDeg * Math.PI) / 180, moveAngle: m, speed: mph });
+    const h0 = (noseDeg * Math.PI) / 180;
+    Object.assign(car, { x: 0, y: 299.5, heading: h0, moveAngle: m, speed: mph });
     stepCar(car, { steer: 0, gas: false, brake: false, toggleReverse: false }, 1 / 60, wall);
     expect(car.wallImpact).toBeGreaterThan(0);
     expect(car.moveAngle).toBeCloseTo(0, 9);
+    expect(Math.abs(car.heading - h0)).toBeLessThanOrEqual(4 / 60 + 1e-9);
     // the wall is below (y = 300, normal up), so away from it is a negative heading
-    return -car.heading;
+    return -(car.heading + car.wallYaw);
   }
 
   it('the kick turns the nose away from the wall, whichever way the car was pointing (critic r1 #2)', () => {
@@ -330,6 +335,46 @@ describe('grip model: walls', () => {
     expect(kickOf(22, 22)).toBeCloseTo(((22 - 15) / 15) * 0.5 * 22 * deg, 6);
     // glancing: straightened along the wall
     expect(kickOf(10, 25)).toBeCloseTo(0, 9);
+  });
+});
+
+describe('grip model: slow steep wall contacts (tester r2 #3)', () => {
+  it('stop against the wall like the classic model: no heading jump in any step', () => {
+    const wallB = (car: { y: number }) => {
+      if (car.y <= 300) return null;
+      car.y = 300;
+      return { nx: 0, ny: -1 };
+    };
+    for (const mph of [5, 15, 25])
+      for (const deg of [35, 50, 70, 85, 100]) {
+        const car = freshCar();
+        const a = (deg * Math.PI) / 180;
+        Object.assign(car, { x: 0, y: 298, heading: a, moveAngle: a, speed: mph });
+        let jump = 0;
+        for (let i = 0; i < 30; i++) {
+          const h = car.heading;
+          stepCar(car, { steer: 0, gas: mph > 10, brake: false, toggleReverse: false }, 1 / 60, wallB);
+          jump = Math.max(jump, Math.abs(car.heading - h));
+        }
+        expect(jump, `${mph} mph ${deg} deg`).toBeLessThan((5 * Math.PI) / 180);
+      }
+  });
+});
+
+describe('grip model: pinned against a wall (tester r2 #5)', () => {
+  it('a car at rest with its nose up to 15 deg into the wall drives away along it', () => {
+    const wallB = (car: { y: number }) => {
+      if (car.y <= 300) return null;
+      car.y = 300;
+      return { nx: 0, ny: -1 };
+    };
+    for (const deg of [2, 8, 15]) {
+      const car = freshCar();
+      const a = (deg * Math.PI) / 180;
+      Object.assign(car, { x: 0, y: 300, heading: a, moveAngle: a, speed: 0.1 });
+      for (let i = 0; i < 180; i++) stepCar(car, { steer: 0, gas: true, brake: false, toggleReverse: false }, 1 / 60, wallB);
+      expect(car.speed, `${deg} deg`).toBeGreaterThan(40);
+    }
   });
 });
 

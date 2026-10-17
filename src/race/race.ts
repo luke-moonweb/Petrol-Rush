@@ -100,6 +100,7 @@ export class Race {
       weightFwd: 0,
       slipPeak: 0,
       wallAgo: 99,
+      wallYaw: 0,
       penalty: 0,
       penaltyAt: -99,
       oilImmune: 0,
