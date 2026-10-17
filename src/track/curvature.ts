@@ -23,6 +23,12 @@ export function laneCurvature(k: number, d: number): number {
 
 export const CURVATURE_STEP = 4;
 
+export interface CurveRun {
+  s0: number;
+  len: number;
+  k: number;
+}
+
 /** Curvature sampled once per track, so lookups in the hot path are a single array read. */
 export class CurvatureTable {
   readonly k: Float32Array;
@@ -49,6 +55,35 @@ export class CurvatureTable {
     let i = Math.floor(s / this.step) % n;
     if (i < 0) i += n;
     return this.k[i]!;
+  }
+
+  private runList: CurveRun[] | null = null;
+
+  /** Maximal runs of constant, non-zero curvature (start, length, k), in track order. */
+  runs(): readonly CurveRun[] {
+    if (this.runList) return this.runList;
+    const out: CurveRun[] = [];
+    const n = this.k.length;
+    // start the scan at a sample that differs from its predecessor so no run is split at s = 0
+    let start = 0;
+    for (let i = 0; i < n; i++) {
+      if (this.k[i] !== this.k[(i + n - 1) % n]) {
+        start = i;
+        break;
+      }
+    }
+    let i = 0;
+    while (i < n) {
+      const idx = (start + i) % n;
+      const k = this.k[idx]!;
+      let j = i + 1;
+      while (j < n && this.k[(start + j) % n] === k) j++;
+      if (k !== 0) out.push({ s0: idx * this.step, len: (j - i) * this.step, k });
+      i = j;
+    }
+    out.sort((a, b) => a.s0 - b.s0);
+    this.runList = out;
+    return out;
   }
 
   /** Largest |curvature| on [s, s + ahead] (both wrapped), sampled every `stride` px. */

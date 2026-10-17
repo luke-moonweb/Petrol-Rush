@@ -23,6 +23,7 @@ import {
   S_TURN1,
   S_TURN2,
   TURN_LEN,
+  trackCurves,
   trackHeadingAt,
   WALL_X0,
   WALL_X1,
@@ -31,7 +32,8 @@ import {
 } from '../track/track';
 import { type Car, lapsCompleted } from './car';
 import { type OilSlick, oilRadius } from './oil';
-import type { DriveInput } from './physics';
+import { brakeAt, type DriveInput, maxCurvature } from './physics';
+import { gripFrac, PLAN, planSpeed } from './planner';
 
 export interface AiView {
   cars: Car[];
@@ -82,14 +84,21 @@ export function aiInput(car: Car, view: AiView, dt: number): DriveInput {
   if (car.reverse && ai.recoverTime <= 0) out.toggleReverse = Math.abs(car.speed) <= CONFIG.REVERSE_TOGGLE_MAX_MPH;
   ai.laneCooldown = Math.max(0, ai.laneCooldown - dt);
 
-  const turnNow = inTurn(car.x);
+  const grip = CONFIG.DRIVE_MODEL === 'grip';
+  const curves = trackCurves();
+  const turnNow = grip ? curves.at(car.s) !== 0 : inTurn(car.x);
   const distToTurn = turnNow ? 0 : Math.min(wrapS(S_TURN1 - car.s), wrapS(S_TURN2 - car.s));
+  // Lane changes wait until no curvature is close ahead (grip) or the next turn is far (classic).
+  const laneChangeOk = grip ? !turnNow && curves.maxAbsAhead(car.s, LANE_CHANGE_CLEAR, 8) === 0 : !turnNow && distToTurn > 160;
   let target = ai.topMph;
   let laneD = ai.lane;
   let pitY: number | null = null;
   let oilLane = false;
 
-  if (ai.pitPhase === 'none' && car.s >= S_TURN2 && car.s < S_BOTTOM) {
+  // Grip model: decide on the straight before turn 2, so the move to the inside lane is done before
+  // the corner (a lane change inside a corner adds curvature the speed plan does not see).
+  const decide = grip ? car.s >= S_TURN2 - PIT_DECIDE_FROM && car.s < S_TURN2 - PIT_DECIDE_TO : car.s >= S_TURN2 && car.s < S_BOTTOM;
+  if (ai.pitPhase === 'none' && decide) {
     const fuelLaps = car.fuel * CONFIG.FUEL_RANGE_LAPS;
     const lapsLeft = view.laps - lapsCompleted(car);
     if (car.finished || (fuelLaps < ai.pitFuelLaps && fuelLaps < lapsLeft + 0.3)) ai.pitPhase = 'entering';
@@ -119,7 +128,13 @@ export function aiInput(car: Car, view: AiView, dt: number): DriveInput {
         }
       } else {
         laneD = -HALF_W + 9;
-        if (car.s > S_TURN2 + TURN_LEN * 0.5) target = Math.min(target, 100);
+        if (grip) {
+          // brake smoothly for the dive instead of the classic step down to 100 mph
+          const toDive = car.s < S_TURN2 - PIT_DECIDE_FROM ? Infinity : S_TURN2 + TURN_LEN * PIT_DIVE_AT - car.s;
+          const vDive = CONFIG.AI_PIT_MPH + 5;
+          const b = CONFIG.BRAKE_MPH_S * PLAN.BRAKE_FRAC;
+          target = Math.min(target, Math.sqrt(vDive * vDive + (2 * b * Math.max(0, toDive)) / pxm));
+        } else if (car.s > S_TURN2 + TURN_LEN * 0.5) target = Math.min(target, 100);
         if (car.s > S_TURN2 + TURN_LEN * PIT_DIVE_AT) {
           const phi = (Math.atan2(car.y - CY, CX_L - car.x) * 180) / Math.PI;
           laneD = pitPathR(phi + 12) - RC;
@@ -257,7 +272,7 @@ export function aiInput(car: Car, view: AiView, dt: number): DriveInput {
     if (ahead && ahead.speed < target) {
       let changed = false;
       const blockedHard = ahead.speed < 60 && car.speed - ahead.speed > 15;
-      const canChange = ai.laneCooldown <= 0 && ai.pitPhase === 'none' && (blockedHard || (!turnNow && car.speed > 50 && distToTurn > 160));
+      const canChange = ai.laneCooldown <= 0 && ai.pitPhase === 'none' && (blockedHard || (laneChangeOk && car.speed > 50));
       if (canChange) {
         const options = LANES.filter((l) => l !== laneD && Math.abs(l - laneD) < 25).sort(
           (p, q) => Math.abs(p - car.d) - Math.abs(q - car.d),
@@ -296,9 +311,14 @@ export function aiInput(car: Car, view: AiView, dt: number): DriveInput {
     }
   }
 
-  const turnV = ai.turnMph;
-  if (turnNow) target = Math.min(target, turnV);
-  else target = Math.min(target, Math.sqrt(turnV * turnV + (2 * CONFIG.BRAKE_MPH_S * 0.75 * distToTurn) / pxm));
+  if (grip) {
+    const dPlan = ai.pitPhase === 'none' ? laneD : car.d;
+    target = Math.min(target, planSpeed(curves, car.s, car.d, dPlan, gripFrac(car), car.speed));
+  } else {
+    const turnV = ai.turnMph;
+    if (turnNow) target = Math.min(target, turnV);
+    else target = Math.min(target, Math.sqrt(turnV * turnV + (2 * CONFIG.BRAKE_MPH_S * 0.75 * distToTurn) / pxm));
+  }
 
   if (ai.creepTime > 0) {
     ai.creepTime -= dt;
@@ -324,6 +344,15 @@ export function aiInput(car: Car, view: AiView, dt: number): DriveInput {
   out.steer = Math.max(-1, Math.min(1, diff * 5));
   out.gas = car.speed < target - 0.5;
   out.brake = car.speed > target + 1.5;
+  if (grip && car.speed > 0 && !car.reverse) {
+    // A smooth driver never asks the tyres for more than they have left after braking.
+    const v = car.speed * pxm;
+    const G = CONFIG.GRIP;
+    const fLong = out.brake ? brakeAt(car.speed) / CONFIG.BRAKE_MPH_S_HIGH : 0;
+    const mu = G.GRIP * Math.sqrt(1 - (G.FC_K * fLong) ** 2);
+    const cap = Math.min(1, mu / (v * v * maxCurvature(v)));
+    out.steer = Math.max(-cap, Math.min(cap, out.steer));
+  }
 
   const servicing = ai.pitPhase === 'fueling' || ai.pitPhase === 'parked';
   if (ai.recoverTime > 0) {
@@ -380,6 +409,10 @@ function pitPathR(phi: number): number {
 }
 const CAR_CLEAR = 24;
 const PIT_DIVE_AT = 0.6;
+// Grip model: the pit decision window ends this far before turn 2 (px), and starts PIT_DECIDE_FROM before it.
+const PIT_DECIDE_FROM = 700;
+const PIT_DECIDE_TO = 250;
+const LANE_CHANGE_CLEAR = 160;
 
 function freeBox(car: Car, cars: Car[]): number {
   const own = Math.round((car.ai.boxX - PIT_X0 - BOX_PITCH / 2) / BOX_PITCH);
