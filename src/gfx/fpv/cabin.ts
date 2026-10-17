@@ -2,7 +2,7 @@ import { CONFIG } from '../../config';
 import type { Car } from '../../race/car';
 import { oilRadius } from '../../race/oil';
 import type { Race } from '../../race/race';
-import { WARN, type Warn } from '../../race/warnings';
+import type { Warn } from '../../race/warnings';
 import { PR } from '../../ui/theme';
 
 export const LED_COUNT = 9;
@@ -141,10 +141,11 @@ function ledColor(i: number): string {
   return i < 4 ? PR.teal : i < 7 ? PR.amber : PR.red;
 }
 
-/** Grip use that lights LED i (grip model). */
-export function ledUse(i: number): number {
-  return WARN.LED_USE[i]!;
+/** Grip model: the speed (mph) that lights LED i; all of them at MAX_MPH. */
+export function ledMph(i: number): number {
+  return CONFIG.MAX_MPH - LED_MPH_STEP * (LED_COUNT - 1 - i);
 }
+const LED_MPH_STEP = 5;
 
 function leds(s: CabinInput, mph: number): (string | null)[] {
   const out: (string | null)[] = new Array(LED_COUNT).fill(null);
@@ -155,6 +156,11 @@ function leds(s: CabinInput, mph: number): (string | null)[] {
     return out;
   }
   if (s.lights && s.lights.since < GREEN_S) return all(LED_GREEN);
+  if (CONFIG.DRIVE_MODEL === 'grip') {
+    // grip model: the strip only shows how close the car is to top speed (the user's decision)
+    for (let i = 0; i < LED_COUNT; i++) if (mph >= ledMph(i)) out[i] = ledColor(i);
+    return out;
+  }
   if (s.finished) {
     const loop = Math.floor(s.finishAge / (CASCADE_LED_S * LED_COUNT));
     if (loop >= CASCADE_LOOPS) return out;
@@ -170,19 +176,12 @@ function leds(s: CabinInput, mph: number): (string | null)[] {
     return out;
   }
   const w = s.warn;
-  if (w.use === null) {
-    // classic: the strip turns red with the SKID lamp
-    if (w.skidLit) return all(PR.red);
-    if (w.skidHz > 0) return out;
-  } else if (w.flash && !s.pitAuto) return all(on(t, 4) ? PR.red : null);
+  // classic: the strip turns red with the SKID lamp
+  if (w.skidLit) return all(PR.red);
+  if (w.skidHz > 0) return out;
   if (s.pitAuto) {
     const phase = Math.floor(t * 4) % 2;
     for (let i = 0; i < LED_COUNT; i++) if (i % 2 === phase) out[i] = PR.teal;
-    return out;
-  }
-  if (w.use !== null) {
-    // grip use: teal to 70 %, amber to 95 %, red from 95 %; nothing below 30 % (straights)
-    for (let i = 0; i < LED_COUNT; i++) if (w.use >= ledUse(i)) out[i] = ledColor(i);
     return out;
   }
   for (let i = 0; i < LED_COUNT; i++) if (mph >= CONFIG.SPIN_MPH - 36 + 4 * i) out[i] = ledColor(i);

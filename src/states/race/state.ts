@@ -403,7 +403,7 @@ export class RaceState implements State {
     const ih = (c: Car) => c.prevHeading + wrapAngle(c.heading - c.prevHeading) * a;
     const view = layout.view;
     const cockpit = this.game.prefs.camera === 'cockpit';
-    const warn: Warn = this.warnShown.shown(this.phase === 'running' && race.started ? warnings(race.player) : null);
+    const warn: Warn = this.warnShown.shown(this.phase === 'running' && race.started ? warnings(race.player) : null, race.time);
     if (cockpit) {
       const lt = this.lights;
       const out = !!lt && lt.t >= lt.outAt;
