@@ -85,6 +85,13 @@ export const CONFIG = {
     FRONT_GAIN: 0.12,
     /** rad/s of tuck-in at full weight transfer and full lateral load. */
     LIFT_YAW: 0.3,
+    /** The tuck-in (LIFT_YAW, FRONT_GAIN) stops adding slip at TUCK_SLIP rad, fading in over TUCK_FADE before it. */
+    TUCK_SLIP: 0.07,
+    TUCK_FADE: 0.02,
+    /** ...unless the demand is above TUCK_FREE_U x the grip (far too fast and insisting). */
+    TUCK_FREE_U: 1.4,
+    /** ...or once the rear stress passes this (demand held over U_REAR). */
+    TUCK_FREE_STRESS: 0.6,
     /** Extra rear stress rate at full weight transfer. */
     WEIGHT_STRESS: 1,
     OS_KICK: 1.5,
@@ -108,6 +115,8 @@ export const CONFIG = {
     /** A fresh hit (no contact for WALL_FRESH_S) also loses up to 2 x this share of the speed. */
     WALL_HIT_SCRUB: 0.06,
     WALL_FRESH_S: 0.4,
+    /** Extra share of the speed a fresh hit costs when the car arrives understeering (over its grip). */
+    WALL_PLOUGH_SCRUB: 0.15,
   },
 
   SPIN_MPH: 150,

@@ -343,13 +343,20 @@ function gripStep(car: Car, input: DriveInput, dt: number, v: number, aLong: num
   // Nose: the front is grip-limited, so the nose never out-turns the front tyres. With weight on the
   // front it can turn a little more than the travel direction: lift-off tightens the line.
   const dir = Math.sign(kCmd);
-  const muFront = muAv * (1 + G.FRONT_GAIN * car.weightFwd);
-  let yaw = dir * Math.min(Math.abs(v * kCmd), muFront / v);
   // Lift-off / brake tuck-in: with load on the front the rear gives a little and the car rotates
   // into the corner. Below the limit the travel direction follows (the line tightens); at the limit
-  // it shows as a small step-out of the tail.
+  // it shows as a small step-out of the tail. That step-out is bounded (TUCK_SLIP) unless the
+  // driver asks for far more than the grip (demand over TUCK_FREE_U, or held over U_REAR long enough
+  // to stress the rear, i.e. an overdriven key far too fast): a
+  // lift at a small excess tucks the nose in and settles instead of feeding a spin (T1).
+  const tuckRoom =
+    u > G.TUCK_FREE_U || car.rearStress > G.TUCK_FREE_STRESS || car.rearLoose
+      ? 1
+      : Math.max(0, Math.min(1, (G.TUCK_SLIP - slip * dir) / G.TUCK_FADE));
+  const muFront = muAv * (1 + G.FRONT_GAIN * car.weightFwd * tuckRoom);
+  let yaw = dir * Math.min(Math.abs(v * kCmd), muFront / v);
   const load = Math.min(1, Math.abs(aLat) / G.GRIP);
-  if (load > 0.5) yaw += Math.sign(aLat) * G.LIFT_YAW * car.weightFwd * ((load - 0.5) / 0.5);
+  if (load > 0.5) yaw += Math.sign(aLat) * G.LIFT_YAW * car.weightFwd * ((load - 0.5) / 0.5) * tuckRoom;
   if (car.rearLoose) {
     yaw += dir * G.OS_KICK * Math.min(over, 0.5);
     if (Math.abs(slip) > G.LOOSE_SLIP) yaw += Math.sign(slip) * G.LOOSE_GAIN * (Math.abs(slip) - G.LOOSE_SLIP);
@@ -499,7 +506,11 @@ function applyWallGrip(car: Car, n: WallNormal, dt: number): void {
   }
   const ang = Math.atan2(ty, tx);
   // A fresh hit costs a fixed share on top of the friction; continuous contact only costs friction.
-  const fresh = car.wallAgo > G.WALL_FRESH_S ? 1 - G.WALL_HIT_SCRUB * (Math.min(1, angle / (3 * DEG)) + Math.min(1, angle / g0)) : 1;
+  const isFresh = car.wallAgo > G.WALL_FRESH_S;
+  // A car that ran wide onto the wall because it was too fast for the corner (the tyres over their
+  // grip, understeering) loses more on the hit, so the outer wall is not a free guide rail (T4).
+  const plough = Math.min(1, car.gripOver / G.SLIDE_OVER_MIN) * G.WALL_PLOUGH_SCRUB;
+  const fresh = isFresh ? 1 - G.WALL_HIT_SCRUB * (Math.min(1, angle / (3 * DEG)) + Math.min(1, angle / g0)) - plough : 1;
   car.wallAgo = 0;
   const newMag = Math.max(0, tmag * fresh - G.WALL_FRICTION * -vn);
   const back = car.speed < 0;

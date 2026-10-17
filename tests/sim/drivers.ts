@@ -5,7 +5,7 @@ import type { Car } from '../../src/race/car';
 import { brakeAt, curvatureAssist, type DriveInput, maxCurvature, SteerRamp, type StepTrack, stepCar } from '../../src/race/physics';
 import { planSpeed } from '../../src/race/planner';
 import { Race } from '../../src/race/race';
-import { PlayerSteering, type SteerTrack } from '../../src/race/steering';
+import { keyCap, PlayerSteering, type SteerTrack } from '../../src/race/steering';
 import type { CurvatureTable } from '../../src/track/curvature';
 import { laneCurvature } from '../../src/track/curvature';
 import { curvatureAt, pointAt, project, TRACK_LEN, trackCurves, type WallNormal, wrapAngle } from '../../src/track/oval';
@@ -78,7 +78,7 @@ export type Gas = 'hold' | 'full' | 'lift' | 'brake' | 'exit';
  *   threshold, with a reaction delay (see HumanKeys). Countersteers a slide the same way.
  * ai: the game AI's speed planner and pursuit steering (gas mode ignored).
  */
-export type DriverKind = 'ideal' | 'keys' | 'keysHold' | 'catch' | 'keysCatch' | 'lock' | 'ai' | 'human';
+export type DriverKind = 'ideal' | 'keys' | 'keysHold' | 'catch' | 'keysCatch' | 'lock' | 'ai' | 'human' | 'capped';
 
 /** The realistic key driver's habits. */
 export const HUMAN = {
@@ -175,6 +175,8 @@ export interface RunOpts {
    */
   planFrac?: number;
   classicTurnMph?: number;
+  /** Throttle: lift off (no gas) from this many seconds after turn-in on (any `gas` mode). */
+  liftAfter?: number;
   /** human: holds the key into the bend for the whole bend, whatever happens (a panicking player). */
   insist?: boolean;
   /** human: never countersteers (holds into the bend or lets go). */
@@ -199,6 +201,8 @@ export interface RunResult {
   /** Time to reach `finishS` (s), Infinity if not reached. */
   time: number;
   looseAt: number;
+  /** Slip angle (deg) when the car leaves the first curve (-1 if it never did). */
+  exitSlipDeg: number;
   /** Times at `splits` (Infinity if not reached). */
   splitT: number[];
   /** Fresh wall contacts (no contact in the 0.3 s before). */
@@ -236,6 +240,7 @@ export function runCurve(
     endMph: 0,
     time: Infinity,
     looseAt: -1,
+    exitSlipDeg: -1,
     splitT: (o.splits ?? []).map(() => Infinity),
     wallHits: 0,
     overSteps: 0,
@@ -259,6 +264,8 @@ export function runCurve(
   let entered = o.approachMph === undefined;
   let curveDone = false;
   let tIn = 0;
+  let turnIn = -1;
+  let inCurve = false;
   for (let time = 0; time < T; time += DT) {
     const st = t.project(car.x, car.y, sHint);
     sHint = st.s;
@@ -310,6 +317,11 @@ export function runCurve(
       }
       case 'ideal':
         steer = want;
+        break;
+      case 'capped':
+        // tracks the line but never asks for more than a held key does (the key cap, no overdrive):
+        // too fast, it understeers wide and rides the outer wall
+        steer = NaN;
         break;
       case 'lock':
         steer = Math.abs(want) > 0.05 ? Math.sign(want) : 0;
@@ -373,6 +385,12 @@ export function runCurve(
         input.gas = !input.brake && car.speed < Math.min(vt, CONFIG.MAX_MPH) - 0.5;
       }
     }
+    if (turnIn < 0 && t.table.at(st.s) !== 0) turnIn = time;
+    if (o.liftAfter !== undefined && turnIn >= 0 && time - turnIn >= o.liftAfter) input.gas = false;
+    if (o.driver === 'capped') {
+      const cap = keyCap(car, input.brake);
+      input.steer = Math.max(-cap, Math.min(cap, want));
+    }
     if (o.driver === 'human') {
       const ps = player.update(car, humanKey, DT, input.brake);
       input.steer = ps.steer;
@@ -401,6 +419,8 @@ export function runCurve(
       res.inside = Math.max(res.inside, -out);
     }
     if (car.slideTime > 0) res.slideT += DT;
+    if (kHere !== 0) inCurve = true;
+    else if (inCurve && res.exitSlipDeg < 0) res.exitSlipDeg = (sl * 180) / Math.PI;
     if (kHere !== 0) {
       res.cornerSteps++;
       res.cornerUse.push(car.gripUse);
