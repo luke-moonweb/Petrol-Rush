@@ -126,10 +126,9 @@ browser does not support it (iPhone Safari).
   have. Braking or lifting off in the corner uses grip too: the nose tucks in and the tail gets
   lighter.
 - **Warnings:** the red zone on the speedometer and an optional bar above your car show the limit
-  speed of the next corner; the cockpit LEDs show how much grip your line needs at your speed (teal,
-  amber, red from 95 %, all red flashing when the tyres are overdriven or the tail steps out); the
-  **SKID** lamp lights only when the car really slides, blinks faster the more it slides and stays
-  lit through a spin.
+  speed of the next corner; the **SKID** lamp lights only when the car really slides, blinks faster
+  the more it slides and stays lit through a spin. The cockpit LED strip shows the start lights,
+  then how close you are to top speed (one LED per 5 mph from 140, all lit at 180).
 - **Hold the throttle to keep your speed** – release it and the car slowly coasts down, like
   lifting off the pedal. Braking is stronger at high speed.
 - **Overtake on the straights.** Steering builds up while you hold a key: tap for small corrections,

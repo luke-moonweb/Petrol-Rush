@@ -22,3 +22,15 @@ Also apply the designer feel targets in scratchpad/designer-grip-baseline.md as 
 
 ## Decision added 2026-10-17 (round 2)
 - AI incidents: the user chose to KEEP the calm field (far fewer AI spins than classic is accepted). Do not add AI driver errors. Contact and oil spins must still work when they happen.
+
+## Decision added 2026-10-17 (round 2): the cockpit LED strip
+- The cockpit LED strip shows only (correction the same day: the start lights stay):
+  - the start-light sequence as today: red LEDs during the countdown, the green flash at lights out;
+  - after that, nearness to top speed: 9 LEDs from 140 to 180 mph, one per 5 mph, all lit at MAX_MPH
+    (180), keeping the teal → amber → red colour order along the strip.
+- Everything else comes off the LEDs in the grip model: grip use, the over-limit / rear-loose flash,
+  the spin flash and chase, skid, the slide pre-warning, the pit-limiter pattern, the finish cascade.
+- The SKID tell-tale, the HUD SKID lamp, the speed bar and the speedo arc stay as they are and carry
+  the grip and slip information. This replaces round-2 item 5 (LEDs read the car) and the LED parts
+  of decision 3 above.
+- Classic mode (`?drive=classic`) keeps its old LED behaviour, as on main.

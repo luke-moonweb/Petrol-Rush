@@ -214,7 +214,6 @@ function resetGrip(car: Car): void {
   car.weightFwd = 0;
   car.slipPeak = 0;
   car.gripUse = 0;
-  car.gripLong = 0;
   car.gripOver = 0;
   car.rearLoose = false;
   car.rearStress = 0;
@@ -373,8 +372,7 @@ function gripStep(car: Car, input: DriveInput, dt: number, v: number, aLong: num
   car.speed = Math.max(0, car.speed - (drag / pxm) * dt);
 
   car.gripOver = over;
-  car.gripLong = G.FC_K * fLong;
-  car.gripUse = Math.max(u, Math.hypot(Math.abs(aLat) / G.GRIP, car.gripLong));
+  car.gripUse = Math.max(u, Math.hypot(Math.abs(aLat) / G.GRIP, G.FC_K * fLong));
   const sliding = over > G.SLIDE_OVER_MIN || Math.abs(slip) > G.SLIDE_SLIP_MIN;
   car.slideTime = sliding ? car.slideTime + dt : 0;
 

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { CONFIG } from '../src/config';
-import { limitMph, stepCar } from '../src/race/physics';
+import { limitMph } from '../src/race/physics';
 import { NO_WARN, nextCornerMph, WARN, type Warn, WarnDisplay, warnings } from '../src/race/warnings';
 import { laneCurvature } from '../src/track/curvature';
 import { CAR_R, HALF_W, PIT_DRIVE_Y, pointAt, project, RC, S_BOTTOM, S_TURN1 } from '../src/track/track';
@@ -25,7 +25,19 @@ describe('warnings: classic model keeps the 150 mph semantics', () => {
     expect(warnings(carAt(S_BOTTOM + 50, 0, 155)).skidHz).toBe(Infinity);
     expect(warnings(carAt(S_TURN1 + 80, 0, 160)).skidHz).toBe(3);
     const w = warnings(carAt(S_TURN1 + 80, 0, 140));
-    expect([w.vRef, w.band, w.use]).toEqual([CONFIG.SPIN_MPH, CONFIG.SLIDE_SPIN_OVER, null]);
+    expect([w.vRef, w.band]).toEqual([CONFIG.SPIN_MPH, CONFIG.SLIDE_SPIN_OVER]);
+  });
+
+  it('classic SKID blink is locked to the race time as on main: floor(time x 6) % 2 at 3 Hz (critic r2 #5)', () => {
+    CONFIG.DRIVE_MODEL = 'classic';
+    const d = new WarnDisplay();
+    const w = { ...NO_WARN, skidHz: 3 };
+    for (let time = 10; time < 12; time += 0.023) {
+      d.update(w, 0.023);
+      expect(d.shown(w, time).skidLit).toBe(Math.floor(time * 6) % 2 === 0);
+    }
+    expect(d.shown({ ...NO_WARN, skidHz: Infinity }, 3.3).skidLit).toBe(true);
+    expect(d.shown(NO_WARN, 3.3).skidLit).toBe(false);
   });
 });
 
@@ -53,32 +65,12 @@ describe('warnings: grip model', () => {
     const loose = carAt(S_TURN1 + 80, 0, 150);
     loose.rearLoose = true;
     expect(warnings(loose).skidHz).toBeGreaterThan(0);
-    expect(warnings(loose).flash).toBe(true);
     expect(NO_WARN.skidHz).toBe(0);
-  });
-
-  it('LEDs read grip use: nothing on a straight at full throttle, lit in a corner at the limit', () => {
-    CONFIG.DRIVE_MODEL = 'grip';
-    const car = carAt(S_BOTTOM + 50, 0, 120);
-    for (let i = 0; i < 30; i++) stepCar(car, { steer: 0, gas: true, brake: false, toggleReverse: false }, 1 / 60);
-    expect(warnings(car).use!).toBeLessThan(0.3);
-    const c2 = carAt(S_TURN1 + 20, 0, limitMph(-1 / RC) * 0.97);
-    for (let i = 0; i < 30; i++) {
-      const st = project(c2.x, c2.y);
-      const t = pointAt(st.s + 60, 0);
-      const diff = Math.atan2(t.y - c2.y, t.x - c2.x) - c2.heading;
-      stepCar(
-        c2,
-        { steer: Math.max(-1, Math.min(1, Math.atan2(Math.sin(diff), Math.cos(diff)) * 5)), gas: true, brake: false, toggleReverse: false },
-        1 / 60,
-      );
-    }
-    expect(warnings(c2).use!).toBeGreaterThan(0.85);
   });
 });
 
 describe('warnings: what the HUD and the cockpit show (critic r1)', () => {
-  const w = (extra: Partial<Warn>): Warn => ({ ...NO_WARN, use: 0.5, vRef: 150, band: 7.5, ...extra });
+  const w = (extra: Partial<Warn>): Warn => ({ ...NO_WARN, vRef: 150, band: 7.5, ...extra });
 
   it('the SKID blink keeps its phase while its rate changes: no flicker', () => {
     CONFIG.DRIVE_MODEL = 'grip';
@@ -91,7 +83,7 @@ describe('warnings: what the HUD and the cockpit show (critic r1)', () => {
     for (let i = 0; i < 600; i++) {
       const hz = 4 + 3 * Math.sin(i / 7);
       d.update(w({ skidHz: hz }), 1 / 60);
-      const lit = d.shown(w({ skidHz: hz })).skidLit;
+      const lit = d.shown(w({ skidHz: hz }), 0).skidLit;
       if (lit !== prev) {
         toggles++;
         runs = Math.max(runs, run);
@@ -112,10 +104,10 @@ describe('warnings: what the HUD and the cockpit show (critic r1)', () => {
     const d = new WarnDisplay();
     for (let i = 0; i < 7; i++) d.update(w({ skidHz: 5 }), 1 / 60);
     d.update(w({ skidHz: 0 }), 1 / 60);
-    expect(d.shown(w({ skidHz: 0 })).skidLit).toBe(false);
+    expect(d.shown(w({ skidHz: 0 }), 0).skidLit).toBe(false);
     d.update(w({ skidHz: 5 }), 1 / 60);
-    expect(d.shown(w({ skidHz: 5 })).skidLit).toBe(true);
-    expect(d.shown(w({ skidHz: Infinity })).skidLit).toBe(true);
+    expect(d.shown(w({ skidHz: 5 }), 0).skidLit).toBe(true);
+    expect(d.shown(w({ skidHz: Infinity }), 0).skidLit).toBe(true);
   });
 
   it('grip: SKID is lit through a spin on the HUD too, as the cockpit tell-tale', () => {
@@ -123,32 +115,21 @@ describe('warnings: what the HUD and the cockpit show (critic r1)', () => {
     const c = carAt(S_TURN1 + 80, 0, 120);
     c.spinTime = 2;
     expect(warnings(c).skidHz).toBe(Infinity);
-    expect(new WarnDisplay().shown(warnings(c)).skidLit).toBe(true);
+    expect(new WarnDisplay().shown(warnings(c), 0).skidLit).toBe(true);
   });
 
   it('the speed bar and the red arc share one eased limit; the paused fallback keeps the grip band', () => {
     CONFIG.DRIVE_MODEL = 'grip';
     const d = new WarnDisplay();
     for (let i = 0; i < 6; i++) d.update(w({ vRef: 140 }), 1 / 60);
-    const shown = d.shown(w({ vRef: 140 }));
+    const shown = d.shown(w({ vRef: 140 }), 0);
     expect(shown.vRef).toBe(d.arcFrom);
     expect(shown.vRef).toBeGreaterThan(140);
     expect(shown.band).toBeCloseTo(WARN.BAND * d.arcFrom, 9);
-    const paused = d.shown(null);
+    const paused = d.shown(null, 0);
     expect(paused.vRef).toBe(d.arcFrom);
     expect(paused.band).toBeCloseTo(WARN.BAND * d.arcFrom, 9);
-    expect(paused.use).not.toBeNull();
     expect(paused.skidLit).toBe(false);
-  });
-
-  it('the LED strip reads the grip use averaged over a quarter second: a short key press does not light red', () => {
-    CONFIG.DRIVE_MODEL = 'grip';
-    const d = new WarnDisplay();
-    for (let i = 0; i < 60; i++) d.update(w({ use: 0.6 }), 1 / 60);
-    for (let i = 0; i < 6; i++) d.update(w({ use: 1.05 }), 1 / 60);
-    expect(d.shown(w({ use: 1.05 })).use!).toBeLessThan(0.95);
-    for (let i = 0; i < 60; i++) d.update(w({ use: 1.05 }), 1 / 60);
-    expect(d.shown(w({ use: 1.05 })).use!).toBeGreaterThan(1.0);
   });
 
   it('in the pit lane the next-corner limit uses the inside edge of the track, not the pit-lane offset', () => {
