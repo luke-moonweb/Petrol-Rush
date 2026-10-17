@@ -6,10 +6,11 @@ import { drawCars, drawOil, trackCanvas } from '../../gfx/world';
 import { keyLabel } from '../../input';
 import { inFrame, layout } from '../../layout';
 import { type Car, lapsCompleted } from '../../race/car';
-import { cornerAssist, type DriveInput, SteerRamp, skidWarning } from '../../race/physics';
+import { type DriveInput, skidWarning } from '../../race/physics';
 import { NUM_COLORS, Race } from '../../race/race';
+import { PlayerSteering } from '../../race/steering';
 import type { TouchLayout } from '../../touch';
-import { deltaS, inTurn, trackHeadingAt, WORLD_W, wrapAngle } from '../../track/track';
+import { deltaS, trackHeadingAt, WORLD_W, wrapAngle } from '../../track/track';
 import type { Hit } from '../../ui/hit';
 import { drawHudPanel, drawHudTop, drawSkidLamp } from '../../ui/hud';
 import { drawPause, drawRaceMenu, drawRaceSettings, drawResults, type SettingRow, type StatField } from '../../ui/overlays';
@@ -53,9 +54,8 @@ export class RaceState implements State {
   private midRace = false;
   private savedRace: Race | null = null;
   private finishTimer = 0;
-  private assistLevel = 0;
   private camOff = NaN;
-  private readonly steerRamp = new SteerRamp();
+  private readonly steering = new PlayerSteering();
   private reverseHint = 0;
   // Set while the hold-to-reverse key (↓ / S) put the car in reverse, so releasing it leaves reverse.
   private reverseHeld = false;
@@ -91,7 +91,7 @@ export class RaceState implements State {
   private newRace(): Race {
     this.particles?.clear();
     this.camOff = NaN;
-    this.assistLevel = 0;
+    this.steering?.resetAssist();
     this.reverseHeld = false;
     this.sound = new RaceSound(this.game.audio);
     this.lightsShown = 0;
@@ -322,12 +322,10 @@ export class RaceState implements State {
     }
     const p0 = this.race.player;
     const steerKey = (input.isDown('right') ? 1 : 0) - (input.isDown('left') ? 1 : 0);
-    const assist = cornerAssist(p0);
-    const step = dt / CONFIG.CORNER_ASSIST_IN_S;
-    this.assistLevel = assist !== 0 ? Math.min(1, this.assistLevel + step) : Math.max(0, this.assistLevel - step);
-    const keySteer = this.steerRamp.update(steerKey, dt, inTurn(p0.x));
+    const st = this.steering.update(p0, steerKey, dt);
     const drive: DriveInput = {
-      steer: this.race.pitAuto ? 0 : Math.max(-1, Math.min(1, keySteer + assist * this.assistLevel)),
+      steer: this.race.pitAuto ? 0 : st.steer,
+      straightTo: this.race.pitAuto ? undefined : st.straightTo,
       gas: input.isDown('gas'),
       brake: input.isDown('brake'),
       // A tap without a held key is the touch REV button, which toggles reverse.
