@@ -99,7 +99,9 @@ export function startSpin(car: Car, rate: number, dir: number): boolean {
   return true;
 }
 
-export function stepCar(car: Car, input: DriveInput, dt: number): void {
+export type ConstrainFn = (car: Car) => WallNormal | null;
+
+export function stepCar(car: Car, input: DriveInput, dt: number, constrain: ConstrainFn = constrainPos): void {
   const C = CONFIG;
   const pxm = C.PX_PER_MPH;
   car.wallImpact = 0;
@@ -169,7 +171,7 @@ export function stepCar(car: Car, input: DriveInput, dt: number): void {
   car.y += Math.sin(car.moveAngle) * dist;
   if (!car.finished) car.fuel = Math.max(0, car.fuel - Math.abs(dist) / (C.FUEL_RANGE_LAPS * TRACK_LEN));
 
-  const hit = constrainPos(car);
+  const hit = constrain(car);
   if (hit) applyWall(car, hit);
   car.heading = wrapAngle(car.heading);
   car.moveAngle = wrapAngle(car.moveAngle);
