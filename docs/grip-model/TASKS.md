@@ -50,8 +50,16 @@ Signed off by the user. Do not change or review these:
   - **Add:** pit-exit spin share ≤ 1.5 × classic over ≥ 12 seeds, and a crawl check.
 
 ## Known open items carried over from round 2
-- [ ] **T4. Pure understeer is too cheap.** Flat out on the centre line without insisting costs
-  about 0.4 s per corner (target 0.5 s). With the realistic key driver it is 0.68 s.
+- [ ] **T4. Going in flat out is too cheap: the outer wall acts as a guide rail (designer M1, still
+  open in r3).**
+  - Designer r3, key tapper that steers along the wall: turn 1 + top straight braked 10.55 s vs
+    flat out 10.82 s (+0.27 s); touch +0.23 s; ~+0.5 s per lap.
+  - At 180 the car understeers to r=187 and grinds the outer wall at ~140 mph, exits at 148, no
+    spin. The overdrive never opens before the wall (grip use peaks 1.21).
+  - The implementer's 0.68–0.95 s comes from a driver who insists into the wall.
+  - Target 3: 10% over should run about a lane wide and cost 0.5–1 s.
+  - Suggestions: wall contact under understeer costs more speed, or excess speed itself builds
+    rear stress so the tail can step out without overdrive.
 - [ ] **T5. A 400 ms key press at 180 mph on a straight spins.** Designer target 8 says it should not.
 - [ ] **T6. Grand Prix port** (when Grand Prix comes back):
   - add `curvatureAt` for segment tracks;
@@ -59,6 +67,21 @@ Signed off by the user. Do not change or review these:
   - make the oval-only pit merge, pit approach and fuel-reach logic in `ai.ts` work per track;
   - drop `R_MIN` and the "150 on the inside lane" assumptions;
   - re-record the oval golden master.
+
+## Designer r3 (other findings)
+- [ ] **T10 (medium). Player and AI car stuck together at the outer wall of turn 2 for ~77 s.**
+  - Touch run, lap 1: a contact at 16.4 s spun the player; at 18.3 s the player's speed dropped
+    22→0 in one step with no wall contact (r=183.8). Player and one AI car stayed stuck until
+    ~96 s and both lost ~5 laps.
+  - The AI recovery in ai.ts only reverses when `tailBlocked` is false, so a car pressed on its
+    tail creeps forever.
+  - Probably shared with classic. Reproduce in classic first.
+- [ ] **T11 (low). A fast glancing wall hit turned the heading 10.3° in one step.** 162 mph, 49 mph
+  into the wall, 11° slip, player car at t=137.82 s. That is above the "≤ 4° per step" claim in
+  RESUME. Check the wall-yaw cap and the slip alignment after the hit.
+- Note: a 300 ms tap at ~175 mph reaches the wall (see T5); slow steep hits now stop cleanly and
+  reverse drives away; holding the key at the limit works (laps 15.83 s); no cockpit view jumps
+  besides T11.
 
 ## Low (critic r3, non-blocking; critic verdict: NO REMAINING ISSUES)
 - [ ] **T7.** The gate comment says its seeds 100–141 were "not tuned on", but they are the round-2
@@ -69,5 +92,5 @@ Signed off by the user. Do not change or review these:
   gate as a slow/CI-only test or sharding it.
 
 ## Pending review reports
-Designer and tester round 3 were still running (the critic finished: no remaining issues) when the user paused the work. Their
+The tester round 3 was still running (critic: no remaining issues; designer and projektant: issues found) when the user paused the work. Their
 findings are added below as they arrive.
