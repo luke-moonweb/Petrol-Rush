@@ -19,3 +19,6 @@ Defaults chosen by the main session for the other open questions (state them in 
 Unchanged user rules: coasting (COAST_MPH_S 8), Down/S brake→reverse, own-oil immunity, the cockpit camera locked to the car heading (slip must become visible as the road crabbing), the REV touch toggle.
 
 Also apply the designer feel targets in scratchpad/designer-grip-baseline.md as acceptance criteria where compatible with the spec (graded walls without gluing, no vanishing-tap cliff on straights, yaw authority falling with speed, lift-off tightens the line, braking in a corner costs grip, lane times within ±0.4 s). Report any conflict with the spec instead of silently choosing.
+
+## Decision added 2026-10-17 (round 2)
+- AI incidents: the user chose to KEEP the calm field (far fewer AI spins than classic is accepted). Do not add AI driver errors. Contact and oil spins must still work when they happen.
