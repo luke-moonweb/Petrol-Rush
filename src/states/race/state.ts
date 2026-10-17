@@ -327,16 +327,17 @@ export class RaceState implements State {
     }
     const p0 = this.race.player;
     const steerKey = (input.isDown('right') ? 1 : 0) - (input.isDown('left') ? 1 : 0);
-    const st = this.steering.update(p0, steerKey, dt);
     const drive: DriveInput = {
-      steer: this.race.pitAuto ? 0 : st.steer,
-      straightTo: this.race.pitAuto ? undefined : st.straightTo,
+      steer: 0,
       gas: input.isDown('gas'),
       brake: input.isDown('brake'),
       // A tap without a held key is the touch REV button, which toggles reverse.
       toggleReverse: input.pressed('reverse') && !input.isDown('reverse'),
     };
     this.holdReverse(drive, input.isDown('reverse'));
+    const st = this.steering.update(p0, steerKey, dt, drive.brake);
+    drive.steer = this.race.pitAuto ? 0 : st.steer;
+    drive.straightTo = this.race.pitAuto ? undefined : st.straightTo;
     const shownSteer = this.race.pitAuto ? this.race.playerDrive.steer : drive.steer;
     this.steerVis += (shownSteer - this.steerVis) * Math.min(1, dt * 12);
     this.reverseHint = Math.max(0, this.reverseHint - dt);
