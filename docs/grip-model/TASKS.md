@@ -38,6 +38,9 @@ Signed off by the user. Do not change or review these:
     - the fallback merge still requires reduced braking room for the nearest racing car within
       about 200 px behind;
     - racing cars treat a committed merger that is alongside or ahead as being on their line.
+  - **Note (critic r3):** fresh seeds 200–239 show only 2 spins near a merging car (classic: 259)
+    and 0 forced 4 s merges. A probe of a forced merge with a racing car 40–300 px behind at
+    120/150 mph gave no contact. Reproduce seeds 502/504 first to confirm before changing anything.
 - [ ] **T3. The 40-seed gate cannot see pile-ups.** Source: projektant r3.
   - **Gaps:**
     - no pit-exit spin share;
@@ -57,6 +60,14 @@ Signed off by the user. Do not change or review these:
   - drop `R_MIN` and the "150 on the inside lane" assumptions;
   - re-record the oval golden master.
 
+## Low (critic r3, non-blocking; critic verdict: NO REMAINING ISSUES)
+- [ ] **T7.** The gate comment says its seeds 100–141 were "not tuned on", but they are the round-2
+  diagnostic seeds. Fix the comment, or move the gate to fresh seeds (200–239 also pass).
+- [ ] **T8.** The forced 4 s merge path has no dedicated test; it never triggered in 40 races.
+  Add a probe test.
+- [ ] **T9.** Suite time rose from ~17 s to ~55 s (`gripGate` takes 51 s). Consider tagging the
+  gate as a slow/CI-only test or sharding it.
+
 ## Pending review reports
-Designer, critic and tester round 3 were still running when the user paused the work. Their
+Designer and tester round 3 were still running (the critic finished: no remaining issues) when the user paused the work. Their
 findings are added below as they arrive.
