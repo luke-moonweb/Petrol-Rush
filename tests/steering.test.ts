@@ -3,7 +3,7 @@ import { CONFIG, type DriveModel } from '../src/config';
 import { curvatureAssist, limitMph, maxCurvature, stepCar } from '../src/race/physics';
 import { keyCap, PlayerSteering } from '../src/race/steering';
 import { laneCurvature } from '../src/track/curvature';
-import { pointAt, project, RC, S_BOTTOM, S_TURN1, S_TURN2, trackHeadingAt, wrapAngle } from '../src/track/track';
+import { CAR_R, HALF_W, pointAt, project, RC, S_BOTTOM, S_TURN1, S_TURN2, trackHeadingAt, wrapAngle } from '../src/track/track';
 import { freshCar } from './sim/drivers';
 
 let saved: DriveModel;
@@ -96,6 +96,21 @@ describe('grip model: straight assist', () => {
     }
     expect(car.d).toBeGreaterThan(2.5);
     expect(car.d).toBeLessThan(10);
+  });
+
+  it('a 200 ms press at 180 mph from the centre line is caught by the assist before the wall (designer L5)', () => {
+    const car = carAt(S_BOTTOM + 50, 0, 180);
+    const ps = new PlayerSteering();
+    let maxD = 0;
+    for (let t = 0; t < 2.5; t += 1 / 60) {
+      const st = ps.update(car, t < 0.2 ? 1 : 0, 1 / 60);
+      stepCar(car, { steer: st.steer, straightTo: st.straightTo, gas: true, brake: false, toggleReverse: false }, 1 / 60);
+      Object.assign(car, project(car.x, car.y));
+      maxD = Math.max(maxD, car.d);
+    }
+    expect(maxD).toBeGreaterThan(15);
+    expect(maxD).toBeLessThan(HALF_W - CAR_R - 2);
+    expect(car.spinTime).toBe(0);
   });
 });
 

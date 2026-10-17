@@ -96,7 +96,7 @@ export const CONFIG = {
     LOADED_USE: 0.7,
     /** Straight assist: full strength up to FULL_DEG of heading error, fading out by OFF_DEG. */
     STRAIGHT_FULL_DEG: 5,
-    STRAIGHT_OFF_DEG: 14,
+    STRAIGHT_OFF_DEG: 20,
     /** Walls: glancing below GLANCE_DEG (straightened, friction only), spin above SPIN_DEG and SPIN_MPH. */
     WALL_GLANCE_DEG: 15,
     WALL_SPIN_DEG: 30,
