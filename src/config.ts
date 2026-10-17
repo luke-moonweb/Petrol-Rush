@@ -52,6 +52,19 @@ export const CONFIG = {
     ALIGN: 6,
     /** Full lock never asks for more than STEER_CAP x the grip. */
     STEER_CAP: 1.5,
+    /** Player keys / touch: a held key asks for KEY_CAP x the grip left (like the AI's cap). */
+    KEY_CAP: 1.05,
+    /**
+     * Holding the key against that cap into a corner the car is too fast for (its line needs more than
+     * 1 + OVERDRIVE_OVER x the grip) for OVERDRIVE_S opens the steering to full lock over OVERDRIVE_RAMP_S.
+     */
+    OVERDRIVE_OVER: 0.1,
+    /** At n x OVERDRIVE_OVER the overdrive comes n times sooner, up to this factor. */
+    OVERDRIVE_RATE_MAX: 3,
+    /** Full lock only from OVERDRIVE_OVER + OVERDRIVE_FULL over; less excess opens it partly. */
+    OVERDRIVE_FULL: 0.3,
+    OVERDRIVE_S: 0.5,
+    OVERDRIVE_RAMP_S: 0.5,
     MIN_V: 20,
     /** Rear stress builds while the demand is above U_REAR; the rear lets go at 1. */
     U_REAR: 1.3,

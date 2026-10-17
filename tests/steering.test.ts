@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { CONFIG, type DriveModel } from '../src/config';
-import { curvatureAssist, maxCurvature, stepCar } from '../src/race/physics';
-import { PlayerSteering } from '../src/race/steering';
+import { curvatureAssist, limitMph, maxCurvature, stepCar } from '../src/race/physics';
+import { keyCap, PlayerSteering } from '../src/race/steering';
 import { laneCurvature } from '../src/track/curvature';
 import { pointAt, project, RC, S_BOTTOM, S_TURN1, S_TURN2, trackHeadingAt, wrapAngle } from '../src/track/track';
 import { freshCar } from './sim/drivers';
@@ -96,5 +96,82 @@ describe('grip model: straight assist', () => {
     }
     expect(car.d).toBeGreaterThan(2.5);
     expect(car.d).toBeLessThan(10);
+  });
+});
+
+describe('grip model: key and touch steering cap (designer H2)', () => {
+  const demand = (car: { speed: number }, steer: number) => {
+    const v = car.speed * CONFIG.PX_PER_MPH;
+    return (Math.abs(steer) * maxCurvature(v) * v * v) / CONFIG.GRIP.GRIP;
+  };
+  const hold = (ps: PlayerSteering, car: ReturnType<typeof carAt>, key: number, s: number, brake = false) => {
+    let st = ps.update(car, key, 1 / 60, brake);
+    for (let t = 1 / 60; t < s; t += 1 / 60) st = ps.update(car, key, 1 / 60, brake);
+    return st.steer;
+  };
+
+  it('a held key asks for KEY_CAP x the grip at speed, on straights and in corners; full lock at low speed', () => {
+    for (const [s, mph] of [
+      [S_BOTTOM + 100, 180],
+      [S_BOTTOM + 100, 140],
+      [S_TURN1 + 100, 150],
+    ] as const) {
+      const car = carAt(s, 0, mph);
+      expect(demand(car, hold(new PlayerSteering(), car, -1, 1)), `${s} ${mph}`).toBeCloseTo(CONFIG.GRIP.KEY_CAP, 6);
+    }
+    expect(hold(new PlayerSteering(), carAt(S_BOTTOM + 100, 0, 60), 1, 1)).toBe(1);
+  });
+
+  it('braking leaves less grip to steer with, so the cap drops', () => {
+    const car = carAt(S_BOTTOM + 100, 0, 170);
+    expect(keyCap(car, true)).toBeLessThan(keyCap(car, false));
+    expect(Math.abs(hold(new PlayerSteering(), car, 1, 0.5, true))).toBeCloseTo(keyCap(car, true), 9);
+  });
+
+  it('at or under the limit a key held for the whole corner never goes past the cap (no overdrive)', () => {
+    const lim = limitMph(laneCurvature(-1 / RC, 0));
+    for (const f of [0.9, 1.0, 1.04]) {
+      const ps = new PlayerSteering();
+      const car = carAt(S_TURN1 + 50, 0, lim * f);
+      expect(demand(car, hold(ps, car, -1, 3)), `x${f}`).toBeLessThanOrEqual(CONFIG.GRIP.KEY_CAP + 1e-9);
+      expect(ps.overdrive).toBe(0);
+    }
+  });
+
+  it('insisting into a corner the car is too fast for opens the steering: later and less for a small excess', () => {
+    const opened = (f: number, s: number, d = 0) => {
+      const car = carAt(S_TURN1 + 50, d, limitMph(laneCurvature(-1 / RC, d)) * f);
+      return demand(car, hold(new PlayerSteering(), car, -1, s));
+    };
+    const G = CONFIG.GRIP;
+    // 7 % over (14 % over the grip): opens a little, after OVERDRIVE_S / 1.4
+    expect(opened(1.07, 0.3)).toBeCloseTo(G.KEY_CAP, 6);
+    expect(opened(1.07, 2)).toBeGreaterThan(G.KEY_CAP + 0.02);
+    expect(opened(1.07, 2)).toBeLessThan(1.3);
+    // 13 % over: further, sooner
+    expect(opened(1.13, 1)).toBeGreaterThan(1.25);
+    expect(opened(1.13, 0.4)).toBeGreaterThan(opened(1.07, 0.4));
+    // 20 % over (44 % over the grip): full lock (STEER_CAP x the grip) within half a second
+    expect(opened(1.2, 0.5, -28.5)).toBeCloseTo(G.STEER_CAP, 6);
+  });
+
+  it('a key out of the bend (countersteer) or a released key never overdrives', () => {
+    const lim = limitMph(laneCurvature(-1 / RC, 0));
+    const car = carAt(S_TURN1 + 50, 0, lim * 1.2);
+    const ps = new PlayerSteering();
+    expect(demand(car, hold(ps, car, 1, 2))).toBeLessThanOrEqual(CONFIG.GRIP.KEY_CAP + 1e-9);
+    hold(ps, car, -1, 2);
+    expect(ps.overdrive).toBe(1);
+    hold(ps, car, 0, 0.1);
+    expect(ps.overdrive).toBe(0);
+  });
+
+  it('classic model: no cap, a held key is full lock', () => {
+    CONFIG.DRIVE_MODEL = 'classic';
+    try {
+      expect(hold(new PlayerSteering(), carAt(S_BOTTOM + 100, 0, 180), 1, 1)).toBe(1);
+    } finally {
+      CONFIG.DRIVE_MODEL = 'grip';
+    }
   });
 });
