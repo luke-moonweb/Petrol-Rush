@@ -205,7 +205,7 @@ describe('oil and crash penalties', () => {
     const { race, a, b, place } = twoCars();
     place(a, 300, 0, 120);
     place(b, 1200, 0, 0);
-    race.oil.push({ x: a.x + 30, y: a.y, s: 330, d: 0, age: 1 });
+    race.oil.push({ x: a.x + 30, y: a.y, s: 330, d: 0, age: 1, owner: -1 });
     const dt = 1 / 60;
     for (let i = 0; i < 20; i++) race.step(dt, null);
     expect(a.spinTime).toBeGreaterThan(0);
@@ -213,6 +213,20 @@ describe('oil and crash penalties', () => {
     expect(b.spinTime).toBe(0);
     for (let i = 0; i < 60 * (CONFIG.OIL_LIFE_S + 1); i++) race.step(dt, null);
     expect(race.oil.length).toBe(0);
+  });
+
+  it("a car never spins on its own slick, only on other cars' oil", () => {
+    const { race, a, b, place } = twoCars();
+    place(a, 300, 0, 120);
+    place(b, 1200, 0, 0);
+    race.oil.push({ x: a.x + 30, y: a.y, s: 330, d: 0, age: 1, owner: a.id });
+    for (let i = 0; i < 20; i++) race.step(1 / 60, null);
+    expect(a.spinTime).toBe(0);
+    race.oil.length = 0;
+    place(a, 300, 0, 120);
+    race.oil.push({ x: a.x + 30, y: a.y, s: 330, d: 0, age: 1, owner: b.id });
+    for (let i = 0; i < 20; i++) race.step(1 / 60, null);
+    expect(a.spinTime).toBeGreaterThan(0);
   });
 
   it('the rear-hit culprit gets a time penalty; none when penalties are off', () => {
