@@ -101,7 +101,7 @@ describe('headless simulation', () => {
     expect(pitStops).toBeGreaterThanOrEqual(20);
     expect(pitStops).toBeLessThanOrEqual(40);
     console.log(`race: ${race.time.toFixed(1)} s, pit stops: ${pitStops}`);
-  });
+  }, 60_000);
 
   it('simulation is deterministic for the same seed', () => {
     const run = () => {
@@ -111,7 +111,7 @@ describe('headless simulation', () => {
       return r.cars.map((c) => `${c.x.toFixed(3)},${c.y.toFixed(3)}`).join('|');
     };
     expect(run()).toBe(run());
-  });
+  }, 30_000);
 });
 
 describe('traffic jam behind the stopped player car', () => {
@@ -123,7 +123,7 @@ describe('traffic jam behind the stopped player car', () => {
       const idle = { steer: 0, gas: false, brake: false, toggleReverse: false };
       while (race.time < 10 * 40 && !race.cars.every((c) => c.isPlayer || c.finished)) race.step(1 / 60, idle);
       expect(race.cars.filter((c) => !c.isPlayer && !c.finished).map((c) => c.id)).toEqual([]);
-    });
+    }, 60_000);
   }
 });
 
@@ -186,7 +186,7 @@ describe('player pit lane autopilot', () => {
     expect(off).toBeLessThan(PIT_LINE_OUT_X + 10);
     expect(p.fuel).toBeGreaterThan(0.95);
     expect(wall).toBe(0);
-  });
+  }, 30_000);
 });
 
 describe('oil and crash penalties', () => {

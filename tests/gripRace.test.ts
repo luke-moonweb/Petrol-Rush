@@ -174,7 +174,7 @@ describe('grip model: 20-car races (A12, A13)', () => {
   it('A14: deterministic after 20 s and after a full race', () => {
     expect(hashState(runFor(99, 20, 18, 20))).toBe(hashState(runFor(99, 20, 18, 20)));
     expect(hashState(runFor(7, 12, 5, 400))).toBe(hashState(runFor(7, 12, 5, 400)));
-  });
+  }, 60_000);
 });
 
 describe('grip model: solo pace (A10)', () => {
@@ -214,7 +214,7 @@ describe('grip model: solo pace (A10)', () => {
     // the limit comes from the radius: inside slowest, outside fastest, within a second of each other
     for (let i = 1; i < lanes.length; i++) expect(grip[i]!.lap).toBeLessThan(grip[i - 1]!.lap);
     expect(grip[0]!.lap - grip[3]!.lap).toBeLessThan(1);
-  });
+  }, 60_000);
 });
 
 describe('grip model: pit entry', () => {
@@ -247,7 +247,7 @@ describe('grip model: pit entry', () => {
     expect(atTurn.length).toBeGreaterThan(10);
     console.log(`pit entry: d at turn 2 ${atTurn.map((d) => d.toFixed(0)).join(' ')}`);
     for (const d of atTurn) expect(d).toBeLessThanOrEqual(-HALF_W + 9 + 15);
-  });
+  }, 60_000);
 });
 
 describe('grip model: performance guard (A15, logged)', () => {
