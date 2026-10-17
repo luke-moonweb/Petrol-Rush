@@ -1,7 +1,20 @@
 # Grip model: open tasks after review round 3 (state 3c8e867 / 47f0378)
 
 On 2026-10-17 the user said: record the findings as tasks and make no code changes for now.
-Full reports are in `review-r3/`. Status: [ ] open, [x] done.
+Full reports are in `review-r3/`. Status: [ ] open, [x] done, [-] dropped by the user (2026-10-18).
+
+## Update 2026-10-18 (integration branch `integrate/all`)
+- **T1 done:** the lift-off tuck-in (LIFT_YAW, FRONT_GAIN) stops adding slip at GRIP.TUCK_SLIP
+  (0.07 rad) unless the demand is above TUCK_FREE_U (1.4), the rear stress is above 0.6 or the rear
+  is loose. Oval turn 1, 1.0-1.10 x, key held or tracking, lift at turn-in or after 0.5 s: no spin,
+  exit slip 3.4-4.0 deg. 1.25 / 1.3 x insisting still spins. Test: keys.test.ts (T1). Known limit:
+  holding the key on the inside lane while lifting tightens the line into the inner wall (a wall
+  hit, excluded from the test).
+- **T4 done:** a fresh wall hit while understeering (gripOver > 0) costs GRIP.WALL_PLOUGH_SCRUB
+  (15 %) more. A driver who only asks the key cap and rides the wall now loses 0.78-0.98 s on turn 1
+  + top straight (lanes -28.5 / -9.5 / 0; was 0.30-0.48). Test: keys.test.ts (T4).
+- **T6 done:** Grand Prix port (see RESUME.md).
+- **Dropped by the user (2026-10-18):** T2, T3, T5, T7, T8, T9, T10, T11, T12.
 
 Signed off by the user. Do not change or review these:
 - The cockpit LED strip: start lights, then 140–180 mph.
@@ -9,7 +22,7 @@ Signed off by the user. Do not change or review these:
 - A calm AI field.
 
 ## High
-- [ ] **T1. Lifting off at a small excess spins instead of recovering (A4).** Source: projektant r3;
+- [x] **T1. Lifting off at a small excess spins instead of recovering (A4).** Source: projektant r3;
   present since round 1.
   - **Setup:** oval turn 1, real PlayerSteering, entry 1.05–1.10 × the limit, key held, throttle
     lifted or coasting.
@@ -28,7 +41,7 @@ Signed off by the user. Do not change or review these:
       no spin, and slip below 5° by the corner exit;
     - at ≥ 1.25 × while insisting → it still spins.
 
-- [ ] **T12. AI cars crawl through the pit exit at ~5 mph for 10–33 s.** Source: tester r3.
+- [-] **T12. AI cars crawl through the pit exit at ~5 mph for 10–33 s.** Source: tester r3.
   - **Numbers:** 60 seeds (1–20, 100–139), 20 cars × 18 laps. Transit time from x=1700 to off the
     pit road:
 
@@ -51,7 +64,7 @@ Signed off by the user. Do not change or review these:
   - Scripts: scratchpad/tester-grip/sim (queue, q2, transit).
 
 ## Medium / minor
-- [ ] **T2. The forced pit-exit merge brings pile-ups back.** Source: projektant r3.
+- [-] **T2. The forced pit-exit merge brings pile-ups back.** Source: projektant r3.
   - **Where:** seeds 502 and 504, 10 spins each.
   - **Sequence:** a car that waited 3.7 s or 8.8 s is pushed out by the 2.5 s / 4 s fallback, a
     racing car at 111–112 mph on the inside line rear-ends it, and an oil chain follows.
@@ -63,7 +76,7 @@ Signed off by the user. Do not change or review these:
   - **Note (critic r3):** fresh seeds 200–239 show only 2 spins near a merging car (classic: 259)
     and 0 forced 4 s merges. A probe of a forced merge with a racing car 40–300 px behind at
     120/150 mph gave no contact. Reproduce seeds 502/504 first to confirm before changing anything.
-- [ ] **T3. The 40-seed gate cannot see pile-ups.** Source: projektant r3.
+- [-] **T3. The 40-seed gate cannot see pile-ups.** Source: projektant r3.
   - **Gaps:**
     - no pit-exit spin share;
     - no race-time comparison with classic;
@@ -72,7 +85,7 @@ Signed off by the user. Do not change or review these:
   - **Add:** pit-exit spin share ≤ 1.5 × classic over ≥ 12 seeds, and a crawl check.
 
 ## Known open items carried over from round 2
-- [ ] **T4. Going in flat out is too cheap: the outer wall acts as a guide rail (designer M1, still
+- [x] **T4. Going in flat out is too cheap: the outer wall acts as a guide rail (designer M1, still
   open in r3).**
   - Designer r3, key tapper that steers along the wall: turn 1 + top straight braked 10.55 s vs
     flat out 10.82 s (+0.27 s); touch +0.23 s; ~+0.5 s per lap.
@@ -82,8 +95,8 @@ Signed off by the user. Do not change or review these:
   - Target 3: 10% over should run about a lane wide and cost 0.5–1 s.
   - Suggestions: wall contact under understeer costs more speed, or excess speed itself builds
     rear stress so the tail can step out without overdrive.
-- [ ] **T5. A 400 ms key press at 180 mph on a straight spins.** Designer target 8 says it should not.
-- [ ] **T6. Grand Prix port** (when Grand Prix comes back):
+- [-] **T5. A 400 ms key press at 180 mph on a straight spins.** Designer target 8 says it should not.
+- [x] **T6. Grand Prix port** (when Grand Prix comes back):
   - add `curvatureAt` for segment tracks;
   - `ai.ts` and `warnings.ts` must take the track's own curvature table;
   - make the oval-only pit merge, pit approach and fuel-reach logic in `ai.ts` work per track;
@@ -91,14 +104,14 @@ Signed off by the user. Do not change or review these:
   - re-record the oval golden master.
 
 ## Designer r3 (other findings)
-- [ ] **T10 (medium). Player and AI car stuck together at the outer wall of turn 2 for ~77 s.**
+- [-] **T10 (medium). Player and AI car stuck together at the outer wall of turn 2 for ~77 s.**
   - Touch run, lap 1: a contact at 16.4 s spun the player; at 18.3 s the player's speed dropped
     22→0 in one step with no wall contact (r=183.8). Player and one AI car stayed stuck until
     ~96 s and both lost ~5 laps.
   - The AI recovery in ai.ts only reverses when `tailBlocked` is false, so a car pressed on its
     tail creeps forever.
   - Probably shared with classic. Reproduce in classic first.
-- [ ] **T11 (low). A fast glancing wall hit turned the heading 10.3° in one step.** 162 mph, 49 mph
+- [-] **T11 (low). A fast glancing wall hit turned the heading 10.3° in one step.** 162 mph, 49 mph
   into the wall, 11° slip, player car at t=137.82 s. That is above the "≤ 4° per step" claim in
   RESUME. Check the wall-yaw cap and the slip alignment after the hit.
 - Note: a 300 ms tap at ~175 mph reaches the wall (see T5); slow steep hits now stop cleanly and
@@ -106,11 +119,11 @@ Signed off by the user. Do not change or review these:
   besides T11.
 
 ## Low (critic r3, non-blocking; critic verdict: NO REMAINING ISSUES)
-- [ ] **T7.** The gate comment says its seeds 100–141 were "not tuned on", but they are the round-2
+- [-] **T7.** The gate comment says its seeds 100–141 were "not tuned on", but they are the round-2
   diagnostic seeds. Fix the comment, or move the gate to fresh seeds (200–239 also pass).
-- [ ] **T8.** The forced 4 s merge path has no dedicated test; it never triggered in 40 races.
+- [-] **T8.** The forced 4 s merge path has no dedicated test; it never triggered in 40 races.
   Add a probe test.
-- [ ] **T9.** Suite time rose from ~17 s to ~55 s (`gripGate` takes 51 s). Consider tagging the
+- [-] **T9.** Suite time rose from ~17 s to ~55 s (`gripGate` takes 51 s). Consider tagging the
   gate as a slow/CI-only test or sharding it.
 
 ## Tester r3 — what improved (for reference)
