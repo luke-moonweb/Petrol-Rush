@@ -247,7 +247,7 @@ export class Race {
   private spillOil(car: Car): void {
     if (this.oil.length >= CONFIG.OIL_MAX) this.oil.shift();
     const st = this.track.project(car.x, car.y);
-    this.oil.push({ x: car.x, y: car.y, s: st.s, d: st.d, age: 0 });
+    this.oil.push({ x: car.x, y: car.y, s: st.s, d: st.d, age: 0, owner: car.id });
   }
 
   private updateOil(dt: number): void {
@@ -256,6 +256,7 @@ export class Race {
     for (const car of this.cars) {
       if (car.spinTime > 0 || car.oilImmune > 0 || Math.abs(car.speed) < CONFIG.OIL_MIN_MPH) continue;
       for (const o of this.oil) {
+        if (o.owner === car.id) continue;
         if (Math.hypot(car.x - o.x, car.y - o.y) < oilRadius(o)) {
           startSpin(car, CONFIG.SPIN_RATE * 0.8, this.rng() < 0.5 ? -1 : 1);
           break;

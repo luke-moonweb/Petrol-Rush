@@ -7,7 +7,7 @@ const TIPS = [
   'Above 150 MPH in a corner the car will spin. Red SKID lamp on? Brake before the turn.',
   'Oil on the track spins you out – steer around it. Hit a rival from behind and you get a time penalty.',
   'A full tank lasts about 12 laps. Low on fuel? Pull into PIT ROAD and stop in a box.',
-  'Spun out? Stop, switch to reverse gear, back up and turn.',
+  'Spun out? Hold the reverse key: the car stops, backs up, and you can turn.',
 ];
 
 const TOUCH_ROWS: [string, string][] = [
@@ -38,7 +38,7 @@ export function drawHelp(g: CanvasRenderingContext2D, b: Bindings, touch = false
         [`${k('left')} ${k('right')}`, 'STEER'],
         [k('gas'), 'ACCELERATE'],
         [k('brake'), 'BRAKE'],
-        [k('reverse'), 'REVERSE GEAR ON / OFF'],
+        [k('reverse'), 'HOLD: BRAKE, THEN REVERSE'],
         [k('camera'), 'TOP-DOWN / COCKPIT VIEW'],
         [k('pause'), 'PAUSE'],
         [`ESC ${keyLabel(b.menu[0])}`, 'RACE MENU'],

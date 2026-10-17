@@ -71,6 +71,8 @@ export class RaceState implements State {
   private camOffY = 0;
   private readonly steerRamp = new SteerRamp();
   private reverseHint = 0;
+  // Set while the hold-to-reverse key (↓ / S) put the car in reverse, so releasing it leaves reverse.
+  private reverseHeld = false;
   private steerVis = 0;
   private notice: { text: string; age: number } | null = null;
   private radioCooldown = 0;
@@ -105,6 +107,7 @@ export class RaceState implements State {
     this.particles?.clear();
     this.camOffX = NaN;
     this.assistLevel = 0;
+    this.reverseHeld = false;
     this.sound = new RaceSound(this.game.audio);
     this.lightsShown = 0;
     const prefs = this.game.prefs;
@@ -120,6 +123,24 @@ export class RaceState implements State {
       return new Race(this.opts, raceSeed(gp, round(gp)), false, rules, getTrack(this.opts.track), lineup);
     }
     return new Race(this.opts, this.seed++, false, rules, getTrack(this.opts.track));
+  }
+
+  // Holding ↓ / S brakes; once the car has nearly stopped it engages reverse and backs up.
+  // Releasing the key leaves reverse and the car rolls to a stop.
+  private holdReverse(drive: DriveInput, held: boolean): void {
+    const p = this.race.player;
+    if (held) {
+      if (p.reverse) drive.gas = true;
+      else if (Math.abs(p.speed) <= CONFIG.REVERSE_TOGGLE_MAX_MPH) {
+        drive.toggleReverse = true;
+        drive.gas = true;
+      } else drive.brake = true;
+      if (drive.gas) drive.brake = false;
+      this.reverseHeld = true;
+    } else if (this.reverseHeld) {
+      this.reverseHeld = false;
+      if (p.reverse) drive.toggleReverse = true;
+    }
   }
 
   touchLayout(): TouchLayout {
@@ -393,8 +414,10 @@ export class RaceState implements State {
       steer: this.race.pitAuto ? 0 : Math.max(-1, Math.min(1, keySteer + assist * this.assistLevel)),
       gas: input.isDown('gas'),
       brake: input.isDown('brake'),
-      toggleReverse: input.pressed('reverse'),
+      // A tap without a held key is the touch REV button, which toggles reverse.
+      toggleReverse: input.pressed('reverse') && !input.isDown('reverse'),
     };
+    this.holdReverse(drive, input.isDown('reverse'));
     const shownSteer = this.race.pitAuto ? this.race.playerDrive.steer : drive.steer;
     this.steerVis += (shownSteer - this.steerVis) * Math.min(1, dt * 12);
     this.reverseHint = Math.max(0, this.reverseHint - dt);

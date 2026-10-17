@@ -6,6 +6,8 @@ export interface OilSlick {
   s: number;
   d: number;
   age: number;
+  // Id of the car that spilled it (-1 for none); a slick never spins its own car.
+  owner: number;
 }
 
 export function oilRadius(o: OilSlick): number {
