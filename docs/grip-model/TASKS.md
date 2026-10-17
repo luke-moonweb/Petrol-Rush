@@ -28,6 +28,28 @@ Signed off by the user. Do not change or review these:
       no spin, and slip below 5° by the corner exit;
     - at ≥ 1.25 × while insisting → it still spins.
 
+- [ ] **T12. AI cars crawl through the pit exit at ~5 mph for 10–33 s.** Source: tester r3.
+  - **Numbers:** 60 seeds (1–20, 100–139), 20 cars × 18 laps. Transit time from x=1700 to off the
+    pit road:
+
+    | | p50 | p95 | p99 | max | exits > 10 s |
+    |---|---|---|---|---|---|
+    | grip | 2.4 s | 12.0 s | 16.0 s | 33.1 s | 82 / 1202 |
+    | classic | 2.3 s | 3.4 s | 6.6 s | 13.7 s | 4 / 1264 |
+
+    26 of 60 races have a 10 s+ exit. It is mostly cars 16–19, whose boxes (x 1588–1804) sit
+    inside the 260 px give-way zone.
+  - **Repro, seed 8:** from 199 to 228 s, car 17 (just out of its box, y≈270–277) and car 16 (in
+    the drive lane, y≈285–290) run side by side at 4–6 mph from x=1736 to 1960. Car 17 steers
+    toward the drive lane, touches car 16, brakes with opposite lock and repeats. Eight more
+    exiting cars queue behind them at 5 mph and lose 25–30 s. None of them is in creep or
+    recovery mode.
+  - **Why the gate misses it:** the stopped-time metric does not count crawling, so the RESUME
+    p95/max figures leave it out.
+  - **To do:** fix the box-exit vs drive-lane interaction (a box exit yields cleanly, or the drive
+    lane car lets it in), and gate on transit time (p95 ≤ ~4 s, max ≤ ~15 s).
+  - Scripts: scratchpad/tester-grip/sim (queue, q2, transit).
+
 ## Medium / minor
 - [ ] **T2. The forced pit-exit merge brings pile-ups back.** Source: projektant r3.
   - **Where:** seeds 502 and 504, 10 spins each.
@@ -91,6 +113,18 @@ Signed off by the user. Do not change or review these:
 - [ ] **T9.** Suite time rose from ~17 s to ~55 s (`gripGate` takes 51 s). Consider tagging the
   gate as a slow/CI-only test or sharding it.
 
-## Pending review reports
-The tester round 3 was still running (critic: no remaining issues; designer and projektant: issues found) when the user paused the work. Their
-findings are added below as they arrive.
+## Tester r3 — what improved (for reference)
+- The old standoff is fixed (seed 17: car 14 passes the exit at 70 mph; car 1 never drops below
+  125 mph).
+- Pit-exit stopped wait over 20 seeds: mean of per-race max 8.2 s (r2 20.6), max 31.9 s, 9 of 20
+  races over 10 s. Classic: max 3.2 s.
+- 0 dry tanks in 40 races; seed 10 car 19 pits correctly.
+- Wall heading change per step at most 8° (was 128°); slow steep hits stop the car.
+- A pinned car drives away.
+- Queue behind a player stopped in the pit exit: 7–20 s (was 25–36 s). Nothing waits forever.
+- Browser: a full race with your own pit stop is clean, all layouts work in both cameras,
+  `?drive=classic` works, no console errors.
+
+## Round 3 verdicts
+critic NO REMAINING ISSUES; projektant, designer and tester ISSUES FOUND. Work is paused at the
+user's request.
