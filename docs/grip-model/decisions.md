@@ -34,3 +34,6 @@ Also apply the designer feel targets in scratchpad/designer-grip-baseline.md as 
   the grip and slip information. This replaces round-2 item 5 (LEDs read the car) and the LED parts
   of decision 3 above.
 - Classic mode (`?drive=classic`) keeps its old LED behaviour, as on main.
+
+## Decision added 2026-10-17 (round 3)
+- The user signed off the cockpit LED strip (start lights, then 140–180 mph) and the SKID lamp as they are at 3c8e867. Work on them is finished: no further changes or review findings about the LEDs or SKID behaviour.
