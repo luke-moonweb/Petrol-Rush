@@ -57,10 +57,12 @@ function laneFree(car: Car, lane: number, cars: Car[]): boolean {
   return true;
 }
 
-function pitCarAhead(car: Car, laneY: number, cars: Car[]): { car: Car; gap: number } | null {
+function pitCarAhead(car: Car, laneY: number, cars: Car[], exitRoad = false): { car: Car; gap: number } | null {
   let best: { car: Car; gap: number } | null = null;
   for (const o of cars) {
-    if (o === car || !o.pitSide || !inPitLane(o.x, o.y)) continue;
+    // (grip: also the stretch of pit road after the pit lane, where a car may wait to merge)
+    const onRoad = inPitLane(o.x, o.y) || (exitRoad && o.y > CY && o.x < WALL_X1 + 20);
+    if (o === car || !o.pitSide || !onRoad) continue;
     const dx = o.x - car.x;
     if (dx <= 0 || dx > 150 || Math.abs(o.y - laneY) > 13) continue;
     if (!best || dx < best.gap) best = { car: o, gap: dx };
@@ -127,7 +129,23 @@ export function aiInput(car: Car, view: AiView, dt: number): DriveInput {
           }
         }
       } else {
-        laneD = -HALF_W + 9;
+        laneD = PIT_APPROACH_D;
+        if (grip && Math.abs(car.d - laneD) > 6) {
+          // Someone alongside on the inside: hold the line until the way is clear, dropping in
+          // behind a car that is level or ahead (one coming from behind is let by).
+          const block = sideBlockers(car, laneD, view.cars);
+          if (block.length > 0) {
+            laneD = car.d;
+            for (const o of block) if (deltaS(car.s, o.s) > -10) target = Math.min(target, Math.max(0, o.speed - 8));
+          }
+          // Still held out wide as turn 2 arrives: skip the pits this lap rather than dive across
+          // the corner, if the fuel lasts another lap.
+          const fuelLaps = car.fuel * CONFIG.FUEL_RANGE_LAPS;
+          if (car.s > S_TURN2 - PIT_GIVE_UP_PX && car.s < S_TURN2 && car.d > PIT_APPROACH_D + PIT_GIVE_UP_D && fuelLaps > 1.2) {
+            ai.pitPhase = 'none';
+            break;
+          }
+        }
         if (grip) {
           // brake smoothly for the dive instead of the classic step down to 100 mph
           const toDive = car.s < S_TURN2 - PIT_DECIDE_FROM ? Infinity : S_TURN2 + TURN_LEN * PIT_DIVE_AT - car.s;
@@ -161,8 +179,23 @@ export function aiInput(car: Car, view: AiView, dt: number): DriveInput {
           pitY = PIT_BOX_Y;
           target = 0;
         }
+        // Grip model: give way at the end of the pit road until the inside lane is clear, instead
+        // of merging into turn 1 alongside (or just ahead of) a car that cannot slow down in time.
+        if (grip && car.x > WALL_X1 - MERGE_YIELD_PX) {
+          if (!mergeClear(car, LANES[0]!, view.cars, true)) {
+            const room = Math.max(0, WALL_X1 - MERGE_STOP_PX - car.x);
+            target = Math.min(target, Math.sqrt((2 * CONFIG.BRAKE_MPH_S * 0.7 * room) / pxm));
+          }
+          // and do not run into a car that has just merged (it is no longer in the pit lane)
+          const ahead = exitRoadAhead(car, view.cars);
+          if (ahead) {
+            const room = Math.max(0, ahead.gap - 46);
+            const v0 = Math.max(0, ahead.car.speed);
+            target = Math.min(target, Math.sqrt(v0 * v0 + (2 * CONFIG.BRAKE_MPH_S * 0.7 * room) / pxm));
+          }
+        }
       } else {
-        laneD = mergeClear(car, LANES[0]!, view.cars) ? LANES[0]! : EXIT_D;
+        laneD = mergeClear(car, LANES[0]!, view.cars, grip) ? LANES[0]! : EXIT_D;
         if (Math.abs(car.d - LANES[0]!) < 5 || car.y < CY) {
           ai.pitPhase = 'none';
           ai.lane = LANES[0]!;
@@ -174,10 +207,10 @@ export function aiInput(car: Car, view: AiView, dt: number): DriveInput {
   }
 
   if (pitY !== null) {
-    let ahead = pitCarAhead(car, pitY, view.cars);
+    let ahead = pitCarAhead(car, pitY, view.cars, grip);
     if (ahead && ahead.car.speed < 2 && ahead.gap < 80 && !isServicing(ahead.car)) {
       const other = pitY === PIT_DRIVE_Y ? PIT_BOX_Y : PIT_DRIVE_Y;
-      if (!pitCarAhead(car, other, view.cars)) {
+      if (!pitCarAhead(car, other, view.cars, grip)) {
         pitY = other;
         ahead = null;
       }
@@ -188,6 +221,9 @@ export function aiInput(car: Car, view: AiView, dt: number): DriveInput {
       target = Math.min(target, Math.sqrt(v0 * v0 + (2 * CONFIG.BRAKE_MPH_S * 0.7 * room) / pxm));
     }
   } else {
+    // Grip model: a car already diving for the pit entry stays on its line (it only slows for
+    // oil and hazards); a lane change there would make it miss the pit road.
+    const diving = grip && ai.pitPhase === 'entering' && car.s > S_TURN2 + TURN_LEN * PIT_DIVE_AT;
     const oil = view.oil ?? [];
     const slicks = oil.filter((o) => {
       const ds = deltaS(car.s, o.s);
@@ -206,7 +242,7 @@ export function aiInput(car: Car, view: AiView, dt: number): DriveInput {
         );
         const free = options.find((ln) => sideClear(car, ln, view.cars)) ?? options[0];
         const nearest = Math.min(...slicks.map((o) => deltaS(car.s, o.s)));
-        if (free !== undefined) {
+        if (free !== undefined && !diving) {
           ai.lane = laneD = free;
           ai.laneCooldown = 1.5;
           oilLane = true;
@@ -235,7 +271,7 @@ export function aiInput(car: Car, view: AiView, dt: number): DriveInput {
         const free = [...LANES]
           .sort((p, q) => Math.abs(p - car.d) - Math.abs(q - car.d))
           .find((ln) => all.every((h) => Math.abs(h.d - ln) > 21) && sideClear(car, ln, view.cars));
-        if (free !== undefined && !oilLane) {
+        if (free !== undefined && !oilLane && !diving) {
           ai.lane = laneD = free;
           ai.laneCooldown = 1.5;
           const nearest = Math.min(...hazards.map((h) => deltaS(car.s, h.s)));
@@ -262,7 +298,12 @@ export function aiInput(car: Car, view: AiView, dt: number): DriveInput {
       if (o === car) continue;
       const ds = deltaS(car.s, o.s);
       if (ds <= 0 || ds > range) continue;
-      if (Math.abs(o.d - car.d) < 17 || (ds > 40 && Math.abs(o.d - laneD) < 16)) {
+      // (grip: a car going to or from the pits also counts on the line it is moving to)
+      const jd = grip ? joiningD(o) : o.d;
+      // (grip: a much slower car counts from further across, as the pursuit line drifts into corners)
+      const wide = grip ? Math.min(FOLLOW_WIDE_PX, Math.max(0, car.speed - o.speed - 20) / 5) : 0;
+      const near = (d: number) => Math.abs(d - car.d) < 17 + wide || (ds > 40 && Math.abs(d - laneD) < 16 + wide);
+      if (near(o.d) || (jd !== o.d && near(jd))) {
         if (ds < gap) {
           gap = ds;
           ahead = o;
@@ -402,6 +443,11 @@ function isServicing(o: Car): boolean {
 const AI_RECOVER_MPH = 10;
 
 const EXIT_D = -HALF_W + 13;
+/** Line of a car heading for the pit entry, before it dives off turn 2. */
+const PIT_APPROACH_D = -HALF_W + 9;
+// Grip model: a car more than PIT_GIVE_UP_D px out from that line PIT_GIVE_UP_PX before turn 2 gives the stop up.
+const PIT_GIVE_UP_PX = 40;
+const PIT_GIVE_UP_D = 15;
 
 function pitPathR(phi: number): number {
   const r = islandHullR(phi) + CAR_CLEAR;
@@ -413,6 +459,17 @@ const PIT_DIVE_AT = 0.6;
 const PIT_DECIDE_FROM = 700;
 const PIT_DECIDE_TO = 250;
 const LANE_CHANGE_CLEAR = 160;
+// Grip model pit exit: give way from this far before the end of the pit road, stopping this far
+// before it; racing cars up to MERGE_BACK_PX behind count, with a reaction of MERGE_REACT_S.
+const MERGE_YIELD_PX = 260;
+/** Grip model: extra lateral reach (px) of the follow logic for a car 60+ mph slower. */
+const FOLLOW_WIDE_PX = 8;
+/** A car leaving the pits this close to the end of the pit road is merging (racing cars allow for it). */
+const MERGE_COMMIT_PX = 4;
+const MERGE_STOP_PX = 12;
+const MERGE_BACK_PX = 700;
+const MERGE_REACT_S = 0.4;
+const MERGE_GAIN_MPH = 20;
 
 function freeBox(car: Car, cars: Car[]): number {
   const own = Math.round((car.ai.boxX - PIT_X0 - BOX_PITCH / 2) / BOX_PITCH);
@@ -424,18 +481,53 @@ function freeBox(car: Car, cars: Car[]): number {
   return car.ai.boxX;
 }
 
-function mergeClear(car: Car, lane: number, cars: Car[]): boolean {
+/**
+ * Can a car leaving the pits take `lane`? Classic: nobody alongside and nobody closing in within
+ * 1.5 s. Grip (`brakeRoom`): a car coming up behind must also have room to slow to the merging
+ * car's speed after a reaction, at the follow-logic braking rate (it may be carrying more speed
+ * into turn 1 than the merging car will have).
+ */
+function mergeClear(car: Car, lane: number, cars: Car[], brakeRoom = false): boolean {
   const pxm = CONFIG.PX_PER_MPH;
   return cars.every((o) => {
     if (o === car || Math.abs(o.d - lane) > 17) return true;
     const ds = deltaS(car.s, o.s);
     if (ds > -30 && ds < 50) return false;
+    if (brakeRoom && ds <= -30 && ds > -MERGE_BACK_PX && o.speed > car.speed) {
+      const vo = o.speed * pxm;
+      // the merging car keeps accelerating out of the pit road
+      const vc = Math.min(vo, (Math.max(0, car.speed) + MERGE_GAIN_MPH) * pxm);
+      const b = CONFIG.BRAKE_MPH_S * 0.6 * pxm;
+      if (-ds < (vo * vo - vc * vc) / (2 * b) + vo * MERGE_REACT_S + 46) return false;
+    }
     if (ds <= -30 && ds > -300) {
       const closing = (o.speed - car.speed) * pxm;
       if (closing > 0 && (-ds - 40) / closing < 1.5) return false;
     }
     return true;
   });
+}
+
+/**
+ * Grip model: where a car going to or from the pits will be across the track: one merging from the
+ * pit road joins at EXIT_D or further out, one heading for the pit entry moves to the inside.
+ */
+function joiningD(o: Car): number {
+  if (o.ai.pitPhase === 'exiting' && o.x > WALL_X1 - MERGE_COMMIT_PX) return Math.max(o.d, EXIT_D);
+  if (o.ai.pitPhase === 'entering' && o.y < CY + 40 && o.s >= S_TURN2 - PIT_DECIDE_FROM) return Math.min(o.d, PIT_APPROACH_D);
+  return o.d;
+}
+
+/** Grip model: the nearest car straight ahead of a car at the end of the pit road (any phase). */
+function exitRoadAhead(car: Car, cars: Car[]): { car: Car; gap: number } | null {
+  let best: { car: Car; gap: number } | null = null;
+  for (const o of cars) {
+    if (o === car) continue;
+    const dx = o.x - car.x;
+    if (dx <= 0 || dx > 150 || Math.abs(o.y - car.y) > 16) continue;
+    if (!best || dx < best.gap) best = { car: o, gap: dx };
+  }
+  return best;
 }
 
 function sideRubber(car: Car, cars: Car[]): { car: Car; ds: number } | null {
@@ -462,6 +554,12 @@ function sideClear(car: Car, lane: number, cars: Car[]): boolean {
     const ds = deltaS(car.s, o.s);
     return !(ds > -40 && ds < 50 && o.d > lo && o.d < hi);
   });
+}
+
+/** The cars that keep sideClear(car, lane) false. */
+function sideBlockers(car: Car, lane: number, cars: Car[]): Car[] {
+  if (Math.abs(lane - car.d) < 8) return [];
+  return cars.filter((o) => o !== car && !sideClear(car, lane, [car, o]));
 }
 
 function bestLane(car: Car, cars: Car[]): number {
