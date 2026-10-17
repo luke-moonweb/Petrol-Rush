@@ -40,7 +40,7 @@ export const CONFIG = {
   STRAIGHT_ASSIST_RATE: 0.6,
   MIN_TURN_RADIUS: 34,
 
-  DRIVE_MODEL: 'classic' as DriveModel,
+  DRIVE_MODEL: 'grip' as DriveModel,
 
   // Grip model (DRIVE_MODEL 'grip'). Lateral limit: v_lim(r) = sqrt(GRIP * r) / PX_PER_MPH.
   GRIP: {

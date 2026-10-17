@@ -1,5 +1,5 @@
 import type { GameAudio } from '../audio/audio';
-import { DEFAULT_OPTIONS, LAP_CHOICES, QUALIFYING_CHOICES, type RaceOptions } from '../config';
+import { DEFAULT_OPTIONS, type DriveModel, LAP_CHOICES, QUALIFYING_CHOICES, type RaceOptions } from '../config';
 import type { Input } from '../input';
 import { loadPrefs, type Prefs } from '../prefs';
 import type { TouchLayout } from '../touch';
@@ -22,6 +22,8 @@ export interface Params {
   cars: number | null;
   laps: number | null;
   touch: boolean | null;
+  /** ?drive=classic|grip: driving model for A/B testing (null = the default). */
+  drive: DriveModel | null;
 }
 
 export function readParams(search: string): Params {
@@ -40,6 +42,7 @@ export function readParams(search: string): Params {
     cars: num('cars'),
     laps: num('laps'),
     touch: p.has('touch') ? p.get('touch') !== '0' : null,
+    drive: p.get('drive') === 'classic' || p.get('drive') === 'grip' ? (p.get('drive') as DriveModel) : null,
   };
 }
 
