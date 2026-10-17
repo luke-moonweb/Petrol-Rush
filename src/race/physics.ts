@@ -217,6 +217,7 @@ function resetGrip(car: Car): void {
   car.gripOver = 0;
   car.rearLoose = false;
   car.rearStress = 0;
+  car.wallYaw = 0;
 }
 
 /** Highest curvature (1/px) the steering can ask for at v px/s: the full-lock envelope. */
@@ -297,6 +298,7 @@ function stepCarGrip(car: Car, input: DriveInput, dt: number, constrain: Constra
       car.overTime = 0;
     } else {
       gripStep(car, input, dt, v, aLong);
+      turnFromWall(car, dt);
     }
   }
 
@@ -306,7 +308,7 @@ function stepCarGrip(car: Car, input: DriveInput, dt: number, constrain: Constra
   if (!car.finished) car.fuel = Math.max(0, car.fuel - Math.abs(dist) / (C.FUEL_RANGE_LAPS * TRACK_LEN));
 
   const hit = constrain(car);
-  if (hit) applyWallGrip(car, hit);
+  if (hit) applyWallGrip(car, hit, dt);
   car.heading = wrapAngle(car.heading);
   car.moveAngle = wrapAngle(car.moveAngle);
 }
@@ -458,7 +460,15 @@ function applyWall(car: Car, n: WallNormal): void {
 // Grip-model walls: graded by the impact angle. Glancing hits redirect the car along the wall and
 // cost friction proportional to the normal speed (so riding a curved wall does not glue the car);
 // medium hits leave part of the angle as a slip the tyres must recover; steep, fast hits spin.
-function applyWallGrip(car: Car, n: WallNormal): void {
+/** Turn the nose by what is left of a wall contact's rotation, at WALL_TURN_RATE at most. */
+function turnFromWall(car: Car, dt: number): void {
+  if (car.wallYaw === 0) return;
+  const step = Math.max(-WALL_TURN_RATE * dt, Math.min(WALL_TURN_RATE * dt, car.wallYaw));
+  car.heading += step;
+  car.wallYaw -= step;
+}
+
+function applyWallGrip(car: Car, n: WallNormal, dt: number): void {
   const C = CONFIG;
   const G = C.GRIP;
   const vx = Math.cos(car.moveAngle) * car.speed;
@@ -490,7 +500,13 @@ function applyWallGrip(car: Car, n: WallNormal): void {
   const ty = vy - vn * n.ny;
   const tmag = Math.hypot(tx, ty);
   if (tmag < 1) {
-    car.speed *= 0.2;
+    // Creeping along the wall from (nearly) rest: keep the part along the wall, so a car with its
+    // nose a little into the wall can still drive away (the classic model pins it).
+    if (angle <= g1 && tmag > 0) {
+      const sgn = car.speed < 0 ? -1 : 1;
+      car.moveAngle = Math.atan2(ty, tx) + (sgn < 0 ? Math.PI : 0);
+      car.speed = sgn * tmag;
+    } else car.speed *= 0.2;
     return;
   }
   const ang = Math.atan2(ty, tx);
@@ -499,13 +515,21 @@ function applyWallGrip(car: Car, n: WallNormal): void {
   car.wallAgo = 0;
   const newMag = Math.max(0, tmag * fresh - G.WALL_FRICTION * -vn);
   const back = car.speed < 0;
+  if (angle > g1) {
+    // Steep but too slow to spin: like the classic model the car stops against the wall (it keeps
+    // its heading and loses the speed into the wall) instead of being turned along it.
+    car.speed = Math.sign(car.speed) * newMag;
+    return;
+  }
   const along = back ? wrapAngle(ang + Math.PI) : ang;
   // Above the glancing range the nose is kicked off the wall (turned from the wall line towards
   // the track) by a share of the impact angle, which the tyres then recover as slip. Below it the
-  // nose is straightened along the wall.
+  // nose is straightened along the wall. The nose turns there at WALL_TURN_RATE at most, so the
+  // cockpit view never jumps.
   const kick = back ? 0 : Math.max(0, Math.min(1, (angle - g0) / (g1 - g0))) * WALL_KICK;
   const away = Math.cos(along) * n.ny - Math.sin(along) * n.nx >= 0 ? 1 : -1;
-  car.heading = along + away * kick * angle;
+  car.wallYaw = wrapAngle(along + away * kick * angle - car.heading);
+  turnFromWall(car, dt);
   car.moveAngle = along;
   car.speed = back ? -newMag : newMag;
 }
@@ -513,6 +537,8 @@ function applyWallGrip(car: Car, n: WallNormal): void {
 const DEG = Math.PI / 180;
 /** Share of the impact angle the nose is kicked off the wall at WALL_SPIN_DEG. */
 const WALL_KICK = 0.5;
+/** rad/s: how fast a wall contact may turn the nose (no instant heading change). */
+const WALL_TURN_RATE = 4;
 const CIRCLE_OFFSETS = [-10, 10];
 const CIRCLE_R = 7;
 

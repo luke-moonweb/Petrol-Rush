@@ -58,6 +58,8 @@ export interface Car {
   weightFwd: number;
   /** Grip model: largest slip angle of the current rear slide (rad), 0 when the rear holds. */
   slipPeak: number;
+  /** Grip model: nose rotation (rad) a wall contact still has to apply, a little per step. */
+  wallYaw: number;
   /** Grip model: seconds since the last wall contact. */
   wallAgo: number;
   penalty: number;
