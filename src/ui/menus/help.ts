@@ -4,7 +4,7 @@ import { FONT_BLACK, PR } from '../theme';
 import { darkPanel, footerHints, keycap, screenHeader, skewBox, stripesBg, wrapText } from './common';
 
 const TIPS = [
-  'Tight corner, lower speed. Too fast: the car runs wide, then the tail slides – steer against it.',
+  'Tight corner, lower speed. Too fast: the car runs wide; keep steering and the tail slides – steer against it.',
   'Oil on the track spins you out – steer around it. Hit a rival from behind and you get a time penalty.',
   'A full tank lasts about 12 laps. Low on fuel? Pull into PIT ROAD and stop in a box.',
   'Spun out? Hold the reverse key: the car stops, backs up, and you can turn.',
