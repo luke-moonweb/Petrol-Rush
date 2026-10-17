@@ -3,7 +3,7 @@ import { CAR_SCHEMES, driverName } from '../gfx/vehicles';
 import { type Box, layout } from '../layout';
 import { lapsCompleted, progress } from '../race/car';
 import type { Race } from '../race/race';
-import { skidOn } from '../race/warnings';
+import type { Warn } from '../race/warnings';
 import { TRACK_LEN } from '../track/track';
 import { FONT_UI } from './text';
 import { FONT_BLACK, PR } from './theme';
@@ -408,8 +408,8 @@ export function drawFuelGauge(g: CanvasRenderingContext2D, fuel: number, time: n
   g.restore();
 }
 
-/** hz: blink rate of the lamp (0 = off, Infinity = steady); see skidOn. */
-export function drawSkidLamp(g: CanvasRenderingContext2D, hz: number, time: number, right: number, top: number): void {
+/** The SKID lamp: lit with warn.skidLit, the label red while the warning is on. */
+export function drawSkidLamp(g: CanvasRenderingContext2D, warn: Warn, right: number, top: number): void {
   const w = 52;
   const h = 18;
   const x = right - w;
@@ -419,7 +419,7 @@ export function drawSkidLamp(g: CanvasRenderingContext2D, hz: number, time: numb
   g.strokeStyle = HUD_EDGE;
   g.lineWidth = 1;
   g.strokeRect(x + 0.5, top + 0.5, w - 1, h - 1);
-  const on = skidOn(hz, time);
+  const on = warn.skidLit;
   const lx = x + 10;
   const ly = top + h / 2;
   if (on) {
@@ -436,7 +436,7 @@ export function drawSkidLamp(g: CanvasRenderingContext2D, hz: number, time: numb
   g.font = `8px ${FONT_BLACK}`;
   g.textAlign = 'left';
   g.textBaseline = 'middle';
-  g.fillStyle = hz <= 0 ? PR.muted : PR.red;
+  g.fillStyle = warn.skidHz <= 0 ? PR.muted : PR.red;
   g.fillText('SKID', lx + 9, ly + 0.5);
   g.restore();
 }

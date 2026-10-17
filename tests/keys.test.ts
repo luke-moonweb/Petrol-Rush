@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { CONFIG, type DriveModel } from '../src/config';
 import { limitMph } from '../src/race/physics';
+import { WarnDisplay, warnings } from '../src/race/warnings';
 import { laneCurvature } from '../src/track/curvature';
 import { RC, S_TOP, S_TURN1, TRACK_LEN } from '../src/track/track';
 import { OVAL_TRACK, runCurve } from './sim/drivers';
@@ -45,6 +46,24 @@ describe('keys: driving at the limit (designer H2)', () => {
         // (the outside lane is 11 px from the wall: the driver's weave brushes it, as in classic)
         if (d < 28.5) expect(r.wallHits, `d ${d} f ${f}`).toBe(0);
       }
+  });
+
+  it('the cockpit LEDs are not red in ordinary key-driven corners, and are at the limit', () => {
+    const redShare = (d: number, f: number) => {
+      const shown = new WarnDisplay();
+      let n = 0;
+      let red = 0;
+      runCurve(OVAL_TRACK, { mph: 160, driver: 'human', d, walls: 'oval', T: 40, planFrac: f }, 1e9, 200, (_t, c) => {
+        const w = warnings(c);
+        shown.update(w, 1 / 60);
+        if (OVAL_TRACK.table.at(c.s) === 0) return;
+        n++;
+        if (shown.shown(w).use! >= 0.95) red++;
+      });
+      return red / n;
+    };
+    for (const d of [-9.5, 9.5]) expect(redShare(d, 0.9), `d ${d}`).toBe(0);
+    expect(redShare(9.5, 1.1)).toBeGreaterThan(0.2);
   });
 
   it('best key laps per lane are within 3 % of the classic model on average (decision: about +1 %)', () => {

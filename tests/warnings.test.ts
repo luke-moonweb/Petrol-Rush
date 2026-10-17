@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { CONFIG } from '../src/config';
 import { limitMph, stepCar } from '../src/race/physics';
-import { NO_WARN, nextCornerMph, warnings } from '../src/race/warnings';
+import { NO_WARN, nextCornerMph, WARN, type Warn, WarnDisplay, warnings } from '../src/race/warnings';
 import { laneCurvature } from '../src/track/curvature';
-import { pointAt, project, RC, S_BOTTOM, S_TURN1 } from '../src/track/track';
+import { CAR_R, HALF_W, PIT_DRIVE_Y, pointAt, project, RC, S_BOTTOM, S_TURN1 } from '../src/track/track';
 import { freshCar } from './sim/drivers';
 
 const saved = CONFIG.DRIVE_MODEL;
@@ -74,5 +74,89 @@ describe('warnings: grip model', () => {
       );
     }
     expect(warnings(c2).use!).toBeGreaterThan(0.85);
+  });
+});
+
+describe('warnings: what the HUD and the cockpit show (critic r1)', () => {
+  const w = (extra: Partial<Warn>): Warn => ({ ...NO_WARN, use: 0.5, vRef: 150, band: 7.5, ...extra });
+
+  it('the SKID blink keeps its phase while its rate changes: no flicker', () => {
+    CONFIG.DRIVE_MODEL = 'grip';
+    const d = new WarnDisplay();
+    // a rate that changes every frame (a slide growing and shrinking) at a large race time
+    let toggles = 0;
+    let prev = true;
+    let runs = 0;
+    let run = 0;
+    for (let i = 0; i < 600; i++) {
+      const hz = 4 + 3 * Math.sin(i / 7);
+      d.update(w({ skidHz: hz }), 1 / 60);
+      const lit = d.shown(w({ skidHz: hz })).skidLit;
+      if (lit !== prev) {
+        toggles++;
+        runs = Math.max(runs, run);
+        // every lit or dark spell lasts at least half a period at the fastest rate (no 1-frame flicker)
+        if (i > 0) expect(run, `frame ${i}`).toBeGreaterThanOrEqual(Math.floor(60 / (2 * 7)));
+        run = 0;
+      }
+      run++;
+      prev = lit;
+    }
+    // 10 s at 1-7 Hz: about 2 x 4 x 10 changes
+    expect(toggles).toBeGreaterThan(50);
+    expect(toggles).toBeLessThan(110);
+  });
+
+  it('each SKID onset starts lit; off when the warning is off; steady at Infinity', () => {
+    CONFIG.DRIVE_MODEL = 'grip';
+    const d = new WarnDisplay();
+    for (let i = 0; i < 7; i++) d.update(w({ skidHz: 5 }), 1 / 60);
+    d.update(w({ skidHz: 0 }), 1 / 60);
+    expect(d.shown(w({ skidHz: 0 })).skidLit).toBe(false);
+    d.update(w({ skidHz: 5 }), 1 / 60);
+    expect(d.shown(w({ skidHz: 5 })).skidLit).toBe(true);
+    expect(d.shown(w({ skidHz: Infinity })).skidLit).toBe(true);
+  });
+
+  it('grip: SKID is lit through a spin on the HUD too, as the cockpit tell-tale', () => {
+    CONFIG.DRIVE_MODEL = 'grip';
+    const c = carAt(S_TURN1 + 80, 0, 120);
+    c.spinTime = 2;
+    expect(warnings(c).skidHz).toBe(Infinity);
+    expect(new WarnDisplay().shown(warnings(c)).skidLit).toBe(true);
+  });
+
+  it('the speed bar and the red arc share one eased limit; the paused fallback keeps the grip band', () => {
+    CONFIG.DRIVE_MODEL = 'grip';
+    const d = new WarnDisplay();
+    for (let i = 0; i < 6; i++) d.update(w({ vRef: 140 }), 1 / 60);
+    const shown = d.shown(w({ vRef: 140 }));
+    expect(shown.vRef).toBe(d.arcFrom);
+    expect(shown.vRef).toBeGreaterThan(140);
+    expect(shown.band).toBeCloseTo(WARN.BAND * d.arcFrom, 9);
+    const paused = d.shown(null);
+    expect(paused.vRef).toBe(d.arcFrom);
+    expect(paused.band).toBeCloseTo(WARN.BAND * d.arcFrom, 9);
+    expect(paused.use).not.toBeNull();
+    expect(paused.skidLit).toBe(false);
+  });
+
+  it('the LED strip reads the grip use averaged over a quarter second: a short key press does not light red', () => {
+    CONFIG.DRIVE_MODEL = 'grip';
+    const d = new WarnDisplay();
+    for (let i = 0; i < 60; i++) d.update(w({ use: 0.6 }), 1 / 60);
+    for (let i = 0; i < 6; i++) d.update(w({ use: 1.05 }), 1 / 60);
+    expect(d.shown(w({ use: 1.05 })).use!).toBeLessThan(0.95);
+    for (let i = 0; i < 60; i++) d.update(w({ use: 1.05 }), 1 / 60);
+    expect(d.shown(w({ use: 1.05 })).use!).toBeGreaterThan(1.0);
+  });
+
+  it('in the pit lane the next-corner limit uses the inside edge of the track, not the pit-lane offset', () => {
+    CONFIG.DRIVE_MODEL = 'grip';
+    const car = carAt(S_TURN1 - 150, 0, 70);
+    car.y = PIT_DRIVE_Y;
+    Object.assign(car, project(car.x, car.y));
+    expect(car.d).toBeLessThan(-60);
+    expect(nextCornerMph(car)).toBeCloseTo(limitMph(laneCurvature(-1 / RC, -(HALF_W - CAR_R))), 2);
   });
 });

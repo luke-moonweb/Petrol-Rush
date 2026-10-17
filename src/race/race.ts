@@ -94,6 +94,7 @@ export class Race {
       overTime: 0,
       slideTime: 0,
       gripUse: 0,
+      gripLong: 0,
       gripOver: 0,
       rearLoose: false,
       rearStress: 0,
