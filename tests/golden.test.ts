@@ -1,9 +1,19 @@
-import { describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { CONFIG, type DriveModel } from '../src/config';
 import { hashState, runFor, runRace } from './sim/golden';
 
 // The classic driving model is pinned bit for bit to main 1a2098f (recorded before the grip model
 // existed). If one of these changes, the classic model is no longer the old game.
 describe('classic driving model golden master (main 1a2098f)', () => {
+  let saved: DriveModel;
+  beforeAll(() => {
+    saved = CONFIG.DRIVE_MODEL;
+    CONFIG.DRIVE_MODEL = 'classic';
+  });
+  afterAll(() => {
+    CONFIG.DRIVE_MODEL = saved;
+  });
+
   it('20 cars, seed 99, after 20 s', () => {
     expect(hashState(runFor(99, 20, 18, 20))).toBe('7473792d');
   });
