@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { CONFIG, DEFAULT_OPTIONS, type DriveModel } from '../src/config';
+import { lapsCompleted } from '../src/race/car';
 import { oilRadius } from '../src/race/oil';
 import { GRIP_SPINS, stepCar } from '../src/race/physics';
 import { cornerMph, PLAN, planSpeed } from '../src/race/planner';
@@ -165,6 +166,46 @@ describe('grip model: 20-car races (A12, A13)', () => {
   it('A14: deterministic after 20 s and after a full race', () => {
     expect(hashState(runFor(99, 20, 18, 20))).toBe(hashState(runFor(99, 20, 18, 20)));
     expect(hashState(runFor(7, 12, 5, 400))).toBe(hashState(runFor(7, 12, 5, 400)));
+  });
+});
+
+describe('grip model: solo pace (A10)', () => {
+  /** A lone AI car (turnMph 145, top 180) on lane d: mean of laps 2 and 3 (s). */
+  function soloLap(model: DriveModel, d: number): { lap: number; crashes: number } {
+    CONFIG.DRIVE_MODEL = model;
+    try {
+      const r = new Race({ ...DEFAULT_OPTIONS, cars: 1, laps: 4 }, 1, true);
+      const c = r.cars[0]!;
+      Object.assign(c.ai, { turnMph: 145, topMph: 180, lane: d, pitFuelLaps: 0 });
+      r.start();
+      const at: number[] = [];
+      let last = lapsCompleted(c);
+      while (r.time < 120 && at.length < 3) {
+        r.step(1 / 60, null);
+        const l = lapsCompleted(c);
+        if (l !== last) at.push(r.time);
+        last = l;
+      }
+      return { lap: (at[2]! - at[0]!) / 2, crashes: c.crashes };
+    } finally {
+      CONFIG.DRIVE_MODEL = 'grip';
+    }
+  }
+
+  it('a lone AI car laps within 3 % of the classic model over the four lanes; the inside is the slow line', () => {
+    const lanes = [-28.5, -9.5, 9.5, 28.5];
+    const grip = lanes.map((d) => soloLap('grip', d));
+    const classic = lanes.map((d) => soloLap('classic', d));
+    const mean = (a: { lap: number }[]) => a.reduce((x, y) => x + y.lap, 0) / a.length;
+    console.log(
+      `solo laps by lane ${lanes.join(' / ')}: grip ${grip.map((g) => g.lap.toFixed(2)).join(' / ')} (mean ${mean(grip).toFixed(2)}), ` +
+        `classic ${classic.map((g) => g.lap.toFixed(2)).join(' / ')} (mean ${mean(classic).toFixed(2)})`,
+    );
+    for (const g of grip) expect(g.crashes).toBe(0);
+    expect(Math.abs(mean(grip) / mean(classic) - 1)).toBeLessThanOrEqual(0.03);
+    // the limit comes from the radius: inside slowest, outside fastest, within a second of each other
+    for (let i = 1; i < lanes.length; i++) expect(grip[i]!.lap).toBeLessThan(grip[i - 1]!.lap);
+    expect(grip[0]!.lap - grip[3]!.lap).toBeLessThan(1);
   });
 });
 
