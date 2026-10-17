@@ -227,7 +227,7 @@ describe('cockpit glass and jolt', () => {
   it('soils the glass in oil and clears most of it within 8 seconds', () => {
     const r = race();
     const p = r.player;
-    r.oil.push({ x: p.x, y: p.y, s: 0, d: 0, age: 5 });
+    r.oil.push({ x: p.x, y: p.y, s: 0, d: 0, age: 5, owner: -1 });
     for (let i = 0; i < 30; i++) stepCabin(r, 1 / 60);
     const peak = cabinFor(r).oil;
     expect(peak).toBeGreaterThan(0.5);
