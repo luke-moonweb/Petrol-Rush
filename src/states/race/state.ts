@@ -22,16 +22,7 @@ import { PR } from '../../ui/theme';
 import { type Game, type State, saveOptions, tapSide } from '../game';
 import { HelpState } from '../info';
 import { RaceSound } from './sound';
-import {
-  drawDebug,
-  drawRaceMessage,
-  drawSpeedBar,
-  drawStartLights,
-  LIGHT_INTERVAL_S,
-  LIGHTS_COUNT,
-  resultRows,
-  type StartLights,
-} from './view';
+import { drawDebug, drawRaceMessage, drawStartLights, LIGHT_INTERVAL_S, LIGHTS_COUNT, resultRows, type StartLights } from './view';
 
 type Phase = 'choose' | 'options' | 'running' | 'paused' | 'finishing' | 'results';
 
@@ -525,7 +516,7 @@ export class RaceState implements State {
         pixelScale,
       });
     } else {
-      this.renderTopDown(g, race, ix, iy, ih, warn);
+      this.renderTopDown(g, race, ix, iy, ih);
       if (this.cockpitTrack()) prewarmCockpitView(g, view, race.player.colorIdx, this.game.touch);
     }
 
@@ -545,7 +536,6 @@ export class RaceState implements State {
     ix: (c: Car) => number,
     iy: (c: Car) => number,
     ih: (c: Car) => number,
-    warn: Warn,
   ): void {
     const cam = this.camFor(Math.round(ix(race.player)), Math.round(iy(race.player)));
     g.save();
@@ -569,7 +559,6 @@ export class RaceState implements State {
     g.lineTo(px, py);
     g.closePath();
     g.fill();
-    if (this.game.prefs.speedBar && this.phase !== 'results') drawSpeedBar(g, race.player, race.pitAuto, px, py + 8, warn);
     g.restore();
   }
 

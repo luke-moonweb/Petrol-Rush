@@ -9,7 +9,7 @@ import { type Game, type State, tapSide } from './game';
 
 const ROW_RESET = BINDABLE.length + 1;
 const ROW_BACK = BINDABLE.length + 2;
-const GAME_OPTIONS = ['sound', 'penalties', 'speedBar', 'collisions'] as const;
+const GAME_OPTIONS = ['sound', 'penalties', 'collisions'] as const;
 type GameOption = (typeof GAME_OPTIONS)[number];
 
 export class SettingsState implements State {
@@ -78,9 +78,6 @@ export class SettingsState implements State {
       case 'penalties':
         prefs.penalties = !prefs.penalties;
         break;
-      case 'speedBar':
-        prefs.speedBar = !prefs.speedBar;
-        break;
       case 'collisions':
         prefs.collisions = prefs.collisions === 'realistic' ? 'classic' : 'realistic';
         break;
@@ -110,15 +107,6 @@ export class SettingsState implements State {
           label: 'CRASH PENALTIES',
           value: on(prefs.penalties),
           desc: `+${CONFIG.PENALTY_S} s for causing a crash. The car ahead has right of way – the car behind is at fault.`,
-        };
-      case 'speedBar':
-        return {
-          label: 'SPEED WARNING',
-          value: on(prefs.speedBar),
-          desc:
-            CONFIG.DRIVE_MODEL === 'grip'
-              ? "Bar under your car's arrow when you are faster than the next corner allows: orange – runs wide, red – brake, or the tail steps out."
-              : `Bar under your car's arrow above ${CONFIG.SPIN_MPH} MPH: orange – slide, red – spin in a corner.`,
         };
       case 'collisions':
         return {
