@@ -4,7 +4,7 @@ exports[`oval golden master > 20 AI cars, 3 laps 1`] = `
 {
   "crashes": 0,
   "finished": 20,
-  "hash": "fbb7cbb2",
+  "hash": "11520c06",
   "oilLeft": 0,
   "order": [
     1,
@@ -60,7 +60,7 @@ exports[`oval golden master > 20 AI cars, low fuel – everybody pits 1`] = `
 {
   "crashes": 28,
   "finished": 20,
-  "hash": "26a5ba49",
+  "hash": "fb892e1a",
   "oilLeft": 0,
   "order": [
     1,
@@ -116,7 +116,7 @@ exports[`oval golden master > classic collisions, penalties on 1`] = `
 {
   "crashes": 0,
   "finished": 20,
-  "hash": "15f835b1",
+  "hash": "d9f3716a",
   "oilLeft": 0,
   "order": [
     1,
@@ -172,7 +172,7 @@ exports[`oval golden master > player driven through the human path, with pit aut
 {
   "crashes": 51,
   "finished": 10,
-  "hash": "1687e287",
+  "hash": "c6205a0f",
   "oilLeft": 0,
   "order": [
     1,
