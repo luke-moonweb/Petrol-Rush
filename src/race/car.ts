@@ -42,6 +42,8 @@ export interface Car {
   slideTime: number;
   /** Grip model: last step's combined grip use (0 = free rolling, 1 = at the limit). */
   gripUse: number;
+  /** Grip model: share of the grip the brakes or the throttle took last step (FC_K x fLong). */
+  gripLong: number;
   /** Grip model: demand above the limit (0 when within grip). */
   gripOver: number;
   /** Grip model: the rear has let go (oversteer). */

@@ -9,7 +9,7 @@ import { type Car, lapsCompleted } from '../../race/car';
 import type { DriveInput } from '../../race/physics';
 import { NUM_COLORS, Race } from '../../race/race';
 import { PlayerSteering } from '../../race/steering';
-import { NO_WARN, type Warn, warnings } from '../../race/warnings';
+import { type Warn, WarnDisplay, warnings } from '../../race/warnings';
 import type { TouchLayout } from '../../touch';
 import { deltaS, trackHeadingAt, WORLD_W, wrapAngle } from '../../track/track';
 import type { Hit } from '../../ui/hit';
@@ -34,7 +34,6 @@ import {
 type Phase = 'choose' | 'options' | 'running' | 'paused' | 'results';
 
 const CRASH_WARN_PX = 1100;
-const ARC_EASE_S = 0.3;
 const NOTICE_S = 4;
 const RADIO_GAP_S = 8;
 
@@ -58,8 +57,8 @@ export class RaceState implements State {
   private finishTimer = 0;
   private camOff = NaN;
   private readonly steering = new PlayerSteering();
-  // Speedo red arc start (mph), eased towards the warning's vRef so it does not jump at corners.
-  private arcFrom: number = CONFIG.SPIN_MPH;
+  // What the HUD and the cockpit show of the player's warnings (SKID blink phase, eased limit and LEDs).
+  private readonly warnShown = new WarnDisplay();
   private reverseHint = 0;
   // Set while the hold-to-reverse key (↓ / S) put the car in reverse, so releasing it leaves reverse.
   private reverseHeld = false;
@@ -96,7 +95,7 @@ export class RaceState implements State {
     this.particles?.clear();
     this.camOff = NaN;
     this.steering?.resetAssist();
-    this.arcFrom = CONFIG.DRIVE_MODEL === 'grip' ? CONFIG.MAX_MPH : CONFIG.SPIN_MPH;
+    this.warnShown.reset();
     this.reverseHeld = false;
     this.sound = new RaceSound(this.game.audio);
     this.lightsShown = 0;
@@ -361,10 +360,7 @@ export class RaceState implements State {
       }
     }
     this.race.step(dt, drive);
-    if (CONFIG.DRIVE_MODEL === 'grip') {
-      const vRef = warnings(this.race.player).vRef;
-      this.arcFrom += (vRef - this.arcFrom) * Math.min(1, dt / ARC_EASE_S);
-    }
+    this.warnShown.update(warnings(this.race.player), dt);
     stepCabin(this.race, dt);
     this.particles.emit(this.race.cars, dt);
     this.particles.update(dt);
@@ -407,7 +403,7 @@ export class RaceState implements State {
     const ih = (c: Car) => c.prevHeading + wrapAngle(c.heading - c.prevHeading) * a;
     const view = layout.view;
     const cockpit = this.game.prefs.camera === 'cockpit';
-    const warn: Warn = this.phase === 'running' && race.started ? warnings(race.player) : { ...NO_WARN, vRef: this.arcFrom };
+    const warn: Warn = this.warnShown.shown(this.phase === 'running' && race.started ? warnings(race.player) : null);
     if (cockpit) {
       const lt = this.lights;
       const out = !!lt && lt.t >= lt.outAt;
@@ -426,7 +422,7 @@ export class RaceState implements State {
         time: race.time,
         touch,
         warn,
-        arcFrom: this.arcFrom,
+        arcFrom: warn.vRef,
         lights,
         particles: this.particles,
         pixelScale,
@@ -437,8 +433,8 @@ export class RaceState implements State {
     }
 
     drawHudTop(g, race, this.notice);
-    drawHudPanel(g, race, !cockpit, this.arcFrom);
-    if (!cockpit) drawSkidLamp(g, warn.skidHz, race.time, view.x + view.w - 6, view.y + 6);
+    drawHudPanel(g, race, !cockpit, warn.vRef);
+    if (!cockpit) drawSkidLamp(g, warn, view.x + view.w - 6, view.y + 6);
     const msg = this.message();
     const low = Math.round(view.h * 0.22);
     if (msg) drawRaceMessage(g, msg, cockpit ? low + 30 : 44);
