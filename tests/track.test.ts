@@ -1,6 +1,25 @@
 import { describe, expect, it } from 'vitest';
 import { createRng } from '../src/sim/rng';
-import { deltaS, HALF_W, pointAt, project, TRACK_LEN, wrapS } from '../src/track/oval';
+import { laneCurvature } from '../src/track/curvature';
+import {
+  CX_R,
+  CY,
+  curvatureAt,
+  deltaS,
+  HALF_W,
+  pointAt,
+  project,
+  RC,
+  S_BOTTOM,
+  S_TOP,
+  S_TURN1,
+  S_TURN2,
+  TRACK_LEN,
+  TURN_LEN,
+  trackCurves,
+  wrapAngle,
+  wrapS,
+} from '../src/track/oval';
 
 describe('track geometry (Frenet)', () => {
   it('project(pointAt(s, d)) returns the same s and d', () => {
@@ -28,5 +47,45 @@ describe('track geometry (Frenet)', () => {
     expect(wrapS(-1)).toBeCloseTo(TRACK_LEN - 1);
     expect(deltaS(TRACK_LEN - 10, 10)).toBeCloseTo(20);
     expect(deltaS(10, TRACK_LEN - 10)).toBeCloseTo(-20);
+  });
+});
+
+describe('track curvature contract', () => {
+  it('oval: -1/RC in both turns (left turns), 0 on the straights', () => {
+    expect(curvatureAt(S_TURN1 + 10)).toBeCloseTo(-1 / RC, 12);
+    expect(curvatureAt(S_TURN2 + TURN_LEN - 1)).toBeCloseTo(-1 / RC, 12);
+    expect(curvatureAt(10)).toBe(0);
+    expect(curvatureAt(S_TOP + 100)).toBe(0);
+    expect(curvatureAt(S_BOTTOM + 1)).toBe(0);
+    expect(curvatureAt(S_TURN1 + TRACK_LEN)).toBeCloseTo(-1 / RC, 12);
+  });
+
+  it('sign matches the heading: + curvature = heading increases along s', () => {
+    for (const s of [S_TURN1 + 50, S_TURN2 + 200, 300]) {
+      const dh = wrapAngle(pointAt(s + 1, 0).heading - pointAt(s - 1, 0).heading) / 2;
+      expect(dh).toBeCloseTo(curvatureAt(s), 4);
+    }
+  });
+
+  it('lane curvature: d + is right of travel, the outside of a left turn is wider', () => {
+    const k = -1 / RC;
+    expect(1 / Math.abs(laneCurvature(k, 28.5))).toBeCloseTo(RC + 28.5, 9);
+    expect(1 / Math.abs(laneCurvature(k, -28.5))).toBeCloseTo(RC - 28.5, 9);
+    expect(1 / laneCurvature(1 / 120, 20)).toBeCloseTo(100, 9);
+    expect(laneCurvature(0, 30)).toBe(0);
+    // measured from the geometry: the d = +28.5 line has radius RC + 28.5
+    const a = pointAt(S_TURN1 + 100, 28.5);
+    expect(Math.hypot(a.x - CX_R, a.y - CY)).toBeCloseTo(RC + 28.5, 9);
+  });
+
+  it('curvature table matches curvatureAt and wraps', () => {
+    const t = trackCurves();
+    for (let s = -500; s < TRACK_LEN + 500; s += 7.3) {
+      const exact = curvatureAt(s);
+      const near = curvatureAt(s - 4) === curvatureAt(s + 4);
+      if (near) expect(t.at(s)).toBeCloseTo(exact, 6);
+    }
+    expect(t.maxAbsAhead(S_TURN1 - 100, 99)).toBe(0);
+    expect(t.maxAbsAhead(S_TURN1 - 100, 120)).toBeCloseTo(1 / RC, 6);
   });
 });

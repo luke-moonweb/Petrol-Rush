@@ -1,5 +1,6 @@
 import type { AiView } from '../race/ai';
 import type { Car } from '../race/car';
+import type { CurvatureTable } from './curvature';
 
 /** Half the width of the tarmac – the same on every track, so the four AI lanes fit everywhere. */
 export const HALF_W = 47;
@@ -62,8 +63,14 @@ export interface PitLane {
   autoIn(car: Car): boolean;
   /** The player is past PIT EXIT (or left the pit side) – control goes back. */
   autoOut(car: Car): boolean;
+  /** Grip model: fuel (laps) from the start of the decision window to the far end of the pit lane. */
+  readonly reachLaps: number;
+  /** Grip model: the line a car going to or from the pits is moving to (its own d otherwise). */
+  joiningD(o: Car): number;
+  /** A car committed to the pit entry: it holds its line (no lane changes for oil or hazards). */
+  diving(car: Car): boolean;
   /** AI pit driving: entry, box, refuelling and exit. */
-  plan(car: Car, view: AiView, target: number, laneD: number): PitPlan;
+  plan(car: Car, view: AiView, target: number, laneD: number, dt: number): PitPlan;
   /** Queueing behind other cars on the pit lane. */
   follow(car: Car, view: AiView, plan: PitPlan): void;
   /** Steering aim on the pit lane. */
@@ -90,4 +97,8 @@ export interface Track {
   /** Keeps a car inside the walls; returns the wall normal on contact. */
   constrain(p: Constrainable): WallNormal | null;
   gridSlot(slot: number): Frenet;
+  /** Signed centre-line curvature (1/px) at s: + = heading increases, 0 on straights. */
+  curvatureAt(s: number): number;
+  /** The track's curvature table (built once), read by the AI planner, assist and warnings. */
+  curves(): CurvatureTable;
 }

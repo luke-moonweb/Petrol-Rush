@@ -1,5 +1,6 @@
 import { CONFIG } from '../config';
 import { CAR_R, type Constrainable, type Corner, type Frenet, HALF_W, type Track, type TrackPoint, type WallNormal } from './common';
+import { CurvatureTable } from './curvature';
 import { pitGeo, StraightPit } from './straightPit';
 
 /** A corner of the track polygon: position and the radius of the arc that rounds it. */
@@ -39,7 +40,10 @@ interface Arc {
 
 export type Segment = Line | Arc;
 
-/** The tightest corner radius on which a car at the 150 mph corner limit still holds the inside lane. */
+/**
+ * The tightest corner radius allowed. In the grip model the limit follows the radius, so this only
+ * keeps the inside lane (r - 28.5) at a sensible speed (about 126 mph) and the kerbs drawable.
+ */
 export const R_MIN = 120;
 /** Kerb that may be driven over on the inside of every corner. */
 export const KERB_W = 12;
@@ -315,6 +319,18 @@ export class SegmentTrack implements Track {
     // Right-hand normal is (-sin h, cos h); the wall pushes back towards the centre line.
     const side = d < lo ? 1 : -1;
     return { nx: -Math.sin(q.heading) * side, ny: Math.cos(q.heading) * side };
+  }
+
+  curvatureAt(s: number): number {
+    const g = this.segmentAt(s);
+    return g.kind === 'arc' ? g.corner.dir / g.r : 0;
+  }
+
+  private table: CurvatureTable | null = null;
+
+  curves(): CurvatureTable {
+    if (!this.table) this.table = CurvatureTable.from(this);
+    return this.table;
   }
 
   gridSlot(slot: number): Frenet {

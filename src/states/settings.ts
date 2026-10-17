@@ -115,7 +115,10 @@ export class SettingsState implements State {
         return {
           label: 'SPEED WARNING',
           value: on(prefs.speedBar),
-          desc: `Bar under your car's arrow above ${CONFIG.SPIN_MPH} MPH: orange – slide, red – spin in a corner.`,
+          desc:
+            CONFIG.DRIVE_MODEL === 'grip'
+              ? "Bar under your car's arrow when you are faster than the next corner allows: orange – runs wide, red – brake, or the tail steps out."
+              : `Bar under your car's arrow above ${CONFIG.SPIN_MPH} MPH: orange – slide, red – spin in a corner.`,
         };
       case 'collisions':
         return {

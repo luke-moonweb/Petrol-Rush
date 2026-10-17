@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { CONFIG, DEFAULT_OPTIONS, type RaceRules } from '../src/config';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { CONFIG, DEFAULT_OPTIONS, type DriveModel, type RaceRules } from '../src/config';
 import { aiInput } from '../src/race/ai';
 import type { Car } from '../src/race/car';
 import { NO_INPUT } from '../src/race/physics';
@@ -77,6 +77,15 @@ function run(sc: Scenario) {
 }
 
 describe('oval golden master', () => {
+  let saved: DriveModel;
+  beforeAll(() => {
+    saved = CONFIG.DRIVE_MODEL;
+    CONFIG.DRIVE_MODEL = 'classic';
+  });
+  afterAll(() => {
+    CONFIG.DRIVE_MODEL = saved;
+  });
+
   it('20 AI cars, 3 laps', () => {
     expect(run({ cars: 20, laps: 3, seed: 1, maxTime: 200 })).toMatchSnapshot();
   });

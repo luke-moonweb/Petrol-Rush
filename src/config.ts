@@ -1,5 +1,8 @@
 export type ThrottleMode = 'cruise' | 'hold';
 
+/** 'grip': grip budget + slip angle (track-independent). 'classic': the old 150 mph corner rule. */
+export type DriveModel = 'grip' | 'classic';
+
 export const CONFIG = {
   SCREEN_W: 640,
   SCREEN_H: 480,
@@ -37,6 +40,75 @@ export const CONFIG = {
   STRAIGHT_ASSIST_DEG: 7,
   STRAIGHT_ASSIST_RATE: 0.6,
   MIN_TURN_RADIUS: 34,
+
+  DRIVE_MODEL: 'grip' as DriveModel,
+
+  // Grip model (DRIVE_MODEL 'grip'). Lateral limit: v_lim(r) = sqrt(GRIP * r) / PX_PER_MPH.
+  GRIP: {
+    /** px/s^2 of tyre force, shared by cornering and braking (friction ellipse). */
+    GRIP: 500,
+    /** Share of the grip that full braking at top speed takes away. */
+    FC_K: 0.6,
+    /** 1/s: how fast the tyres pull the direction of travel back to the nose. */
+    ALIGN: 6,
+    /** Full lock never asks for more than STEER_CAP x the grip. */
+    STEER_CAP: 1.5,
+    /** Player keys / touch: a held key asks for KEY_CAP x the grip left (like the AI's cap). */
+    KEY_CAP: 1.05,
+    /**
+     * Holding the key against that cap into a corner the car is too fast for (its line needs more than
+     * 1 + OVERDRIVE_OVER x the grip) for OVERDRIVE_S opens the steering to full lock over OVERDRIVE_RAMP_S.
+     */
+    OVERDRIVE_OVER: 0.1,
+    /** At n x OVERDRIVE_OVER the overdrive comes n times sooner, up to this factor. */
+    OVERDRIVE_RATE_MAX: 3,
+    /** Full lock only from OVERDRIVE_OVER + OVERDRIVE_FULL over; less excess opens it partly. */
+    OVERDRIVE_FULL: 0.3,
+    OVERDRIVE_S: 0.5,
+    /** Push time lost per second while the key is released. */
+    OVERDRIVE_DECAY: 2,
+    OVERDRIVE_RAMP_S: 0.5,
+    MIN_V: 20,
+    /** Rear stress builds while the demand is above U_REAR; the rear lets go at 1. */
+    U_REAR: 1.3,
+    STRESS_S: 0.55,
+    STRESS_DECAY_S: 0.5,
+    STRESS_MAX: 1.2,
+    /** Rear stress left after a slide is caught. */
+    CAUGHT_STRESS: 0.5,
+    /** Share of a countersteer that bends the travel direction (the rest only turns the nose back). */
+    COUNTER_COURSE: 0.3,
+    /** Weight transfer: lifting puts LIFT_WEIGHT on the front, full braking 1; smoothed over WEIGHT_S. */
+    LIFT_WEIGHT: 0.5,
+    WEIGHT_S: 0.25,
+    /** Extra front grip at full weight transfer (the nose can out-turn the travel direction). */
+    FRONT_GAIN: 0.12,
+    /** rad/s of tuck-in at full weight transfer and full lateral load. */
+    LIFT_YAW: 0.3,
+    /** Extra rear stress rate at full weight transfer. */
+    WEIGHT_STRESS: 1,
+    OS_KICK: 1.5,
+    LOOSE_SLIP: 0.22,
+    LOOSE_GAIN: 3,
+    SPIN_SLIP: 0.75,
+    SCRUB: 0.25,
+    SLIP_DRAG: 0.6,
+    SLIDE_OVER_MIN: 0.05,
+    SLIDE_SLIP_MIN: 0.08,
+    /** Grip use above which a rear hit spins at REAR_SPIN_TURN_MPH. */
+    LOADED_USE: 0.7,
+    /** Straight assist: full strength up to FULL_DEG of heading error, fading out by OFF_DEG. */
+    STRAIGHT_FULL_DEG: 5,
+    STRAIGHT_OFF_DEG: 20,
+    /** Walls: glancing below GLANCE_DEG (straightened, friction only), spin above SPIN_DEG and SPIN_MPH. */
+    WALL_GLANCE_DEG: 15,
+    WALL_SPIN_DEG: 30,
+    WALL_SPIN_MPH: 28,
+    WALL_FRICTION: 0.4,
+    /** A fresh hit (no contact for WALL_FRESH_S) also loses up to 2 x this share of the speed. */
+    WALL_HIT_SCRUB: 0.06,
+    WALL_FRESH_S: 0.4,
+  },
 
   SPIN_MPH: 150,
   SPIN_GRACE_S: 0.15,

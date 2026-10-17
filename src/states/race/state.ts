@@ -7,8 +7,10 @@ import { keyLabel } from '../../input';
 import { inFrame, layout } from '../../layout';
 import { type Car, lapsCompleted } from '../../race/car';
 import { type GrandPrix, gridOrder, raceResult, raceSeed, round, saveGp, standings } from '../../race/grandprix';
-import { cornerAssist, type DriveInput, SteerRamp, skidWarning } from '../../race/physics';
+import type { DriveInput } from '../../race/physics';
 import { NUM_COLORS, Race } from '../../race/race';
+import { PlayerSteering } from '../../race/steering';
+import { type Warn, WarnDisplay, warnings } from '../../race/warnings';
 import type { TouchLayout } from '../../touch';
 import { wrapAngle } from '../../track/common';
 import { getTrack, OVAL_ID, trackIds } from '../../track/tracks';
@@ -66,10 +68,11 @@ export class RaceState implements State {
   private midRace = false;
   private savedRace: Race | null = null;
   private finishTimer = 0;
-  private assistLevel = 0;
   private camOffX = NaN;
   private camOffY = 0;
-  private readonly steerRamp = new SteerRamp();
+  private readonly steering = new PlayerSteering();
+  // What the HUD and the cockpit show of the player's warnings (SKID blink phase, eased limit and LEDs).
+  private readonly warnShown = new WarnDisplay();
   private reverseHint = 0;
   // Set while the hold-to-reverse key (↓ / S) put the car in reverse, so releasing it leaves reverse.
   private reverseHeld = false;
@@ -106,7 +109,8 @@ export class RaceState implements State {
   private newRace(): Race {
     this.particles?.clear();
     this.camOffX = NaN;
-    this.assistLevel = 0;
+    this.steering?.resetAssist();
+    this.warnShown.reset();
     this.reverseHeld = false;
     this.sound = new RaceSound(this.game.audio);
     this.lightsShown = 0;
@@ -405,19 +409,18 @@ export class RaceState implements State {
     }
     const p0 = this.race.player;
     const steerKey = (input.isDown('right') ? 1 : 0) - (input.isDown('left') ? 1 : 0);
-    const track = this.race.track;
-    const assist = cornerAssist(p0, track);
-    const step = dt / CONFIG.CORNER_ASSIST_IN_S;
-    this.assistLevel = assist !== 0 ? Math.min(1, this.assistLevel + step) : Math.max(0, this.assistLevel - step);
-    const keySteer = this.steerRamp.update(steerKey, dt, track.cornerAt(p0.x, p0.y) !== null);
+    this.steering.track = this.race.track;
     const drive: DriveInput = {
-      steer: this.race.pitAuto ? 0 : Math.max(-1, Math.min(1, keySteer + assist * this.assistLevel)),
+      steer: 0,
       gas: input.isDown('gas'),
       brake: input.isDown('brake'),
       // A tap without a held key is the touch REV button, which toggles reverse.
       toggleReverse: input.pressed('reverse') && !input.isDown('reverse'),
     };
     this.holdReverse(drive, input.isDown('reverse'));
+    const st = this.steering.update(p0, steerKey, dt, drive.brake);
+    drive.steer = this.race.pitAuto ? 0 : st.steer;
+    drive.straightTo = this.race.pitAuto ? undefined : st.straightTo;
     const shownSteer = this.race.pitAuto ? this.race.playerDrive.steer : drive.steer;
     this.steerVis += (shownSteer - this.steerVis) * Math.min(1, dt * 12);
     this.reverseHint = Math.max(0, this.reverseHint - dt);
@@ -441,6 +444,7 @@ export class RaceState implements State {
       }
     }
     this.race.step(dt, drive);
+    this.warnShown.update(warnings(this.race.player, this.race.track), dt);
     stepCabin(this.race, dt);
     this.particles.emit(this.race.cars, dt);
     this.particles.update(dt);
@@ -496,7 +500,7 @@ export class RaceState implements State {
     const ih = (c: Car) => c.prevHeading + wrapAngle(c.heading - c.prevHeading) * a;
     const view = layout.view;
     const cockpit = this.cockpit;
-    const skid = this.phase === 'running' && race.started ? skidWarning(race.player, race.track) : 0;
+    const warn: Warn = this.warnShown.shown(this.phase === 'running' && race.started ? warnings(race.player, race.track) : null, race.time);
     if (cockpit) {
       const lt = this.lights;
       const out = !!lt && lt.t >= lt.outAt;
@@ -514,19 +518,20 @@ export class RaceState implements State {
         steer: this.steerVis,
         time: race.time,
         touch,
-        skid,
+        warn,
+        arcFrom: warn.vRef,
         lights,
         particles: this.particles,
         pixelScale,
       });
     } else {
-      this.renderTopDown(g, race, ix, iy, ih);
+      this.renderTopDown(g, race, ix, iy, ih, warn);
       if (this.cockpitTrack()) prewarmCockpitView(g, view, race.player.colorIdx, this.game.touch);
     }
 
     drawHudTop(g, race, this.notice);
-    drawHudPanel(g, race, !cockpit);
-    if (!cockpit) drawSkidLamp(g, skid, race.time, view.x + view.w - 6, view.y + 6);
+    drawHudPanel(g, race, !cockpit, warn.vRef);
+    if (!cockpit) drawSkidLamp(g, warn, view.x + view.w - 6, view.y + 6);
     const msg = this.message();
     const low = Math.round(view.h * 0.22);
     if (msg) drawRaceMessage(g, msg, cockpit ? low + 30 : 44);
@@ -540,6 +545,7 @@ export class RaceState implements State {
     ix: (c: Car) => number,
     iy: (c: Car) => number,
     ih: (c: Car) => number,
+    warn: Warn,
   ): void {
     const cam = this.camFor(Math.round(ix(race.player)), Math.round(iy(race.player)));
     g.save();
@@ -563,7 +569,7 @@ export class RaceState implements State {
     g.lineTo(px, py);
     g.closePath();
     g.fill();
-    if (this.game.prefs.speedBar && this.phase !== 'results') drawSpeedBar(g, race.player, race.pitAuto, px, py + 8);
+    if (this.game.prefs.speedBar && this.phase !== 'results') drawSpeedBar(g, race.player, race.pitAuto, px, py + 8, warn);
     g.restore();
   }
 
@@ -721,6 +727,9 @@ export class RaceState implements State {
       `x ${p.x.toFixed(0)} y ${p.y.toFixed(0)}  s ${p.s.toFixed(0)} d ${p.d.toFixed(1)}`,
       `mph ${p.speed.toFixed(1)}  fuel ${(p.fuel * 100).toFixed(1)}%  spin ${p.spinTime.toFixed(2)}`,
       `sector ${p.lastSector} passed ${p.sectorsPassed}  t ${this.race.time.toFixed(1)}`,
+      CONFIG.DRIVE_MODEL === 'grip'
+        ? `grip ${p.gripUse.toFixed(2)} slip ${((wrapAngle(p.heading - p.moveAngle) * 180) / Math.PI).toFixed(1)}° rear ${p.rearLoose ? 'LOOSE' : p.rearStress.toFixed(2)} limit ${warnings(p, this.race.track).vRef.toFixed(0)}`
+        : 'drive classic',
       ...(this.cockpit ? [this.overlayLine()] : []),
     ];
   }

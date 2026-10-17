@@ -1,5 +1,10 @@
 import { CAR_R, type Constrainable, NUM_SECTORS, type TrackPoint, type WallNormal } from './common';
 
+// (re-exported for the grip-model tests and sim tools, which read the oval's geometry from here)
+export { CAR_R, type Constrainable, LANES, type TrackPoint, type WallNormal, wrapAngle } from './common';
+
+import { type CurvatureSource, CurvatureTable } from './curvature';
+
 export const WORLD_W = 2240;
 export const CY = 208;
 export const R_OUT = 194;
@@ -208,6 +213,23 @@ export function project(x: number, y: number): { s: number; d: number } {
 
 export function inTurn(x: number): boolean {
   return x < CX_L || x > CX_R;
+}
+
+/** Signed centre-line curvature (1/px) at s. Both oval turns are left turns (heading decreases). */
+export function curvatureAt(sIn: number): number {
+  const s = wrapS(sIn);
+  if ((s >= S_TURN1 && s < S_TOP) || (s >= S_TURN2 && s < S_BOTTOM)) return -1 / RC;
+  return 0;
+}
+
+export const OVAL_CURVES: CurvatureSource = { len: TRACK_LEN, curvatureAt };
+
+let curves: CurvatureTable | null = null;
+
+/** The oval's curvature table (built on first use). */
+export function trackCurves(): CurvatureTable {
+  if (!curves) curves = CurvatureTable.from(OVAL_CURVES);
+  return curves;
 }
 
 export function inPitRange(x: number): boolean {
