@@ -1,15 +1,12 @@
 import { layout } from '../../layout';
-import { type Car, lapsCompleted } from '../../race/car';
+import { lapsCompleted } from '../../race/car';
 import type { Race } from '../../race/race';
-import type { Warn } from '../../race/warnings';
 import type { ResultRow } from '../../ui/overlays';
 import { offBall, redBall, text } from '../../ui/text';
 import { FONT_BLACK, PR } from '../../ui/theme';
 
 export const LIGHTS_COUNT = 5;
 export const LIGHT_INTERVAL_S = 1;
-
-const SPEED_BAR_MAX_OVER = 20;
 
 export interface StartLights {
   t: number;
@@ -42,30 +39,6 @@ export function drawStartLights(g: CanvasRenderingContext2D, lights: StartLights
       g.restore();
     } else offBall(g, cx, cy);
   }
-}
-
-/** How far the car is over vRef (classic: 150 mph; grip: the next corner's limit): orange band, then red. */
-export function drawSpeedBar(g: CanvasRenderingContext2D, p: Car, pitAuto: boolean, cx: number, bottom: number, warn: Warn): void {
-  if (pitAuto || p.finished || p.spinTime > 0) return;
-  const over = Math.abs(p.speed) - warn.vRef;
-  if (over <= 0.5) return;
-  const W_BAR = 34;
-  const H_BAR = 4;
-  const scale = W_BAR / SPEED_BAR_MAX_OVER;
-  const len = Math.min(W_BAR, over * scale);
-  const slideEnd = Math.min(W_BAR, warn.band * scale);
-  const x0 = Math.round(cx - W_BAR / 2);
-  const y0 = Math.round(bottom - H_BAR);
-  g.fillStyle = 'rgba(10,9,20,0.55)';
-  g.fillRect(x0 - 1, y0 - 1, W_BAR + 2, H_BAR + 2);
-  g.fillStyle = '#FF9A2E';
-  g.fillRect(x0, y0, Math.min(len, slideEnd), H_BAR);
-  if (len > slideEnd) {
-    g.fillStyle = PR.red;
-    g.fillRect(x0 + slideEnd, y0, len - slideEnd, H_BAR);
-  }
-  g.fillStyle = 'rgba(255,248,232,0.5)';
-  g.fillRect(x0 + slideEnd, y0 - 1, 1, H_BAR + 2);
 }
 
 export function drawRaceMessage(g: CanvasRenderingContext2D, msg: string, top = 44): void {

@@ -1,7 +1,7 @@
 // What the HUD, the cockpit and the sound tell the player about grip.
 //
 // Grip model: the SKID lamp shows real slip (blinking faster as the slip angle grows, steady in a
-// spin), and the speed bar / speedo red arc show the limit speed of the next corner. (The cockpit
+// spin), and the speedo red arc show the limit speed of the next corner. (The cockpit
 // LED strip only shows the start lights and how close the car is to top speed, see cabin.ts.)
 // Classic model: today's 150 mph rule (SKID above 150, blinking in a turn; LEDs ramp up to 150).
 import { CONFIG } from '../config';
@@ -16,7 +16,7 @@ export interface Warn {
   skidHz: number;
   /** Is the SKID lamp lit right now (the blink phase comes from WarnDisplay; on at the onset otherwise). */
   skidLit: boolean;
-  /** Speed (mph) above which the car is too fast for the next corner: speed bar and speedo red arc. */
+  /** Speed (mph) above which the car is too fast for the next corner: speedo red arc. */
   vRef: number;
   /** Width (mph) of the orange "recoverable" band of the speed bar above vRef. */
   band: number;
@@ -32,13 +32,13 @@ export const WARN = {
   SKID_HZ_MAX: 9,
   /** Orange band of the speed bar as a share of vRef. */
   BAND: 0.05,
-  /** Easing (s) of the speedo red arc / speed bar limit. */
+  /** Easing (s) of the speedo red arc limit. */
   ARC_EASE_S: 0.3,
 };
 
 /**
  * What the HUD and the cockpit show, smoothed over frames: the SKID blink keeps its phase while
- * its rate changes (no flicker), and the red arc and the speed bar share one eased limit. The
+ * its rate changes (no flicker), and the red arc uses one eased limit. The
  * classic model keeps its old time-locked blink (floor(time x hz x 2), as on main).
  */
 export class WarnDisplay {
