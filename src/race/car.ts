@@ -16,6 +16,12 @@ export interface AiState {
   recoverTime: number;
   creepTime: number;
   oilTime: number;
+  /** Grip model: seconds stopped at the end of the pit road waiting to merge. */
+  mergeWait: number;
+  /** Grip model: the car leaving the pits has committed to merging (racing cars allow for it). */
+  merging: boolean;
+  /** Grip model: the last pit stop was skipped (the next one may not be). */
+  skipped: boolean;
 }
 
 export interface Car {

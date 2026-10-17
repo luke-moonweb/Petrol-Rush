@@ -136,6 +136,9 @@ export class Race {
         recoverTime: 0,
         creepTime: 0,
         oilTime: 0,
+        mergeWait: 0,
+        merging: false,
+        skipped: false,
       },
     };
     const st = project(car.x, car.y);
