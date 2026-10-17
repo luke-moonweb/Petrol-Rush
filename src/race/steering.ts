@@ -112,14 +112,27 @@ export class PlayerSteering {
     // how far the car's line needs more than the grip (0 = at the limit); only into the bend
     const need = kLane * key > 0 ? (v * v * Math.abs(kLane)) / gripLeft(car, brake) - 1 : 0;
     const pushing = key !== 0 && Math.sign(steer) === key && Math.abs(steer) > cap;
-    if (!pushing || key !== this.pushDir) {
+    if (pushing && key !== this.pushDir) {
+      // a push the other way starts afresh
       this.pushTime = 0;
       this.pushDepth = 0;
-      this.pushDir = pushing ? key : 0;
+      this.pushDir = key;
+    } else if (!pushing) {
+      // letting go only winds the push down (OVERDRIVE_DECAY), so pulsing the key while far too
+      // fast insists as much as holding it
+      this.pushTime = Math.max(0, this.pushTime - dt * G.OVERDRIVE_DECAY);
+      if (this.pushTime === 0) {
+        this.pushDepth = 0;
+        this.pushDir = 0;
+      }
     }
     // The further over, the sooner and the deeper (towards full lock): the consequence grows with the excess.
     if (pushing && need > G.OVERDRIVE_OVER) {
-      this.pushTime += dt * Math.min(G.OVERDRIVE_RATE_MAX, need / G.OVERDRIVE_OVER);
+      // (saturates at full overdrive, so letting go winds it down in a bounded time)
+      this.pushTime = Math.min(
+        G.OVERDRIVE_S + G.OVERDRIVE_RAMP_S,
+        this.pushTime + dt * Math.min(G.OVERDRIVE_RATE_MAX, need / G.OVERDRIVE_OVER),
+      );
       this.pushDepth = Math.max(this.pushDepth, Math.min(1, (need - G.OVERDRIVE_OVER) / G.OVERDRIVE_FULL));
     }
     const lim = cap + (1 - cap) * this.overdrive * this.pushDepth;

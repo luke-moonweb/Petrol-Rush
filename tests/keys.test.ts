@@ -66,13 +66,16 @@ describe('keys: driving at the limit (designer H2)', () => {
   });
 });
 
-/** Turn 1 from 700 px before it to 500 px after it, entering at f x the lane limit (capped at 180). */
-function entry(d: number, f: number, opts: { noCatch?: boolean; insist?: boolean } = {}) {
+/**
+ * Turn 1 from 700 px before it to `after` px after it (default 500; the end of the next straight
+ * is 1600), entering at f x the lane limit (capped at 180).
+ */
+function entry(d: number, f: number, opts: { noCatch?: boolean; insist?: boolean } = {}, after = 500) {
   const mph = Math.min(CONFIG.MAX_MPH, limitMph(laneCurvature(-1 / RC, d)) * f);
   return runCurve(
     OVAL_TRACK,
-    { mph: 180, approachMph: mph, driver: 'human', d, walls: 'oval', T: 12, gas: 'exit', stopAtFinish: true, ...opts },
-    S_TOP + 500,
+    { mph: 180, approachMph: mph, driver: 'human', d, walls: 'oval', T: 16, gas: 'exit', stopAtFinish: true, ...opts },
+    S_TOP + after,
     S_TURN1 - 700,
   );
 }
@@ -80,12 +83,13 @@ function entry(d: number, f: number, opts: { noCatch?: boolean; insist?: boolean
 describe('keys: braking matters (designer H1, M3)', () => {
   it('braking to the limit beats a flat-out entry by a clear margin on the centre and inside lanes', () => {
     const lines: string[] = [];
+    // over the corner and the whole straight after it, where a slower exit keeps costing
     for (const d of [-9.5, 0]) {
-      const braked = entry(d, 1);
-      const flat = entry(d, 2);
+      const braked = entry(d, 1, {}, 1600);
+      const flat = entry(d, 2, {}, 1600);
       lines.push(`d ${d}: braked ${braked.time.toFixed(2)} s, flat out ${flat.time.toFixed(2)} s (slip ${flat.maxSlipDeg.toFixed(0)} deg)`);
       expect(braked.spun || flat.spun, `d ${d}`).toBe(false);
-      expect(flat.time - braked.time, `d ${d}`).toBeGreaterThanOrEqual(0.35);
+      expect(flat.time - braked.time, `d ${d}`).toBeGreaterThanOrEqual(0.5);
     }
     console.log(lines.join('\n'));
   });

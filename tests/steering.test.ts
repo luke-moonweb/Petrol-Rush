@@ -177,7 +177,10 @@ describe('grip model: key and touch steering cap (designer H2)', () => {
     expect(demand(car, hold(ps, car, 1, 2))).toBeLessThanOrEqual(CONFIG.GRIP.KEY_CAP + 1e-9);
     hold(ps, car, -1, 2);
     expect(ps.overdrive).toBe(1);
+    // letting go winds it down: a short release keeps some (pulsing still insists), a longer one clears it
     hold(ps, car, 0, 0.1);
+    expect(ps.overdrive).toBeGreaterThan(0);
+    hold(ps, car, 0, 1.2);
     expect(ps.overdrive).toBe(0);
   });
 
