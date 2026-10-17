@@ -21,7 +21,7 @@ export const CONFIG = {
   BRAKE_MPH_S: 55,
   BRAKE_MPH_S_HIGH: 75,
   COAST_MPH_S: 8,
-  THROTTLE_MODE: 'cruise' as ThrottleMode,
+  THROTTLE_MODE: 'hold' as ThrottleMode,
   REVERSE_TOGGLE_MAX_MPH: 15,
 
   MAX_TURN_RATE: 2.9,

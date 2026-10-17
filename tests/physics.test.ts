@@ -98,10 +98,11 @@ describe('driving model', () => {
     expect(Math.abs(wrapAngle(trackHeadingAt(car.x, car.y) - car.heading))).toBeLessThan(0.005);
   });
 
-  it('cruise control: speed is kept after releasing the throttle', () => {
+  it('off the throttle the car coasts down slowly, much gentler than braking', () => {
     const car = carAt(100, 120);
     for (let i = 0; i < 60; i++) stepCar(car, { steer: 0, gas: false, brake: false, toggleReverse: false }, 1 / 60);
-    expect(car.speed).toBeCloseTo(120, 5);
+    expect(car.speed).toBeCloseTo(120 - CONFIG.COAST_MPH_S, 5);
+    expect(CONFIG.COAST_MPH_S).toBeLessThan(CONFIG.BRAKE_MPH_S / 4);
   });
 
   it('top speed is 180 mph', () => {
