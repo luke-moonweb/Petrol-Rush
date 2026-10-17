@@ -259,6 +259,8 @@ function longitudinal(car: Car, input: DriveInput, dt: number, hasFuel: boolean)
 // Over the limit the car first understeers (runs wide, scrubs speed); sustained or provoked excess
 // lets the rear go (oversteer), which countersteer catches; only a slip beyond SPIN_SLIP spins.
 function stepCarGrip(car: Car, input: DriveInput, dt: number, constrain: ConstrainFn): void {
+  // a zero (or broken) step changes nothing; the grip budget below divides by dt
+  if (!(dt > 0)) return;
   const C = CONFIG;
   const G = C.GRIP;
   const pxm = C.PX_PER_MPH;
@@ -498,15 +500,19 @@ function applyWallGrip(car: Car, n: WallNormal): void {
   const newMag = Math.max(0, tmag * fresh - G.WALL_FRICTION * -vn);
   const back = car.speed < 0;
   const along = back ? wrapAngle(ang + Math.PI) : ang;
-  // Above the glancing range the nose is kicked off the wall by a share of the impact angle, which
-  // the tyres then have to recover as slip.
-  const kick = back ? 0 : Math.max(0, Math.min(1, (angle - g0) / (g1 - g0))) * 0.5;
-  car.heading = along - wrapAngle(car.heading - along) * kick;
+  // Above the glancing range the nose is kicked off the wall (turned from the wall line towards
+  // the track) by a share of the impact angle, which the tyres then recover as slip. Below it the
+  // nose is straightened along the wall.
+  const kick = back ? 0 : Math.max(0, Math.min(1, (angle - g0) / (g1 - g0))) * WALL_KICK;
+  const away = Math.cos(along) * n.ny - Math.sin(along) * n.nx >= 0 ? 1 : -1;
+  car.heading = along + away * kick * angle;
   car.moveAngle = along;
   car.speed = back ? -newMag : newMag;
 }
 
 const DEG = Math.PI / 180;
+/** Share of the impact angle the nose is kicked off the wall at WALL_SPIN_DEG. */
+const WALL_KICK = 0.5;
 const CIRCLE_OFFSETS = [-10, 10];
 const CIRCLE_R = 7;
 
