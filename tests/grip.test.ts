@@ -285,7 +285,7 @@ describe('grip model: walls', () => {
       for (const deg of [5, 10, 14]) {
         const r = hit(mph, deg);
         expect(r.spun, `${mph} ${deg}`).toBe(false);
-        expect(r.loss, `${mph} ${deg}`).toBeGreaterThanOrEqual(0.05);
+        expect(r.loss, `${mph} ${deg}`).toBeGreaterThanOrEqual(0.1);
         expect(r.loss, `${mph} ${deg}`).toBeLessThanOrEqual(0.25);
       }
   });
@@ -306,5 +306,42 @@ describe('grip model: walls', () => {
   it('between 15 and 30 deg the nose is kicked off the wall (slip), without a spin at moderate speed', () => {
     const r = hit(90, 22);
     expect(r.spun).toBe(false);
+  });
+
+  /** One step into the wall; returns the nose relative to the wall line (+ = away from the wall, rad). */
+  function kickOf(moveDeg: number, noseDeg: number, mph = 90) {
+    const car = freshCar();
+    const m = (moveDeg * Math.PI) / 180;
+    Object.assign(car, { x: 0, y: 299.5, heading: (noseDeg * Math.PI) / 180, moveAngle: m, speed: mph });
+    stepCar(car, { steer: 0, gas: false, brake: false, toggleReverse: false }, 1 / 60, wall);
+    expect(car.wallImpact).toBeGreaterThan(0);
+    expect(car.moveAngle).toBeCloseTo(0, 9);
+    // the wall is below (y = 300, normal up), so away from it is a negative heading
+    return -car.heading;
+  }
+
+  it('the kick turns the nose away from the wall, whichever way the car was pointing (critic r1 #2)', () => {
+    const deg = Math.PI / 180;
+    // a sliding car: travelling into the wall at 22 deg, nose already 10 deg off it
+    expect(kickOf(22, -10)).toBeGreaterThan(0);
+    // nose pointing into the wall harder than the travel direction
+    expect(kickOf(22, 40)).toBeGreaterThan(0);
+    // straight in: half of the way from 15 to 30 deg of kick share, of the impact angle
+    expect(kickOf(22, 22)).toBeCloseTo(((22 - 15) / 15) * 0.5 * 22 * deg, 6);
+    // glancing: straightened along the wall
+    expect(kickOf(10, 25)).toBeCloseTo(0, 9);
+  });
+});
+
+describe('grip model: degenerate steps', () => {
+  it('dt = 0 changes nothing and makes no NaN (critic r1 #3)', () => {
+    const car = freshCar();
+    Object.assign(car, { x: 500, y: 300, heading: 0.1, moveAngle: 0.05, speed: 150 });
+    const before = { ...car };
+    stepCar(car, { steer: 0.5, gas: false, brake: true, toggleReverse: false }, 0, () => null);
+    for (const k of ['x', 'y', 'heading', 'moveAngle', 'speed', 'gripUse', 'rearStress', 'weightFwd'] as const) {
+      expect(Number.isFinite(car[k]), k).toBe(true);
+      expect(car[k], k).toBe(before[k]);
+    }
   });
 });
