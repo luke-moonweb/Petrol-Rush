@@ -1,5 +1,6 @@
 import type { Car } from '../../race/car';
 import type { Race } from '../../race/race';
+import type { Warn } from '../../race/warnings';
 import { createRng } from '../../sim/rng';
 import { drawFuelGauge, drawSpeedo } from '../../ui/hud';
 import { FONT_BLACK, PR } from '../../ui/theme';
@@ -17,7 +18,9 @@ export interface CabinView {
   steer: number;
   time: number;
   touch: boolean;
-  skid: 0 | 1 | 2;
+  warn: Warn;
+  /** Where the speedo's red arc starts (mph, smoothed). */
+  arcFrom: number;
   lights?: { lit: number; out: boolean; since: number };
   standings: Car[];
   streaks: Streak[];
@@ -765,8 +768,8 @@ function drawDial(g: CanvasRenderingContext2D, gm: Geom, cx: number, draw: () =>
   g.restore();
 }
 
-function drawSpeed(g: CanvasRenderingContext2D, gm: Geom, mph: number): void {
-  drawDial(g, gm, gm.cx, () => drawSpeedo(g, mph, 0, 0, SPEEDO_R));
+function drawSpeed(g: CanvasRenderingContext2D, gm: Geom, mph: number, arcFrom: number): void {
+  drawDial(g, gm, gm.cx, () => drawSpeedo(g, mph, 0, 0, SPEEDO_R, arcFrom));
 }
 
 function drawFuel(g: CanvasRenderingContext2D, gm: Geom, fuel: number, time: number): void {
@@ -855,7 +858,7 @@ export function drawCockpit(g: CanvasRenderingContext2D, w: number, h: number, f
     started: race.started,
     finished: p.finished,
     finishAge: race.time - cabin.finishedAt,
-    skid: f.skid,
+    warn: f.warn,
     slideTime: p.slideTime,
     spinTime: p.spinTime,
     pitAuto: race.pitAuto,
@@ -888,7 +891,7 @@ export function drawCockpit(g: CanvasRenderingContext2D, w: number, h: number, f
   }
   drawFlecks(g, gm, cabin.oil, cabin.grit);
   drawLeds(g, gm, r.leds);
-  drawSpeed(g, gm, p.speed);
+  drawSpeed(g, gm, p.speed, f.arcFrom);
   drawFuel(g, gm, p.fuel, race.time);
   drawPod(g, gm, r);
   drawLamps(g, gm, r);

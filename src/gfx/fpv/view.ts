@@ -3,6 +3,7 @@ import type { Box } from '../../layout';
 import type { Car } from '../../race/car';
 import { oilRadius } from '../../race/oil';
 import type { Race } from '../../race/race';
+import { NO_WARN, type Warn } from '../../race/warnings';
 import { createRng } from '../../sim/rng';
 import { CX_L, CX_R, CY, PIT_DRIVE_Y, PIT_X0, PIT_X1, R_IN, R_OUT, WORLD_W, wrapAngle } from '../../track/track';
 import { PR } from '../../ui/theme';
@@ -25,7 +26,8 @@ export interface CockpitFrame {
   steer: number;
   time: number;
   touch: boolean;
-  skid: 0 | 1 | 2;
+  warn: Warn;
+  arcFrom: number;
   lights?: CabinView['lights'];
   particles?: Particles;
   // Device px per canvas unit (DPR × layout scale); the car level of detail counts device px.
@@ -696,7 +698,16 @@ function updatePylon(standings: Car[]): void {
   setPylonNames(standings.slice(0, 4).map((car) => driverName(car.colorIdx).slice(0, 3)));
 }
 
-const cabinIn: CabinView = { race: null as unknown as Race, steer: 0, time: 0, touch: false, skid: 0, standings: [], streaks: [] };
+const cabinIn: CabinView = {
+  race: null as unknown as Race,
+  steer: 0,
+  time: 0,
+  touch: false,
+  warn: NO_WARN,
+  arcFrom: NO_WARN.vRef,
+  standings: [],
+  streaks: [],
+};
 
 export function drawCockpitView(g: CanvasRenderingContext2D, f: CockpitFrame): void {
   if (stars.length === 0) initSky();
@@ -735,7 +746,8 @@ export function drawCockpitView(g: CanvasRenderingContext2D, f: CockpitFrame): v
   cabinIn.steer = f.steer;
   cabinIn.time = f.time;
   cabinIn.touch = f.touch;
-  cabinIn.skid = f.skid;
+  cabinIn.warn = f.warn;
+  cabinIn.arcFrom = f.arcFrom;
   cabinIn.lights = f.lights;
   cabinIn.standings = standings;
   cabinIn.streaks = floodStreaks(cam, scene!.glows);

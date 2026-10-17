@@ -3,6 +3,7 @@ import { CAR_SCHEMES, driverName } from '../gfx/vehicles';
 import { type Box, layout } from '../layout';
 import { lapsCompleted, progress } from '../race/car';
 import type { Race } from '../race/race';
+import { skidOn } from '../race/warnings';
 import { TRACK_LEN } from '../track/track';
 import { FONT_UI } from './text';
 import { FONT_BLACK, PR } from './theme';
@@ -156,7 +157,7 @@ function gapLabel(race: Race, i: number, list: ReturnType<Race['standings']>): s
 }
 
 /** `gauges` is false in the cockpit, whose dash carries the speedo and fuel gauge itself. */
-export function drawHudPanel(g: CanvasRenderingContext2D, race: Race, gauges = true): void {
+export function drawHudPanel(g: CanvasRenderingContext2D, race: Race, gauges = true, redFrom: number = CONFIG.SPIN_MPH): void {
   const b = layout.panel;
   g.fillStyle = PR.night;
   g.fillRect(b.x, b.y, b.w, b.h);
@@ -166,7 +167,7 @@ export function drawHudPanel(g: CanvasRenderingContext2D, race: Race, gauges = t
     g.fillRect(b.x + b.w - 1, b.y, 1, b.h);
     drawTower(g, race, { x: b.x, y: b.y, w: b.w, h: b.h }, 1);
     if (!gauges) return;
-    drawSpeedo(g, p.speed, b.x + 62, b.y + 372, 54);
+    drawSpeedo(g, p.speed, b.x + 62, b.y + 372, 54, redFrom);
     drawFuelGauge(g, p.fuel, race.time, b.x + 62, b.y + 432, 34);
     return;
   }
@@ -177,7 +178,7 @@ export function drawHudPanel(g: CanvasRenderingContext2D, race: Race, gauges = t
   }
   const gaugeW = 132;
   g.fillRect(b.x + gaugeW, b.y, 1, b.h);
-  drawSpeedo(g, p.speed, b.x + gaugeW / 2, b.y + 72, 54);
+  drawSpeedo(g, p.speed, b.x + gaugeW / 2, b.y + 72, 54, redFrom);
   drawFuelGauge(g, p.fuel, race.time, b.x + gaugeW / 2, b.y + 146, 34);
   drawTower(g, race, { x: b.x + gaugeW, y: b.y, w: b.w - gaugeW, h: b.h }, 2);
 }
@@ -302,20 +303,29 @@ function needle(g: CanvasRenderingContext2D, cx: number, cy: number, a: number, 
   g.stroke();
 }
 
-export function drawSpeedo(g: CanvasRenderingContext2D, mph: number, cx: number, cy: number, r: number): void {
+/** `redFrom`: where the red arc starts (classic: SPIN_MPH; grip: the next corner's limit speed). */
+export function drawSpeedo(
+  g: CanvasRenderingContext2D,
+  mph: number,
+  cx: number,
+  cy: number,
+  r: number,
+  redFrom: number = CONFIG.SPIN_MPH,
+): void {
   const v = Math.min(200, Math.abs(mph));
   const ang = (val: number) => Math.PI + (val / 200) * Math.PI;
+  const red = Math.max(0, Math.min(200, redFrom));
   g.save();
   semiDial(g, cx, cy, r);
   g.strokeStyle = PR.red;
   g.lineWidth = 3;
   g.beginPath();
-  g.arc(cx, cy, r - 8, ang(CONFIG.SPIN_MPH), ang(200));
+  g.arc(cx, cy, r - 8, ang(red), ang(200));
   g.stroke();
-  const hot = v > CONFIG.SPIN_MPH;
+  const hot = v > red;
   g.strokeStyle = hot ? '#FF6A4A' : PR.red;
   g.lineWidth = 1.2;
-  for (let val = CONFIG.SPIN_MPH; val <= 200; val += 5) {
+  for (let val = Math.ceil(red / 5) * 5; val <= 200; val += 5) {
     const a = ang(val);
     g.beginPath();
     g.moveTo(cx + Math.cos(a) * (r - 15), cy + Math.sin(a) * (r - 15));
@@ -324,7 +334,7 @@ export function drawSpeedo(g: CanvasRenderingContext2D, mph: number, cx: number,
   }
   g.strokeStyle = PR.amber;
   for (let val = 0; val <= 200; val += 20) {
-    if (val > CONFIG.SPIN_MPH) continue;
+    if (val > red) continue;
     const a = ang(val);
     const major = val % 40 === 0;
     g.lineWidth = major ? 2 : 1;
@@ -398,7 +408,8 @@ export function drawFuelGauge(g: CanvasRenderingContext2D, fuel: number, time: n
   g.restore();
 }
 
-export function drawSkidLamp(g: CanvasRenderingContext2D, level: 0 | 1 | 2, time: number, right: number, top: number): void {
+/** hz: blink rate of the lamp (0 = off, Infinity = steady); see skidOn. */
+export function drawSkidLamp(g: CanvasRenderingContext2D, hz: number, time: number, right: number, top: number): void {
   const w = 52;
   const h = 18;
   const x = right - w;
@@ -408,7 +419,7 @@ export function drawSkidLamp(g: CanvasRenderingContext2D, level: 0 | 1 | 2, time
   g.strokeStyle = HUD_EDGE;
   g.lineWidth = 1;
   g.strokeRect(x + 0.5, top + 0.5, w - 1, h - 1);
-  const on = level === 1 || (level === 2 && Math.floor(time * 6) % 2 === 0);
+  const on = skidOn(hz, time);
   const lx = x + 10;
   const ly = top + h / 2;
   if (on) {
@@ -425,7 +436,7 @@ export function drawSkidLamp(g: CanvasRenderingContext2D, level: 0 | 1 | 2, time
   g.font = `8px ${FONT_BLACK}`;
   g.textAlign = 'left';
   g.textBaseline = 'middle';
-  g.fillStyle = level === 0 ? PR.muted : PR.red;
+  g.fillStyle = hz <= 0 ? PR.muted : PR.red;
   g.fillText('SKID', lx + 9, ly + 0.5);
   g.restore();
 }
