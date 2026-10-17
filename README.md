@@ -86,8 +86,8 @@ The production build is a static site – `dist/` can be hosted on any static ho
 |---|---|---|
 | ← / → | Steer | |
 | ↑ | Throttle | W |
-| Space | Brake | ↓ |
-| Shift | Reverse on/off (only when almost stopped) | |
+| Space | Brake | |
+| ↓ | Hold: brake, then reverse once almost stopped; release to leave reverse | S |
 | C | Camera: top-down ↔ cockpit | |
 | P | Pause | |
 | Tab | Race menu (Esc always works) | |

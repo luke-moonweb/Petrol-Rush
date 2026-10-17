@@ -9,7 +9,7 @@ export const BINDABLE: { action: BindableAction; label: string }[] = [
   { action: 'right', label: 'STEER RIGHT' },
   { action: 'gas', label: 'ACCELERATE' },
   { action: 'brake', label: 'BRAKE' },
-  { action: 'reverse', label: 'REVERSE GEAR' },
+  { action: 'reverse', label: 'BRAKE / REVERSE' },
   { action: 'camera', label: 'CAMERA VIEW' },
   { action: 'pause', label: 'PAUSE' },
   { action: 'menu', label: 'RACE MENU' },
@@ -21,8 +21,8 @@ export const DEFAULT_BINDINGS: Bindings = {
   left: ['ArrowLeft', null],
   right: ['ArrowRight', null],
   gas: ['ArrowUp', 'KeyW'],
-  brake: ['Space', 'ArrowDown'],
-  reverse: ['ShiftLeft', null],
+  brake: ['Space', null],
+  reverse: ['ArrowDown', 'KeyS'],
   camera: ['KeyC', null],
   pause: ['KeyP', null],
   menu: ['Tab', null],
@@ -103,6 +103,10 @@ export function loadBindings(): Bindings {
     for (const { action } of BINDABLE) {
       const v = o[action];
       if (!Array.isArray(v) || v.length !== 2) continue;
+      // Older defaults: reverse was a Shift toggle and ↓ a second brake key. Those move to the new
+      // hold-to-reverse keys; keys the player chose themselves are kept.
+      if (action === 'reverse' && v[0] === 'ShiftLeft' && v[1] === null) continue;
+      if (action === 'brake' && v[1] === 'ArrowDown') v[1] = null;
       const ok = (k: unknown): k is string | null => k === null || (typeof k === 'string' && !RESERVED_CODES.has(k));
       if (ok(v[0]) && ok(v[1])) {
         b[action] = [v[0], v[1]];
