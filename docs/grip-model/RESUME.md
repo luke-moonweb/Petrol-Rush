@@ -8,12 +8,32 @@ not easier driving.
 
 ## State
 - Branch `feature/grip-model` (local only, not pushed), based on main `1a2098f`.
-  - 9 implementation commits: `38968a9`..`945e2dd`.
-  - One more commit that adds this `docs/grip-model/` folder.
+  - 9 implementation commits `38968a9`..`945e2dd`, then `50a503a` (this folder).
+  - Round-1 fixes (2026-10-17): `03922cf`..`3a58f50`, see below.
 - Both models are in the code. Grip is the default; `?drive=classic` gives the old model, which
   is bit-identical to main (golden test).
-- `npx tsc --noEmit`, `npx biome ci .` and `npx vitest run` (142 tests) all passed at `945e2dd`.
+- `npx tsc --noEmit`, `npx biome ci .` and `npx vitest run` (164 tests) pass.
 - main and feature/grand-prix are untouched. Grand Prix is parked for later.
+
+### Round-1 findings, all addressed
+- Designer H2 (keys overdrive): `src/race/steering.ts` caps key / touch steering at KEY_CAP 1.05 x
+  the grip left after braking. Insisting (key held into a corner the car is >10 % over the grip
+  for) opens towards full lock, sooner and further with the excess (OVERDRIVE_*).
+- Designer H1 / M3 (braking pointless, spins not graded): SLIP_DRAG 0.35 -> 0.6. With the
+  realistic key driver (`human` in `tests/sim/drivers.ts`, 0.18 s reaction) on turn 1: braked
+  5.85 / 5.83 s vs flat out 6.47 / 6.27 s (lanes -9.5 / 0); +10 % understeer only, +15 % steps
+  out and costs 0.3-0.5 s, an insisting player spins only from ~+15-20 %.
+- Projektant A12 + critic co-cause: grip AI gives way at the pit exit (brake-room merge check,
+  queueing on the exit road), racing cars count merging / pit-bound cars on the line they move
+  to, the pit approach waits for the inside lane (skips the stop for a lap if still held out at
+  turn 2), diving cars no longer swerve for oil. 10 seeds: 15 spins (classic 496), 1 near the pit
+  exit (6.7 %, classic 11.9 %), worst seed +6.4 %, mean 339.4 s (classic 354.6).
+- Critic: SKID blink phase (WarnDisplay), SKID steady in a spin on the HUD, LEDs red from 95 %
+  and reading the grip use of the car's line (not the key demand), speed bar and arc share one
+  eased limit, paused fallback band, pit-lane red arc, wall kick direction, dt = 0, solo pace test
+  (grip 16.40 vs classic 16.03 s), weak assertions fixed.
+- Designer M4 (settings text) and L5 (STRAIGHT_OFF_DEG 14 -> 20) done.
+- Key-driver laps (best per lane, mean of 4 lanes): grip 16.26 s vs classic 16.13 s (+0.8 %).
 
 ## Documents (this folder)
 - `spec.md` — the projektant's spec, with prototype measurements.
@@ -32,44 +52,21 @@ not easier driving.
    - `git worktree prune`
    - `git worktree add <scratchpad>/wt-grip feature/grip-model`
    - Symlink `node_modules` to the main checkout's.
-   - Re-create `tmp-harness.html`: an iframe page loading `/?<q>` at `w`×`h`.
-2. Send all round-1 findings to an implementer in one go. Highest priority first:
-   - **Designer H2: digital steering overdrives the tyres.**
-     - A held key asks for 1.5× grip, so key and touch corners run at ~135 mph against a ~160 mph
-       limit. Laps are ~4% slower and the LEDs show red in every corner.
-     - Fix: cap the player's key and touch steering like the AI's (~1.0–1.1× of the grip left).
-       Going over the limit should need a deliberate extra input.
-   - **Designer H1: braking is pointless.**
-     - A flat-out entry at 180 laps the same as a braked entry, and a caught slide costs ~0 s.
-     - Make excess speed cost more than braking would: a wider line, more scrub, wall risk.
-     - Add a realistic key driver to the tests (hold while the heading error is above a
-       threshold, with a reaction delay). Assert that a braked entry beats a flat-out one.
-   - **Projektant: pit-exit / turn-1 pile-ups.** 44% of AI spins happen there, against 8% in
-     classic. Seed 5 is +16.9% slower. Fix the merge (`mergeClear`) and the follow/hazard
-     speed-difference logic.
-   - **Critic (likely a co-cause):** the AI cuts to the pit lane before turn 2 at full speed
-     with no `laneFree` check (`ai.ts:100,130`).
-   - **Critic:** the SKID blink jumps phase, so it flickers. Use a phase accumulator.
-   - **Critic:** the wall kick turns a sliding car's nose into the wall.
-   - **Critic:** red LEDs start at 101% instead of 95%.
-   - **Critic:** during a spin the HUD SKID is off while the cockpit SKID is on.
-   - **Critic:** the red arc is wrong in the pit lane.
-   - **Critic:** `dt = 0` produces NaN.
-   - **Designer M3:** uncaught spins are not graded by how far over the limit the car was.
-   - **Designer M4:** the speed-bar text "red – spins" is no longer true.
-   - **Tests:**
-     - more seeds, and assert spin counts;
-     - a solo pace test;
-     - assert zero pit-phase spins;
-     - fix the weak assertions the critic listed.
-3. Run review rounds (designer, projektant, critic, tester) until all four say
-   "VERDICT: NO REMAINING ISSUES".
-4. Let the user playtest grip against classic. After sign-off, delete the classic model and its
+   - Re-create `tmp-harness.html`: an iframe page loading `/?<q>` at `w`x`h`.
+2. Review round 2 (designer, projektant, critic, tester) on the round-1 fixes. Things to look at:
+   - feel of the key cap and the overdrive in a real playtest (keyboard and touch, both cameras);
+   - SKID lights in ~10-15 % of corner time at the limit from lift-off tuck-in slip (> 4.6 deg);
+   - the AI field is now much calmer than classic (15 vs 496 spins over 10 seeds);
+   - a 400 ms press at 180 mph on a straight still reaches the wall and spins (as before the
+     fixes; designer target 8 says it should not reach the wall).
+   Repeat until all four say "VERDICT: NO REMAINING ISSUES".
+3. Let the user playtest grip against classic. After sign-off, delete the classic model and its
    constants, then merge to main. Ask before pushing: a push to main deploys GitHub Pages.
-5. Later, when Grand Prix comes back:
+4. Later, when Grand Prix comes back:
    - implement `curvatureAt` for its segment tracks;
-   - `ai.ts`, `steering.ts` and `warnings.ts` call the oval-only `trackCurves()` directly and
-     must take the track's own table instead;
+   - `ai.ts`, `warnings.ts` call the oval-only `trackCurves()` directly and must take the track's
+     own table (`PlayerSteering` already takes a `SteerTrack`); the pit merge / pit approach logic
+     in `ai.ts` is oval-specific;
    - drop that branch's `R_MIN` and its "150 on the inside lane" assumptions;
    - re-record the oval golden master.
 
