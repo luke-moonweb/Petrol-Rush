@@ -493,7 +493,7 @@ function applyWallGrip(car: Car, n: WallNormal): void {
   }
   const ang = Math.atan2(ty, tx);
   // A fresh hit costs a fixed share on top of the friction; continuous contact only costs friction.
-  const fresh = car.wallAgo > G.WALL_FRESH_S ? 1 - G.WALL_HIT_SCRUB * Math.min(1, impact / Math.sin(g0)) : 1;
+  const fresh = car.wallAgo > G.WALL_FRESH_S ? 1 - G.WALL_HIT_SCRUB * (Math.min(1, angle / (3 * DEG)) + Math.min(1, angle / g0)) : 1;
   car.wallAgo = 0;
   const newMag = Math.max(0, tmag * fresh - G.WALL_FRICTION * -vn);
   const back = car.speed < 0;
@@ -506,6 +506,7 @@ function applyWallGrip(car: Car, n: WallNormal): void {
   car.speed = back ? -newMag : newMag;
 }
 
+const DEG = Math.PI / 180;
 const CIRCLE_OFFSETS = [-10, 10];
 const CIRCLE_R = 7;
 
@@ -521,6 +522,12 @@ function setVelocity(car: Car, vx: number, vy: number): void {
     const v = vx * Math.cos(car.moveAngle) + vy * Math.sin(car.moveAngle);
     car.speed = Math.max(car.reverse ? -CONFIG.MAX_REVERSE_MPH : 0, Math.min(v, CONFIG.MAX_MPH));
   }
+}
+
+/** A car hit from behind spins more easily while cornering: in a turn (classic) or loaded (grip). */
+function rearLoaded(car: Car): boolean {
+  if (CONFIG.DRIVE_MODEL === 'grip') return car.gripUse >= CONFIG.GRIP.LOADED_USE;
+  return inTurn(car.x);
 }
 
 export type CrashHandler = (culprit: Car | null, victims: Car[]) => void;
@@ -626,7 +633,7 @@ export function collideCars(cars: Car[], mode: CollisionMode = 'realistic', onCr
         const za = zoneOf(a, nx, ny, px, py);
         const zb = zoneOf(b, -nx, -ny, px, py);
         const hitSpins = (v: Car, zv: Zone): boolean => {
-          if (zv === 'rear') return closing > (inTurn(v.x) ? C.REAR_SPIN_TURN_MPH : C.REAR_SPIN_MPH);
+          if (zv === 'rear') return closing > (rearLoaded(v) ? C.REAR_SPIN_TURN_MPH : C.REAR_SPIN_MPH);
           if (zv === 'sideRear') return closing > C.SIDE_REAR_SPIN_MPH;
           return false;
         };

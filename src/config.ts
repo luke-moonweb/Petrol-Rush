@@ -88,9 +88,9 @@ export const CONFIG = {
     WALL_GLANCE_DEG: 15,
     WALL_SPIN_DEG: 30,
     WALL_SPIN_MPH: 28,
-    WALL_FRICTION: 0.6,
-    /** A fresh hit (no contact for WALL_FRESH_S) also loses up to this share of the speed. */
-    WALL_HIT_SCRUB: 0.08,
+    WALL_FRICTION: 0.4,
+    /** A fresh hit (no contact for WALL_FRESH_S) also loses up to 2 x this share of the speed. */
+    WALL_HIT_SCRUB: 0.06,
     WALL_FRESH_S: 0.4,
   },
 
