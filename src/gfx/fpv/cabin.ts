@@ -2,6 +2,7 @@ import { CONFIG } from '../../config';
 import type { Car } from '../../race/car';
 import { oilRadius } from '../../race/oil';
 import type { Race } from '../../race/race';
+import { skidOn, WARN, type Warn } from '../../race/warnings';
 import { PR } from '../../ui/theme';
 
 export const LED_COUNT = 9;
@@ -105,7 +106,7 @@ export interface CabinInput {
   started: boolean;
   finished: boolean;
   finishAge: number;
-  skid: 0 | 1 | 2;
+  warn: Warn;
   slideTime: number;
   spinTime: number;
   pitAuto: boolean;
@@ -140,6 +141,11 @@ function ledColor(i: number): string {
   return i < 4 ? PR.teal : i < 7 ? PR.amber : PR.red;
 }
 
+/** Grip use that lights LED i (grip model). */
+export function ledUse(i: number): number {
+  return WARN.LED_USE_MIN + ((WARN.LED_USE_MAX - WARN.LED_USE_MIN) * (i + 1)) / LED_COUNT;
+}
+
 function leds(s: CabinInput, mph: number): (string | null)[] {
   const out: (string | null)[] = new Array(LED_COUNT).fill(null);
   const all = (color: string | null) => out.fill(color);
@@ -163,11 +169,20 @@ function leds(s: CabinInput, mph: number): (string | null)[] {
     for (let i = 0; i < CHASE_LEN; i++) out[(head + i) % LED_COUNT] = PR.red;
     return out;
   }
-  if (s.skid === 1 || (s.skid === 2 && on(t, 3))) return all(PR.red);
-  if (s.skid === 2) return out;
+  const w = s.warn;
+  if (w.use === null) {
+    // classic: the strip turns red with the SKID lamp
+    if (skidOn(w.skidHz, t)) return all(PR.red);
+    if (w.skidHz > 0) return out;
+  } else if (w.flash && !s.pitAuto) return all(on(t, 4) ? PR.red : null);
   if (s.pitAuto) {
     const phase = Math.floor(t * 4) % 2;
     for (let i = 0; i < LED_COUNT; i++) if (i % 2 === phase) out[i] = PR.teal;
+    return out;
+  }
+  if (w.use !== null) {
+    // grip use: teal to 70 %, amber to 95 %, red to 110 %; nothing below 30 % (straights)
+    for (let i = 0; i < LED_COUNT; i++) if (w.use >= ledUse(i)) out[i] = ledColor(i);
     return out;
   }
   for (let i = 0; i < LED_COUNT; i++) if (mph >= CONFIG.SPIN_MPH - 36 + 4 * i) out[i] = ledColor(i);
@@ -192,7 +207,7 @@ export function cabinReadout(s: CabinInput): Readout {
     : {
         pit: s.pitAuto && (!s.refueling || on(t, 2)),
         fuel: low ? on(t, 1.5) : short && fuelLaps < PIT_NOW_LAPS,
-        skid: s.spinTime > 0 || s.skid === 1 || (s.skid === 2 && on(t, 3)),
+        skid: s.spinTime > 0 || skidOn(s.warn.skidHz, t),
         pen: s.penalty > 0 && (s.penaltyAge >= 3 || Math.floor(s.penaltyAge * 4) % 2 === 0),
         rev: s.reverse,
       };

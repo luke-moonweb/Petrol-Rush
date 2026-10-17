@@ -6,9 +6,10 @@ import { drawCars, drawOil, trackCanvas } from '../../gfx/world';
 import { keyLabel } from '../../input';
 import { inFrame, layout } from '../../layout';
 import { type Car, lapsCompleted } from '../../race/car';
-import { type DriveInput, skidWarning } from '../../race/physics';
+import type { DriveInput } from '../../race/physics';
 import { NUM_COLORS, Race } from '../../race/race';
 import { PlayerSteering } from '../../race/steering';
+import { NO_WARN, type Warn, warnings } from '../../race/warnings';
 import type { TouchLayout } from '../../touch';
 import { deltaS, trackHeadingAt, WORLD_W, wrapAngle } from '../../track/track';
 import type { Hit } from '../../ui/hit';
@@ -33,6 +34,7 @@ import {
 type Phase = 'choose' | 'options' | 'running' | 'paused' | 'results';
 
 const CRASH_WARN_PX = 1100;
+const ARC_EASE_S = 0.3;
 const NOTICE_S = 4;
 const RADIO_GAP_S = 8;
 
@@ -56,6 +58,8 @@ export class RaceState implements State {
   private finishTimer = 0;
   private camOff = NaN;
   private readonly steering = new PlayerSteering();
+  // Speedo red arc start (mph), eased towards the warning's vRef so it does not jump at corners.
+  private arcFrom: number = CONFIG.SPIN_MPH;
   private reverseHint = 0;
   // Set while the hold-to-reverse key (↓ / S) put the car in reverse, so releasing it leaves reverse.
   private reverseHeld = false;
@@ -92,6 +96,7 @@ export class RaceState implements State {
     this.particles?.clear();
     this.camOff = NaN;
     this.steering?.resetAssist();
+    this.arcFrom = CONFIG.DRIVE_MODEL === 'grip' ? CONFIG.MAX_MPH : CONFIG.SPIN_MPH;
     this.reverseHeld = false;
     this.sound = new RaceSound(this.game.audio);
     this.lightsShown = 0;
@@ -355,6 +360,10 @@ export class RaceState implements State {
       }
     }
     this.race.step(dt, drive);
+    if (CONFIG.DRIVE_MODEL === 'grip') {
+      const vRef = warnings(this.race.player).vRef;
+      this.arcFrom += (vRef - this.arcFrom) * Math.min(1, dt / ARC_EASE_S);
+    }
     stepCabin(this.race, dt);
     this.particles.emit(this.race.cars, dt);
     this.particles.update(dt);
@@ -397,7 +406,7 @@ export class RaceState implements State {
     const ih = (c: Car) => c.prevHeading + wrapAngle(c.heading - c.prevHeading) * a;
     const view = layout.view;
     const cockpit = this.game.prefs.camera === 'cockpit';
-    const skid = this.phase === 'running' && race.started ? skidWarning(race.player) : 0;
+    const warn: Warn = this.phase === 'running' && race.started ? warnings(race.player) : { ...NO_WARN, vRef: this.arcFrom };
     if (cockpit) {
       const lt = this.lights;
       const out = !!lt && lt.t >= lt.outAt;
@@ -415,19 +424,20 @@ export class RaceState implements State {
         steer: this.steerVis,
         time: race.time,
         touch,
-        skid,
+        warn,
+        arcFrom: this.arcFrom,
         lights,
         particles: this.particles,
         pixelScale,
       });
     } else {
-      this.renderTopDown(g, race, ix, iy, ih);
+      this.renderTopDown(g, race, ix, iy, ih, warn);
       prewarmCockpitView(g, view, race.player.colorIdx, this.game.touch);
     }
 
     drawHudTop(g, race, this.notice);
-    drawHudPanel(g, race, !cockpit);
-    if (!cockpit) drawSkidLamp(g, skid, race.time, view.x + view.w - 6, view.y + 6);
+    drawHudPanel(g, race, !cockpit, this.arcFrom);
+    if (!cockpit) drawSkidLamp(g, warn.skidHz, race.time, view.x + view.w - 6, view.y + 6);
     const msg = this.message();
     const low = Math.round(view.h * 0.22);
     if (msg) drawRaceMessage(g, msg, cockpit ? low + 30 : 44);
@@ -441,6 +451,7 @@ export class RaceState implements State {
     ix: (c: Car) => number,
     iy: (c: Car) => number,
     ih: (c: Car) => number,
+    warn: Warn,
   ): void {
     const camX = this.camXFor(Math.round(ix(race.player)));
     g.save();
@@ -464,7 +475,7 @@ export class RaceState implements State {
     g.lineTo(px, py);
     g.closePath();
     g.fill();
-    if (this.game.prefs.speedBar && this.phase !== 'results') drawSpeedBar(g, race.player, race.pitAuto, px, py + 8);
+    if (this.game.prefs.speedBar && this.phase !== 'results') drawSpeedBar(g, race.player, race.pitAuto, px, py + 8, warn);
     g.restore();
   }
 
@@ -607,6 +618,9 @@ export class RaceState implements State {
       `x ${p.x.toFixed(0)} y ${p.y.toFixed(0)}  s ${p.s.toFixed(0)} d ${p.d.toFixed(1)}`,
       `mph ${p.speed.toFixed(1)}  fuel ${(p.fuel * 100).toFixed(1)}%  spin ${p.spinTime.toFixed(2)}`,
       `sector ${p.lastSector} passed ${p.sectorsPassed}  t ${this.race.time.toFixed(1)}`,
+      CONFIG.DRIVE_MODEL === 'grip'
+        ? `grip ${p.gripUse.toFixed(2)} slip ${((wrapAngle(p.heading - p.moveAngle) * 180) / Math.PI).toFixed(1)}° rear ${p.rearLoose ? 'LOOSE' : p.rearStress.toFixed(2)} limit ${warnings(p).vRef.toFixed(0)}`
+        : 'drive classic',
       ...(this.game.prefs.camera === 'cockpit' ? [this.overlayLine()] : []),
     ];
   }
