@@ -5,6 +5,7 @@ import {
   CX_R,
   CY,
   constrainPos,
+  curvatureAt,
   deltaS,
   pointAt,
   project,
@@ -12,6 +13,7 @@ import {
   S_TURN2,
   SECTOR_LEN,
   TRACK_LEN,
+  trackCurves,
   trackHeadingAt,
   WORLD_W,
   wrapS,
@@ -48,6 +50,8 @@ export const OVAL: Track = {
     return Math.min(wrapS(S_TURN1 - s), wrapS(S_TURN2 - s));
   },
   constrain: constrainPos,
+  curvatureAt,
+  curves: trackCurves,
   gridSlot(slot: number): Frenet {
     return { s: gridS(slot), d: CONFIG.GRID_LANES[slot % 2]! };
   },

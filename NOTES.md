@@ -13,7 +13,7 @@ Quality gate: see `CABIN_QUALITY.md` (Done-when playtester questions).
    - Do you feel **inside** a car? Roof header, A-pillars, livery hood, binnacle on the dash, wheel with gloves at 10 and 2.
    - Can you still see the **track and rivals** clearly? The centre lane and the race-info corridor under the mirror stay clear; flecks sit at the edges.
    - Do the **gauges** look intentional? LED strip, HUD speedo and fuel gauge (moved from the left panel), race pod (position + interval ahead) and tell-tales.
-5. Stress the cabin: drive through an **oil** slick (dark smears build up on the lower glass) and hit a wall (grit specks plus a small cabin jolt that the mirror follows). Go over 150 mph in a turn: LED strip and SKID lamp blink together with the HUD SKID lamp.
+5. Stress the cabin: drive through an **oil** slick (dark smears build up on the lower glass) and hit a wall (grit specks plus a small cabin jolt that the mirror follows). The LED strip shows the start lights, then only how close the car is to top speed (teal → amber → red, one LED per 5 mph from 140, all lit at 180). Push a turn past the grip limit: the SKID tell-tale blinks with the HUD SKID lamp (faster with more slip), and the road visibly crabs by the slip angle. With `?drive=classic` the old strip (114→146 mph, red and blinking with the 150 mph SKID rule, spin flash, pit limiter, finish cascade) is back for comparison.
 6. Confirm **mirror** + **minimap** are still usable; the wheel follows steer; during a spin the view turns exactly with the car.
 
 ## Acceptance (Done when)

@@ -64,6 +64,7 @@ export function pitGeo(x0: number, y0: number, straightLen: number): PitGeo {
 /** The lap, as far as the pit lane needs it: s at the start of the main straight. */
 export interface PitTrackRef {
   readonly startS: number;
+  readonly len: number;
   deltaS(a: number, b: number): number;
 }
 
@@ -185,6 +186,22 @@ export class StraightPit implements PitLane {
     return du > -DECIDE_FROM && du < -DECIDE_TO;
   }
 
+  get reachLaps(): number {
+    return (DECIDE_FROM + this.geo.box1) / this.lap.len;
+  }
+
+  joiningD(o: Car): number {
+    const du = this.along(o.s);
+    if (o.ai.pitPhase === 'exiting' && !o.pitSide && o.speed > 15 && du > 0) return Math.max(o.d, EXIT_D);
+    if (o.ai.pitPhase === 'entering' && du > -DECIDE_FROM && du < this.geo.entry0) return Math.min(o.d, -HALF_W + 9);
+    return o.d;
+  }
+
+  diving(car: Car): boolean {
+    const du = this.along(car.s);
+    return car.ai.pitPhase === 'entering' && du > -120 && du < this.geo.exit1;
+  }
+
   autoIn(car: Car): boolean {
     const x = this.geo.x0 + this.geo.lineIn;
     return car.prevX < x && car.x >= x && car.pitSide && this.inLane(car.x, car.y);
@@ -194,7 +211,7 @@ export class StraightPit implements PitLane {
     return car.x >= this.geo.x0 + this.geo.lineOut || !car.pitSide;
   }
 
-  plan(car: Car, view: AiView, target: number, laneD: number): PitPlan {
+  plan(car: Car, view: AiView, target: number, laneD: number, _dt: number): PitPlan {
     const ai = car.ai;
     const g = this.geo;
     const road = this.road;

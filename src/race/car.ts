@@ -17,6 +17,12 @@ export interface AiState {
   recoverTime: number;
   creepTime: number;
   oilTime: number;
+  /** Grip model: seconds stopped at the end of the pit road waiting to merge. */
+  mergeWait: number;
+  /** Grip model: the car leaving the pits has committed to merging (racing cars allow for it). */
+  merging: boolean;
+  /** Grip model: the last pit stop was skipped (the next one may not be). */
+  skipped: boolean;
 }
 
 export interface Car {
@@ -41,6 +47,22 @@ export interface Car {
   crashes: number;
   overTime: number;
   slideTime: number;
+  /** Grip model: last step's combined grip use (0 = free rolling, 1 = at the limit). */
+  gripUse: number;
+  /** Grip model: demand above the limit (0 when within grip). */
+  gripOver: number;
+  /** Grip model: the rear has let go (oversteer). */
+  rearLoose: boolean;
+  /** Grip model: 0..1 build-up towards the rear letting go. */
+  rearStress: number;
+  /** Grip model: smoothed load on the front from lifting or braking (0..1). */
+  weightFwd: number;
+  /** Grip model: largest slip angle of the current rear slide (rad), 0 when the rear holds. */
+  slipPeak: number;
+  /** Grip model: nose rotation (rad) a wall contact still has to apply, a little per step. */
+  wallYaw: number;
+  /** Grip model: seconds since the last wall contact. */
+  wallAgo: number;
   penalty: number;
   penaltyAt: number;
   oilImmune: number;

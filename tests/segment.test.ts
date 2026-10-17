@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createRng } from '../src/sim/rng';
-import { CAR_R, HALF_W } from '../src/track/common';
+import { CAR_R, HALF_W, wrapAngle } from '../src/track/common';
 import { GP_DEFS, gpTracks } from '../src/track/gp';
 import { CX_L, CX_R, CY, FINISH_X, RC, STRAIGHT } from '../src/track/oval';
 import { OVAL } from '../src/track/ovalTrack';
@@ -178,5 +178,19 @@ describe('GP calendar', () => {
     expect(new Set(GP_DEFS.map((d) => d.id)).size).toBe(5);
     const lens = gpTracks().map((t) => Math.round(t.len));
     expect(new Set(lens).size).toBe(5);
+  });
+});
+
+describe('segment tracks: curvature contract (grip model)', () => {
+  it('curvatureAt is the heading change per px along every circuit, 0 on straights', () => {
+    for (const track of gpTracks()) {
+      for (let s = 2; s < track.len; s += 37) {
+        const k = track.curvatureAt(s);
+        if (k !== track.curvatureAt(s - 2) || k !== track.curvatureAt(s + 2)) continue;
+        const dh = wrapAngle(track.pointAt(s + 1, 0).heading - track.pointAt(s - 1, 0).heading) / 2;
+        expect(dh, `${track.id} s ${s}`).toBeCloseTo(k, 6);
+      }
+      expect(track.curves().at(track.len / 3)).toBe(track.curves().at(track.len / 3 + track.len));
+    }
   });
 });

@@ -3,6 +3,9 @@ import type { Car } from '../race/car';
 import { isServicing } from '../race/car';
 import type { PitPlan, Track } from './common';
 
+/** Grip model: fuel margin (laps) on top of the reach to the pit lane before a stop may be skipped. */
+export const PIT_FUEL_MARGIN_LAPS = 0.15;
+
 /** An east-bound pit road: boxes along x, a box row and a drive row at fixed y. */
 export interface PitRoad {
   inLane(x: number, y: number): boolean;
@@ -12,12 +15,15 @@ export interface PitRoad {
   boxPitch: number;
   boxY: number;
   driveY: number;
+  /** Grip model: the stretch of pit road after the pit lane, where a car may wait to merge. */
+  onExitRoad?(x: number, y: number): boolean;
 }
 
-export function pitCarAhead(road: PitRoad, car: Car, laneY: number, cars: Car[]): { car: Car; gap: number } | null {
+export function pitCarAhead(road: PitRoad, car: Car, laneY: number, cars: Car[], exitRoad = false): { car: Car; gap: number } | null {
   let best: { car: Car; gap: number } | null = null;
   for (const o of cars) {
-    if (o === car || !o.pitSide || !road.inLane(o.x, o.y)) continue;
+    const onRoad = road.inLane(o.x, o.y) || (exitRoad && (road.onExitRoad?.(o.x, o.y) ?? false));
+    if (o === car || !o.pitSide || !onRoad) continue;
     const dx = o.x - car.x;
     if (dx <= 0 || dx > 150 || Math.abs(o.y - laneY) > 13) continue;
     if (!best || dx < best.gap) best = { car: o, gap: dx };
@@ -45,18 +51,48 @@ export function freeBox(road: PitRoad, car: Car, cars: Car[]): number {
   return road.boxX(own);
 }
 
-export function mergeClear(track: Track, car: Car, lane: number, cars: Car[]): boolean {
+/**
+ * Can a car leaving the pits take `lane`? Classic: nobody alongside and nobody closing in within
+ * `closeS`. Grip (`brakeRoom`): a car coming up behind must also have room to slow to the merging
+ * car's speed after a reaction, at the follow-logic braking rate (it may be carrying more speed
+ * into turn 1 than the merging car will have).
+ */
+export function mergeClear(track: Track, car: Car, lane: number, cars: Car[], brakeRoom = false, closeS = 1.5): boolean {
   const pxm = CONFIG.PX_PER_MPH;
   return cars.every((o) => {
     if (o === car || Math.abs(o.d - lane) > 17) return true;
     const ds = track.deltaS(car.s, o.s);
     if (ds > -30 && ds < 50) return false;
+    if (brakeRoom && ds <= -30 && ds > -MERGE_BACK_PX && o.speed > car.speed) {
+      const vo = o.speed * pxm;
+      // the merging car keeps accelerating out of the pit road
+      const vc = Math.min(vo, (Math.max(0, car.speed) + MERGE_GAIN_MPH) * pxm);
+      const b = CONFIG.BRAKE_MPH_S * 0.7 * pxm;
+      if (-ds < (vo * vo - vc * vc) / (2 * b) + vo * MERGE_REACT_S + 46) return false;
+    }
     if (ds <= -30 && ds > -300) {
       const closing = (o.speed - car.speed) * pxm;
-      if (closing > 0 && (-ds - 40) / closing < 1.5) return false;
+      if (closing > 0 && (-ds - 40) / closing < closeS) return false;
     }
     return true;
   });
+}
+
+// Grip model merge check: racing cars up to MERGE_BACK_PX behind count, with a reaction of MERGE_REACT_S.
+const MERGE_BACK_PX = 450;
+const MERGE_REACT_S = 0.25;
+const MERGE_GAIN_MPH = 20;
+
+/** Grip model: the nearest car straight ahead of a car at the end of the pit road, also leaving the pits. */
+export function exitRoadAhead(car: Car, cars: Car[]): { car: Car; gap: number } | null {
+  let best: { car: Car; gap: number } | null = null;
+  for (const o of cars) {
+    if (o === car || !o.pitSide || o.ai.pitPhase !== 'exiting') continue;
+    const dx = o.x - car.x;
+    if (dx <= 0 || dx > 150 || Math.abs(o.y - car.y) > 16) continue;
+    if (!best || dx < best.gap) best = { car: o, gap: dx };
+  }
+  return best;
 }
 
 /** Drives to the box: slows down with the distance left and stops in it. */
@@ -73,12 +109,12 @@ export function driveToBox(road: PitRoad, car: Car, cars: Car[], target: number)
 }
 
 /** Queues behind a car ahead on the pit lane, or passes a parked one on the other row. */
-export function followInPits(road: PitRoad, car: Car, cars: Car[], plan: PitPlan): void {
+export function followInPits(road: PitRoad, car: Car, cars: Car[], plan: PitPlan, exitRoad = false): void {
   const pitY = plan.lane!;
-  let ahead = pitCarAhead(road, car, pitY, cars);
+  let ahead = pitCarAhead(road, car, pitY, cars, exitRoad);
   if (ahead && ahead.car.speed < 2 && ahead.gap < 80 && !isServicing(ahead.car)) {
     const other = pitY === road.driveY ? road.boxY : road.driveY;
-    if (!pitCarAhead(road, car, other, cars)) {
+    if (!pitCarAhead(road, car, other, cars, exitRoad)) {
       plan.lane = other;
       ahead = null;
     }

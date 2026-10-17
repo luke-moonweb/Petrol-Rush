@@ -4,6 +4,7 @@ import { layout } from '../../layout';
 import { lapsCompleted } from '../../race/car';
 import type { DriveInput } from '../../race/physics';
 import type { Race } from '../../race/race';
+import { slideAmount } from '../../race/warnings';
 
 const SOUND_C = 700;
 
@@ -28,7 +29,8 @@ export class RaceSound {
 
     audio.setEngine(p.speed, true, drive.gas && !p.reverse);
     const braking = drive.brake && Math.abs(p.speed) > 90 && p.spinTime <= 0;
-    audio.setScreech(p.spinTime > 0 ? 1 : p.slideTime > 0 ? 0.7 : braking ? 0.35 : 0);
+    const slide = CONFIG.DRIVE_MODEL === 'grip' ? slideAmount(p) * 0.8 : p.slideTime > 0 ? 0.7 : 0;
+    audio.setScreech(p.spinTime > 0 ? 1 : Math.max(slide, braking ? 0.35 : 0));
     audio.setRefuel(p.refueling);
 
     const pc = Math.cos(p.heading);

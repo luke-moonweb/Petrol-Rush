@@ -121,9 +121,18 @@ browser does not support it (iPhone Safari).
 
 ## 🏆 How to race
 
-- **Corners are taken at 150 mph or less.** Go a little faster and the car slides wide and scrubs
-  speed; go much faster and it spins. The **SKID** lamp (top right) and the red-dashed zone on the
-  speedometer warn you, and an optional bar above your car shows how far over the limit you are.
+- **Corner speed depends on the radius.** The tyres have a fixed amount of grip: a tight corner or
+  the inside lane needs less speed than a wide one (the centre of the oval goes at about 160 mph,
+  the outside lane at about 174). A held steering key asks for about all the grip there is, so you
+  can drive right at the limit. A little too fast and the car runs wide and scrubs speed; keep
+  steering into a corner you are clearly too fast for and the tail steps out – steer against it (a
+  quick tap is enough for a small slide) or it spins. A slide costs more time than braking would
+  have. Braking or lifting off in the corner uses grip too: the nose tucks in and the tail gets
+  lighter.
+- **Warnings:** the red zone on the speedometer and an optional bar above your car show the limit
+  speed of the next corner; the **SKID** lamp lights only when the car really slides, blinks faster
+  the more it slides and stays lit through a spin. The cockpit LED strip shows the start lights,
+  then how close you are to top speed (one LED per 5 mph from 140, all lit at 180).
 - **Hold the throttle to keep your speed** – release it and the car slowly coasts down, like
   lifting off the pedal. Braking is stronger at high speed.
 - **Overtake on the straights.** Steering builds up while you hold a key: tap for small corrections,
@@ -132,13 +141,11 @@ browser does not support it (iPhone Safari).
   changed lanes – the crash is your fault and costs you **+2 s**. The timing tower shows track
   order; penalised cars get a red `+2s` tag, and if you are penalised the top bar shows your
   projected position, e.g. `PEN +2s → P6`. Penalties count in the final classification.
-- **Hit a wall head-on and you stop dead** – back out with reverse and straighten up; only light
-  glancing contacts let you slide along the barrier.
+- **Walls:** a glancing contact costs some speed and you slide along the barrier; a steeper hit
+  kicks the nose away, and a hard one spins the car – back out with reverse and straighten up.
 - **Pit when the fuel gauge gets low.** On the oval, take the funnel at the bottom-left, follow the PIT
   arrows, and the pit crew does the rest. On the Grand Prix circuits the pit lane runs alongside the
   main straight: keep left out of the last corner and take the entry road at the start of the straight.
-- **Every corner is taken at 150 mph or less** – on the Grand Prix circuits too. Tighter corners only
-  need a cleaner line.
 
 ## ⚙️ Settings
 
@@ -185,6 +192,7 @@ Handy for testing and tuning:
 | `?debug` | Debug overlay, `]` speeds up time ×4/×8, `window.__game` and `window.__race` in the console |
 | `?overlay=URL` | Semi-transparent 640×480 image over the screen for layout comparison |
 | `?touch` / `?touch=0` | Force touch controls on / off, regardless of the device |
+| `?drive=classic` | The old driving model (150 mph corner rule) for comparison; `?drive=grip` (default) is the grip model |
 
 ## 🧱 How it's built
 

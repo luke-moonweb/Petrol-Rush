@@ -14,6 +14,7 @@ const ctx = canvas.getContext('2d')!;
 let renderScale = 1;
 
 const params = readParams(location.search);
+if (params.drive) CONFIG.DRIVE_MODEL = params.drive;
 const input = new Input(window, loadBindings());
 const audio = new GameAudio();
 const game = new Game(input, audio, params, (g) => new TitleState(g));

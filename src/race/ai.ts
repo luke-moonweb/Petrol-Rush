@@ -1,8 +1,10 @@
 import { CONFIG } from '../config';
 import { LANES, type Track, wrapAngle } from '../track/common';
+import { PIT_FUEL_MARGIN_LAPS } from '../track/pitAi';
 import { type Car, isServicing, lapsCompleted } from './car';
 import { type OilSlick, oilRadius } from './oil';
-import type { DriveInput } from './physics';
+import { brakeAt, type DriveInput, maxCurvature } from './physics';
+import { gripFrac, planSpeed } from './planner';
 
 export interface AiView {
   track: Track;
@@ -35,8 +37,12 @@ export function aiInput(car: Car, view: AiView, dt: number): DriveInput {
   ai.laneCooldown = Math.max(0, ai.laneCooldown - dt);
 
   const track = view.track;
-  const turnNow = track.cornerAt(car.x, car.y) !== null;
+  const grip = CONFIG.DRIVE_MODEL === 'grip';
+  const curves = track.curves();
+  const turnNow = grip ? curves.at(car.s) !== 0 : track.cornerAt(car.x, car.y) !== null;
   const distToTurn = turnNow ? 0 : track.distToCorner(car.s);
+  // Lane changes wait until no curvature is close ahead (grip) or the next turn is far (classic).
+  const laneChangeOk = grip ? !turnNow && curves.maxAbsAhead(car.s, LANE_CHANGE_CLEAR, 8) === 0 : !turnNow && distToTurn > 160;
   let target = ai.topMph;
   let laneD = ai.lane;
   let oilLane = false;
@@ -44,10 +50,17 @@ export function aiInput(car: Car, view: AiView, dt: number): DriveInput {
   if (ai.pitPhase === 'none' && track.pit.decideAt(car.s)) {
     const fuelLaps = car.fuel * CONFIG.FUEL_RANGE_LAPS;
     const lapsLeft = view.laps - lapsCompleted(car);
-    if (car.finished || (fuelLaps < ai.pitFuelLaps && fuelLaps < lapsLeft + 0.3)) ai.pitPhase = 'entering';
+    // Grip model: the decision comes up to PIT_DECIDE_FROM before turn 2, so also stop when the fuel
+    // would not reach the box from the next decision point a lap later.
+    const low = fuelLaps < ai.pitFuelLaps || (grip && fuelLaps < 1 + track.pit.reachLaps + PIT_FUEL_MARGIN_LAPS);
+    if (car.finished || (low && fuelLaps < lapsLeft + 0.3)) ai.pitPhase = 'entering';
   }
 
-  const pit = track.pit.plan(car, view, target, laneD);
+  if (ai.pitPhase !== 'exiting') {
+    ai.merging = false;
+    ai.mergeWait = 0;
+  }
+  const pit = track.pit.plan(car, view, target, laneD, dt);
   target = pit.target;
   laneD = pit.laneD;
 
@@ -55,6 +68,9 @@ export function aiInput(car: Car, view: AiView, dt: number): DriveInput {
     track.pit.follow(car, view, pit);
     target = pit.target;
   } else {
+    // Grip model: a car already diving for the pit entry stays on its line (it only slows for
+    // oil and hazards); a lane change there would make it miss the pit road.
+    const diving = grip && track.pit.diving(car);
     const oil = view.oil ?? [];
     const slicks = oil.filter((o) => {
       const ds = track.deltaS(car.s, o.s);
@@ -73,7 +89,7 @@ export function aiInput(car: Car, view: AiView, dt: number): DriveInput {
         );
         const free = options.find((ln) => sideClear(track, car, ln, view.cars)) ?? options[0];
         const nearest = Math.min(...slicks.map((o) => track.deltaS(car.s, o.s)));
-        if (free !== undefined) {
+        if (free !== undefined && !diving) {
           ai.lane = laneD = free;
           ai.laneCooldown = 1.5;
           oilLane = true;
@@ -102,7 +118,7 @@ export function aiInput(car: Car, view: AiView, dt: number): DriveInput {
         const free = [...LANES]
           .sort((p, q) => Math.abs(p - car.d) - Math.abs(q - car.d))
           .find((ln) => all.every((h) => Math.abs(h.d - ln) > 21) && sideClear(track, car, ln, view.cars));
-        if (free !== undefined && !oilLane) {
+        if (free !== undefined && !oilLane && !diving) {
           ai.lane = laneD = free;
           ai.laneCooldown = 1.5;
           const nearest = Math.min(...hazards.map((h) => track.deltaS(car.s, h.s)));
@@ -129,7 +145,13 @@ export function aiInput(car: Car, view: AiView, dt: number): DriveInput {
       if (o === car) continue;
       const ds = track.deltaS(car.s, o.s);
       if (ds <= 0 || ds > range) continue;
-      if (Math.abs(o.d - car.d) < 17 || (ds > 40 && Math.abs(o.d - laneD) < 16)) {
+      // (grip: a car going to or from the pits also counts on the line it is moving to)
+      const jd = grip ? track.pit.joiningD(o) : o.d;
+      // (grip: a much slower car counts from further across, as the pursuit line drifts into corners)
+      const wide = grip ? Math.min(FOLLOW_WIDE_PX, Math.max(0, car.speed - o.speed - 20) / 5) : 0;
+      const near = (d: number) => Math.abs(d - car.d) < 17 + wide || (ds > 40 && Math.abs(d - laneD) < 16 + wide);
+      // (counted on its new line only once clearly ahead: one level with us gives way to us instead)
+      if (near(o.d) || (jd !== o.d && ds > JOIN_AHEAD_PX && near(jd))) {
         if (ds < gap) {
           gap = ds;
           ahead = o;
@@ -139,7 +161,7 @@ export function aiInput(car: Car, view: AiView, dt: number): DriveInput {
     if (ahead && ahead.speed < target) {
       let changed = false;
       const blockedHard = ahead.speed < 60 && car.speed - ahead.speed > 15;
-      const canChange = ai.laneCooldown <= 0 && ai.pitPhase === 'none' && (blockedHard || (!turnNow && car.speed > 50 && distToTurn > 160));
+      const canChange = ai.laneCooldown <= 0 && ai.pitPhase === 'none' && (blockedHard || (laneChangeOk && car.speed > 50));
       if (canChange) {
         const options = LANES.filter((l) => l !== laneD && Math.abs(l - laneD) < 25).sort(
           (p, q) => Math.abs(p - car.d) - Math.abs(q - car.d),
@@ -178,9 +200,14 @@ export function aiInput(car: Car, view: AiView, dt: number): DriveInput {
     }
   }
 
-  const turnV = ai.turnMph;
-  if (turnNow) target = Math.min(target, turnV);
-  else target = Math.min(target, Math.sqrt(turnV * turnV + (2 * CONFIG.BRAKE_MPH_S * 0.75 * distToTurn) / pxm));
+  if (grip) {
+    const dPlan = ai.pitPhase === 'none' ? laneD : car.d;
+    target = Math.min(target, planSpeed(curves, car.s, car.d, dPlan, gripFrac(car), car.speed));
+  } else {
+    const turnV = ai.turnMph;
+    if (turnNow) target = Math.min(target, turnV);
+    else target = Math.min(target, Math.sqrt(turnV * turnV + (2 * CONFIG.BRAKE_MPH_S * 0.75 * distToTurn) / pxm));
+  }
 
   if (ai.creepTime > 0) {
     ai.creepTime -= dt;
@@ -206,6 +233,15 @@ export function aiInput(car: Car, view: AiView, dt: number): DriveInput {
   out.steer = Math.max(-1, Math.min(1, diff * 5));
   out.gas = car.speed < target - 0.5;
   out.brake = car.speed > target + 1.5;
+  if (grip && car.speed > 0 && !car.reverse) {
+    // A smooth driver never asks the tyres for more than they have left after braking.
+    const v = car.speed * pxm;
+    const G = CONFIG.GRIP;
+    const fLong = out.brake ? brakeAt(car.speed) / CONFIG.BRAKE_MPH_S_HIGH : 0;
+    const mu = G.GRIP * Math.sqrt(1 - (G.FC_K * fLong) ** 2);
+    const cap = Math.min(1, mu / (v * v * maxCurvature(v)));
+    out.steer = Math.max(-cap, Math.min(cap, out.steer));
+  }
 
   const servicing = ai.pitPhase === 'fueling' || ai.pitPhase === 'parked';
   if (ai.recoverTime > 0) {
@@ -250,6 +286,12 @@ function isHazard(track: Track, o: Car, me: Car): boolean {
 
 const AI_RECOVER_MPH = 10;
 
+const LANE_CHANGE_CLEAR = 160;
+/** Grip model: extra lateral reach (px) of the follow logic for a car 60+ mph slower. */
+const FOLLOW_WIDE_PX = 8;
+/** A car moving to a new line (pit entry or exit) counts there for cars this far behind it or more. */
+const JOIN_AHEAD_PX = 30;
+
 function sideRubber(track: Track, car: Car, cars: Car[]): { car: Car; ds: number } | null {
   let best: { car: Car; ds: number } | null = null;
   for (const o of cars) {
@@ -274,6 +316,12 @@ function sideClear(track: Track, car: Car, lane: number, cars: Car[]): boolean {
     const ds = track.deltaS(car.s, o.s);
     return !(ds > -40 && ds < 50 && o.d > lo && o.d < hi);
   });
+}
+
+/** The cars that keep sideClear(track, car, lane) false. */
+export function sideBlockers(track: Track, car: Car, lane: number, cars: Car[]): Car[] {
+  if (Math.abs(lane - car.d) < 8) return [];
+  return cars.filter((o) => o !== car && !sideClear(track, car, lane, [car, o]));
 }
 
 function bestLane(track: Track, car: Car, cars: Car[]): number {
