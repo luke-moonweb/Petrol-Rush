@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { CONFIG, type DriveModel } from '../src/config';
-import { limitMph, stepCar } from '../src/race/physics';
+import { collideCars, limitMph, startSpin, stepCar } from '../src/race/physics';
 import { CurveTrack, chicane, circle, hairpin, sBend } from './sim/curves';
 import { type DriverKind, firstCurveS, freshCar, type Gas, runCurve } from './sim/drivers';
 
@@ -196,4 +196,115 @@ describe('grip model: the AI planner on other track shapes (A8)', () => {
         }
     });
   }
+});
+
+describe('grip model: collisions and spins', () => {
+  function pair(rearMph: number, frontMph: number) {
+    const a = freshCar();
+    const b = freshCar();
+    b.id = 1;
+    Object.assign(a, { x: 1000, y: 380, heading: 0, moveAngle: 0, speed: rearMph, s: 0, d: 0 });
+    Object.assign(b, { x: 1033, y: 380, heading: 0, moveAngle: 0, speed: frontMph, s: 33, d: 0 });
+    return [a, b] as const;
+  }
+
+  it('a loaded car (grip use >= 0.7) spins from a weaker rear hit, an unloaded one does not', () => {
+    const [a, b] = pair(150, 132);
+    b.gripUse = 0.9;
+    collideCars([a, b], 'realistic');
+    expect(b.spinTime).toBeGreaterThan(0);
+    const [c, d] = pair(150, 132);
+    d.gripUse = 0.2;
+    collideCars([c, d], 'realistic');
+    expect(d.spinTime).toBe(0);
+  });
+
+  it('a contact keeps a slipping car on its travel direction (the lateral impulse is dropped)', () => {
+    const [a, b] = pair(170, 60);
+    a.heading = 0.15;
+    a.moveAngle = 0;
+    collideCars([a, b], 'realistic');
+    expect(a.spinTime).toBe(0);
+    expect(a.moveAngle).toBe(0);
+    expect(a.speed).toBeLessThan(170);
+  });
+
+  it('a spin clears the slip state; it ends with the travel direction on the nose', () => {
+    const car = freshCar();
+    Object.assign(car, {
+      x: 1000,
+      y: 380,
+      heading: 0.5,
+      moveAngle: 0,
+      speed: 120,
+      rearLoose: true,
+      rearStress: 1.2,
+      slideTime: 1,
+      gripUse: 1.4,
+    });
+    expect(startSpin(car, CONFIG.SPIN_RATE, 1)).toBe(true);
+    expect([car.slideTime, car.rearStress, car.gripUse, car.rearLoose]).toEqual([0, 0, 0, false]);
+    for (let i = 0; i < 400 && car.spinTime > 0; i++)
+      stepCar(car, { steer: 0, gas: false, brake: false, toggleReverse: false }, 1 / 60, () => null);
+    expect(car.spinTime).toBe(0);
+    expect(car.moveAngle).toBeCloseTo(car.heading, 9);
+    expect(car.speed).toBeGreaterThanOrEqual(0);
+  });
+});
+
+describe('grip model: walls', () => {
+  // A straight wall along y = 300 (car centre limit); the car drives at it from above.
+  const wall = (car: { y: number }) => {
+    if (car.y <= 300) return null;
+    car.y = 300;
+    return { nx: 0, ny: -1 };
+  };
+  function hit(mph: number, deg: number) {
+    const car = freshCar();
+    const a = (deg * Math.PI) / 180;
+    Object.assign(car, { x: 0, y: 300 - 3, heading: a, moveAngle: a, speed: mph });
+    let spun = false;
+    let lost = 0;
+    let touched = -1;
+    for (let i = 0; i < 90; i++) {
+      const before = car.speed;
+      // after the hit the driver steers back along the wall
+      const steer = touched >= 0 ? -Math.max(-1, Math.min(1, car.heading * 3)) : 0;
+      stepCar(car, { steer, gas: false, brake: false, toggleReverse: false }, 1 / 60, wall);
+      if (car.wallImpact > 0) {
+        if (touched < 0) touched = i;
+        lost += before - car.speed;
+      }
+      if (car.spinTime > 0) spun = true;
+    }
+    return { spun, loss: lost / mph, car };
+  }
+
+  it('glancing hits (< 15 deg) cost 10-25 % and never spin', () => {
+    for (const mph of [120, 150, 180])
+      for (const deg of [5, 10, 14]) {
+        const r = hit(mph, deg);
+        expect(r.spun, `${mph} ${deg}`).toBe(false);
+        expect(r.loss, `${mph} ${deg}`).toBeGreaterThanOrEqual(0.05);
+        expect(r.loss, `${mph} ${deg}`).toBeLessThanOrEqual(0.25);
+      }
+  });
+
+  it('riding along a wall with the throttle held does not glue the car', () => {
+    const car = freshCar();
+    Object.assign(car, { x: 0, y: 299, heading: 0.03, moveAngle: 0.03, speed: 148 });
+    for (let i = 0; i < 120; i++) stepCar(car, { steer: 0.05, gas: true, brake: false, toggleReverse: false }, 1 / 60, wall);
+    expect(car.speed).toBeGreaterThan(130);
+  });
+
+  it('steep fast hits (> 30 deg) spin; slow ones do not', () => {
+    expect(hit(120, 40).spun).toBe(true);
+    expect(hit(180, 35).spun).toBe(true);
+    expect(hit(40, 40).spun).toBe(false);
+  });
+
+  it('between 15 and 30 deg the nose is kicked off the wall (slip), without a spin at moderate speed', () => {
+    const r = hit(90, 22);
+    expect(r.spun).toBe(false);
+  });
 });
