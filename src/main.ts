@@ -92,6 +92,19 @@ const STEP = 1 / CONFIG.STEP_HZ;
 let acc = 0;
 let last = performance.now();
 
+// ?debug: `__ff(40)` runs 40 s of game time at once and draws the result, so browser checks need no
+// real-time waits (a hidden browser pane gets no animation frames at all).
+if (params.debug) {
+  (window as unknown as { __ff: (seconds: number) => void }).__ff = (seconds) => {
+    for (let i = Math.round(seconds * CONFIG.STEP_HZ); i > 0; i--) {
+      game.state.update(STEP);
+      input.endStep();
+    }
+    acc = 0;
+    draw();
+  };
+}
+
 function frame(now: number): void {
   const dt = Math.max(0, Math.min((now - last) / 1000, 0.25));
   last = now;
@@ -110,11 +123,15 @@ function frame(now: number): void {
     steps++;
   }
   if (steps >= maxSteps) acc = 0;
+  draw();
+  requestAnimationFrame(frame);
+}
+
+function draw(): void {
   touch?.update(game.state.touchLayout?.() ?? 'menu', game.state.touchCamera?.() ?? true);
   ctx.setTransform(renderScale, 0, 0, renderScale, 0, 0);
   ctx.imageSmoothingEnabled = false;
   clearHits(renderScale);
   game.state.render(ctx, Math.min(1, acc / STEP));
-  requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
