@@ -342,7 +342,7 @@ export class RaceState implements State {
       }
       if (this.lights.t >= this.lights.outAt + 1.5) this.lights = null;
       if (!this.race.started) {
-        if (this.cockpitTrack()) prewarmScene();
+        if (this.cockpitTrack()) prewarmScene(this.race.track);
         this.game.audio.setEngine(drive.gas ? 70 : 10, true, drive.gas);
         return;
       }

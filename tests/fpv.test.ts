@@ -1,8 +1,10 @@
+import './sim/browser';
 import { describe, expect, it } from 'vitest';
 import { CONFIG, DEFAULT_OPTIONS } from '../src/config';
 import { type CabinInput, cabinFor, cabinReadout, JOLT_GAP_S, joltOffset, LED_COUNT, ledMph, stepCabin } from '../src/gfx/fpv/cabin';
 import { Camera, clipProject, outX, outY } from '../src/gfx/fpv/engine';
 import { upright } from '../src/gfx/fpv/geom';
+import { OVAL_SPEC } from '../src/gfx/fpv/oval';
 import { buildScene } from '../src/gfx/fpv/scene';
 import { drawTexQuad, texFacing, texQuad } from '../src/gfx/fpv/texture';
 import { Race } from '../src/race/race';
@@ -37,14 +39,14 @@ describe('first-person renderer', () => {
   });
 
   it('builds the static night track scene', () => {
-    const s = buildScene();
+    const s = buildScene(OVAL_SPEC);
     expect(s.ground.length).toBeGreaterThan(0);
     expect(s.solids.length).toBeGreaterThan(200);
     expect(s.glows.length).toBeGreaterThan(5);
   });
 
   it('hangs wall signs on the wall pieces behind them, piece by piece', () => {
-    const s = buildScene();
+    const s = buildScene(OVAL_SPEC);
     const hung = s.solids.flatMap((p) => p.decals ?? []);
     expect(hung.length).toBeGreaterThan(40);
     for (const p of s.solids) {

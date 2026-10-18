@@ -2,17 +2,16 @@ import type { Box } from '../../layout';
 import type { Car } from '../../race/car';
 import type { Race } from '../../race/race';
 import { NO_WARN, type Warn } from '../../race/warnings';
-import { OVAL } from '../../track/ovalTrack';
+import type { Track } from '../../track/common';
 import type { Particles } from '../particles';
 import { driverName } from '../vehicles';
-import { trackCanvas } from '../world';
 import { drawCarModel, setCarPixelScale } from './cars';
 import { type CabinView, cockpitUsed, drawCockpit, prewarmCockpit, reducedMotion, wheelRadius } from './cockpit';
 import { addItem, byDepth, CAR_REACH, type Item, items, NO_ITEMS, orderCarsAgainstCars, orderCarsAgainstWalls } from './drawList';
 import { Camera, drawPoly, FOG_LEVELS, NEAR, visible } from './engine';
-import { setPylonNames } from './landmarks';
 import { drawMinimap } from './minimap';
-import { buildScene, type Scene } from './scene';
+import { setPylonNames } from './oval';
+import { type Scene, sceneFor } from './scene';
 import { drawSky, GROUND, SKY_HORIZON } from './sky';
 import { drawPuff } from './smoke';
 import { floodStreaks } from './streaks';
@@ -47,7 +46,6 @@ export const SHAKE_AMP = 0.12;
 const MIRROR_FAR = 600;
 const OWN_SMOKE = 15;
 
-let scene: Scene | null = null;
 const cam = new Camera();
 const mirrorCam = new Camera();
 // One fog colour for both cameras, so the car style cache is shared.
@@ -64,7 +62,7 @@ function drawCar(g: CanvasRenderingContext2D, c: Camera, it: Item): void {
 }
 
 function renderWorld(g: CanvasRenderingContext2D, c: Camera, f: CockpitFrame, cheap: boolean): void {
-  const scene = prewarmScene();
+  const scene = prewarmScene(f.race.track);
   for (const p of scene.ground) {
     const d = visible(p, c);
     if (d >= 0) drawPoly(g, c, p, d);
@@ -208,12 +206,8 @@ function drawMirror(g: CanvasRenderingContext2D, w: number, h: number, f: Cockpi
 }
 
 // The 3D scene takes a few hundred ms to build; the race state calls this during the start lights.
-export function prewarmScene(): Scene {
-  if (!scene) {
-    trackCanvas(OVAL);
-    scene = buildScene();
-  }
-  return scene;
+export function prewarmScene(track: Track): Scene {
+  return sceneFor(track);
 }
 
 // Builds the cockpit layers on idle once the cockpit has been used this session.
@@ -283,7 +277,7 @@ export function drawCockpitView(g: CanvasRenderingContext2D, f: CockpitFrame): v
   cabinIn.arcFrom = f.arcFrom;
   cabinIn.lights = f.lights;
   cabinIn.standings = standings;
-  cabinIn.streaks = floodStreaks(cam, scene!.glows);
+  cabinIn.streaks = floodStreaks(cam, prewarmScene(f.race.track).glows);
   const jolt = drawCockpit(g, v.w, v.h, cabinIn);
   const t1 = performance.now();
   g.translate(jolt.x, jolt.y);

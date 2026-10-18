@@ -1,6 +1,6 @@
 import type { Streak } from './cockpit';
 import type { Camera } from './engine';
-import type { Glow } from './scene';
+import type { Glow } from './kit';
 
 const FLOOD_DEPTH = 176;
 const FLOOD_SIDE = 140;
