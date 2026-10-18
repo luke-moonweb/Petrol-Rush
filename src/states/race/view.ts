@@ -1,5 +1,5 @@
 import { layout } from '../../layout';
-import { lapsCompleted } from '../../race/car';
+import { isStranded, lapsCompleted } from '../../race/car';
 import type { Race } from '../../race/race';
 import type { ResultRow } from '../../ui/overlays';
 import { offBall, redBall, text } from '../../ui/text';
@@ -41,12 +41,12 @@ export function drawStartLights(g: CanvasRenderingContext2D, lights: StartLights
   }
 }
 
-export function drawRaceMessage(g: CanvasRenderingContext2D, msg: string, top = 44): void {
+export function drawRaceMessage(g: CanvasRenderingContext2D, msg: string, top = 44, size = 14): void {
   g.save();
   g.shadowColor = PR.amber;
   g.shadowBlur = 8;
   text(g, msg, layout.view.x + layout.view.w / 2, layout.view.y + top, {
-    font: `14px ${FONT_BLACK}`,
+    font: `${size}px ${FONT_BLACK}`,
     align: 'center',
     color: PR.amber,
     shadow: null,
@@ -63,7 +63,9 @@ export function resultRows(race: Race): ResultRow[] {
     const t = race.resultTime(car);
     const lapsDown = lapsCompleted(winner) - lapsCompleted(car);
     const dnf = car.isPlayer && race.playerRetired;
-    if (dnf || (!car.finished && race.autoPlayer)) time = 'DNF';
+    if (dnf) time = 'DNF';
+    else if (isStranded(car)) time = 'NO FUEL';
+    else if (!car.finished && race.autoPlayer) time = 'DNF';
     else if (i === 0 && t !== null) {
       const m = Math.floor(t / 60);
       time = `${m}:${(t - m * 60).toFixed(2).padStart(5, '0')}`;

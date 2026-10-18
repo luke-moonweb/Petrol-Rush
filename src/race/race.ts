@@ -3,7 +3,7 @@ import { createRng, lerp, type Rng } from '../sim/rng';
 import { NUM_SECTORS, type Track } from '../track/common';
 import { OVAL } from '../track/ovalTrack';
 import { aiInput } from './ai';
-import { type Car, initProgress, lapsCompleted, progress, updateProgress } from './car';
+import { type Car, initProgress, isStranded, lapsCompleted, progress, updateProgress } from './car';
 import { draftOf, logLapFuel, nominalLapFuel } from './fuel';
 import type { DriverSkill } from './grandprix';
 import { type OilSlick, oilRadius } from './oil';
@@ -430,5 +430,10 @@ export class Race {
 
   allFinished(): boolean {
     return this.cars.every((c) => c.finished);
+  }
+
+  /** Every car has finished or stands out of fuel: no car still racing can change the result. */
+  raceOver(): boolean {
+    return this.cars.every((c) => c.finished || isStranded(c));
   }
 }
