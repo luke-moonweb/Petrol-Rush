@@ -1,5 +1,6 @@
 // Minimal open-plane test tracks built from constant-curvature pieces. They implement the same
 // curvature contract as the game track (curvatureAt), plus pointAt / project for test drivers.
+import { CAR_R, HALF_W } from '../../src/track/common';
 import { type CurvatureSource, CurvatureTable } from '../../src/track/curvature';
 import { wrapAngle } from '../../src/track/oval';
 
@@ -21,11 +22,10 @@ export class CurveTrack implements CurvatureSource {
   readonly table: CurvatureTable;
   private readonly pieces: Placed[] = [];
 
-  constructor(pieces: Piece[]) {
+  /** start: pose of s = 0 (default the origin, heading east). */
+  constructor(pieces: Piece[], start = { x: 0, y: 0, h: 0 }) {
     let s = 0;
-    let x = 0;
-    let y = 0;
-    let h = 0;
+    let { x, y, h } = start;
     for (const p of pieces) {
       this.pieces.push({ ...p, s0: s, x0: x, y0: y, h0: h });
       const e = this.local(this.pieces[this.pieces.length - 1]!, p.len, 0);
@@ -132,3 +132,54 @@ export const chicane = (): CurveTrack =>
 /** r 150, 90 degrees left then 90 degrees right. */
 export const sBend = (): CurveTrack =>
   new CurveTrack([lead(), { len: 150 * 90 * DEG, k: -1 / 150 }, { len: 150 * 90 * DEG, k: 1 / 150 }, lead(600)]);
+
+/** How far the car centre may get from the centre line: the walls of the game tracks. */
+export const LAB_HW = HALF_W - CAR_R;
+/** The racing line keeps this far off the walls (px), so tracking errors do not touch them. */
+export const LINE_MARGIN = 4;
+/** ...and this far for a key player, who weaves about +-10 px around the line. */
+export const HUMAN_MARGIN = 14;
+
+/** How far before the road's arc the racing line turns in, on a corner of `deg` using half-width hw. */
+function turnInBefore(deg: number, hw: number): number {
+  const s = Math.cos((deg * DEG) / 2);
+  return 2 * hw * Math.sqrt((1 + s) / (1 - s));
+}
+
+export interface LabCorner {
+  /** The road: run-up, one arc of radius r turning deg, run-off. Its walls are at +-LAB_HW. */
+  road: CurveTrack;
+  /** The line driven: on the outside, one arc touching the inside at the apex, back to the outside. */
+  line: CurveTrack;
+  /** Radius of the line's arc, and how far off the centre line it runs on the straights (px). */
+  rho: number;
+  hw: number;
+  /** Road s where the road's arc starts and ends. */
+  arc0: number;
+  arc1: number;
+  /** Line s where its arc starts and ends. */
+  lineArc0: number;
+  lineArc1: number;
+  /** +1 right turn, -1 left turn (the sign of the curvature). */
+  sign: number;
+}
+
+/**
+ * A single corner (0 < deg <= 180) of radius r with the widest line through it that uses `use` (0..1)
+ * of the track width, keeping `margin` px off the walls: outside, apex, outside. use 0 drives the centre line.
+ */
+export function labCorner(r: number, deg: number, dir: 'left' | 'right' = 'left', use = 1, margin = LINE_MARGIN): LabCorner {
+  if (!(deg > 0 && deg <= 180) || r <= LAB_HW) throw new Error(`labCorner: need 0 < deg <= 180 and r > ${LAB_HW}`);
+  const sign = dir === 'left' ? -1 : 1;
+  const th = deg * DEG;
+  const hw = use * (LAB_HW - margin);
+  // the run-up fits the full line's turn-in plus braking from top speed for every use
+  const runUp = turnInBefore(deg, LAB_HW) + 600;
+  const road = new CurveTrack([lead(runUp), { len: r * th, k: sign / r }, lead(1000)]);
+  const sinPhi = Math.sin((Math.PI - th) / 2);
+  const rho = hw === 0 ? r : (r + hw - (r - hw) * sinPhi) / (1 - sinPhi);
+  const pre = hw === 0 ? 0 : turnInBefore(deg, hw);
+  // the line starts on the outside of the run-up: d = -sign * hw (right of travel for a left turn)
+  const line = new CurveTrack([lead(runUp - pre), { len: rho * th, k: sign / rho }, lead(1000 + pre)], { x: 0, y: -sign * hw, h: 0 });
+  return { road, line, rho, hw, arc0: runUp, arc1: runUp + r * th, lineArc0: runUp - pre, lineArc1: runUp - pre + rho * th, sign };
+}
