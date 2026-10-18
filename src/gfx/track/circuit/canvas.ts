@@ -10,8 +10,8 @@ import { COL, FONT_BLACK } from '../style';
 import { type CircuitTheme, THEMES } from './theme';
 
 const STEP = 4;
-const WALL_W = 8;
-const SHOULDER_W = 26;
+export const WALL_W = 8;
+export const SHOULDER_W = 26;
 const LANE_LINES = [-19, 0, 19];
 const KERB_STRIPE = 6;
 
@@ -55,7 +55,7 @@ interface Ctx {
   loop: Pt[];
 }
 
-function pitPaint(track: SegmentTrack): PitPaint {
+export function pitPaint(track: SegmentTrack): PitPaint {
   const p = track.pit;
   const g = p.geo;
   return {
@@ -71,27 +71,38 @@ function pitPaint(track: SegmentTrack): PitPaint {
   };
 }
 
+export function circuitTheme(track: SegmentTrack): CircuitTheme {
+  return THEMES[track.id] ?? THEMES.harbour!;
+}
+
+/** Side of the infield: +1 right, -1 left. */
+export function inSideOf(track: SegmentTrack): -1 | 1 {
+  const turn = track.segments.reduce((a, s) => a + (s.kind === 'arc' ? s.corner.dir * s.len : 0), 0);
+  return turn > 0 ? 1 : -1;
+}
+
+/** s range of the main straight where the pit complex replaces the left wall. */
+export function pitRange(track: SegmentTrack): [number, number] {
+  const geo = track.pit.geo;
+  return [-track.finishAt + geo.entry0, -track.finishAt + geo.exit1];
+}
+
+function makeCtx(track: SegmentTrack, g: CanvasRenderingContext2D): Ctx {
+  const [pitS0, pitS1] = pitRange(track);
+  const ctx: Ctx = { g, track, theme: circuitTheme(track), inSide: inSideOf(track), pitS0, pitS1, loop: [] };
+  for (let s = 0; s < track.len; s += 20) {
+    const p = track.pointAt(s, 0);
+    ctx.loop.push([p.x, p.y]);
+  }
+  return ctx;
+}
+
 export function buildCircuitCanvas(track: SegmentTrack): HTMLCanvasElement {
   const W = track.worldW;
   const H = track.worldH;
   const c = makeCanvas(W, H);
   const g = c.getContext('2d')!;
-  const theme = THEMES[track.id] ?? THEMES.harbour!;
-  const turn = track.segments.reduce((a, s) => a + (s.kind === 'arc' ? s.corner.dir * s.len : 0), 0);
-  const geo = track.pit.geo;
-  const ctx: Ctx = {
-    g,
-    track,
-    theme,
-    inSide: turn > 0 ? 1 : -1,
-    pitS0: -track.finishAt + geo.entry0,
-    pitS1: -track.finishAt + geo.exit1,
-    loop: [],
-  };
-  for (let s = 0; s < track.len; s += 20) {
-    const p = track.pointAt(s, 0);
-    ctx.loop.push([p.x, p.y]);
-  }
+  const ctx = makeCtx(track, g);
   const rng = createRng(track.len | 0);
 
   drawGround(ctx, rng);
@@ -184,6 +195,17 @@ function propSpots(ctx: Ctx, rng: Rng): Pt[] {
     spots.push([x, y]);
   }
   return spots;
+}
+
+/** Where the props stand: the same spots the top-down canvas draws them on. */
+export function circuitPropSpots(track: SegmentTrack): Pt[] {
+  return propSpots(makeCtx(track, null as unknown as CanvasRenderingContext2D), createRng(7 + (track.len | 0)));
+}
+
+/** Inside the lap, and (for a theme with far ground such as water) on land. */
+export function circuitGround(track: SegmentTrack): { inside(x: number, y: number): boolean; onLand(x: number, y: number): boolean } {
+  const ctx = makeCtx(track, null as unknown as CanvasRenderingContext2D);
+  return { inside: (x, y) => insideLoop(ctx, x, y), onLand: (x, y) => onLand(ctx, x, y) };
 }
 
 function drawProps(ctx: Ctx, rng: Rng): void {

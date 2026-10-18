@@ -18,6 +18,8 @@ export interface Poly {
   styles?: string[];
   backStyles?: string[];
   plane?: [number, number, number];
+  /** A side of a closed box: seen from behind, it is hidden by the box's other sides. */
+  closed?: boolean;
   decals?: TexQuad[];
 }
 

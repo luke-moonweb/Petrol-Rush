@@ -47,9 +47,10 @@ are no image, audio or font files in the project.
   radio squelch, plus a yellow-flag banner in the HUD.
 - 🔊 **Four engine sounds** to choose from: V8 MUSCLE, JET TURBINE, 8-BIT ARCADE and RC TOY, with
   stereo panning and Doppler for passing rivals.
-- 🎥 **Cockpit view** – press C (or CAM on touch screens) to drive from the driver's seat: flat-shaded
-  pseudo-3D night track, rivals with working tail and brake lights, a live rear-view mirror and a
-  steering wheel that follows your inputs.
+- 🎥 **Cockpit view** – press C (or CAM on touch screens) to drive from the driver's seat on any
+  circuit: flat-shaded pseudo-3D night track with each circuit's own scenery (containers, cacti, city
+  blocks, pines, grandstands), rivals with working tail and brake lights, a live rear-view mirror and
+  a steering wheel that follows your inputs.
 - 📺 **Live-on-air title screen** – a silent 20-car demo race plays behind the menu, filmed like a
   TV broadcast.
 - ⌨️ **Fully rebindable keys** (primary + alternate per action), saved in the browser.
@@ -231,7 +232,7 @@ src/
   ui/              HUD, race overlays, text, palette
     menus/         title, controls, settings and credits screens
   gfx/             3D-to-sprite renderer, liveries, particles, world drawing
-    fpv/           cockpit view: tiny Canvas 2D polygon renderer, 3D night scene, mirror, dashboard (oval only)
+    fpv/           cockpit view: tiny Canvas 2D polygon renderer, 3D night scene of any track, mirror, dashboard
     track/         pre-rendered tracks: oval/ (tarmac, pit road, paddock, infield), circuit/ (themes)
   audio/           Web Audio effects and four engine voices
 docs/screenshots/  images used in this README

@@ -2,7 +2,8 @@ import { CONFIG } from '../../config';
 import { oilRadius } from '../../race/oil';
 import type { Race } from '../../race/race';
 import { type Camera, clipProject, drawGlowAt, fillProjected } from './engine';
-import type { Glow, Scene } from './scene';
+import type { Glow } from './kit';
+import type { Scene } from './scene';
 
 // What lies on the asphalt in the cockpit view: oil slicks and the floodlights' pools of light.
 

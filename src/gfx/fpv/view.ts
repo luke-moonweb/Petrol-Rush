@@ -2,23 +2,22 @@ import type { Box } from '../../layout';
 import type { Car } from '../../race/car';
 import type { Race } from '../../race/race';
 import { NO_WARN, type Warn } from '../../race/warnings';
-import { OVAL } from '../../track/ovalTrack';
+import type { Track } from '../../track/common';
 import type { Particles } from '../particles';
 import { driverName } from '../vehicles';
-import { trackCanvas } from '../world';
 import { drawCarModel, setCarPixelScale } from './cars';
 import { type CabinView, cockpitUsed, drawCockpit, prewarmCockpit, reducedMotion, wheelRadius } from './cockpit';
 import { addItem, byDepth, CAR_REACH, type Item, items, NO_ITEMS, orderCarsAgainstCars, orderCarsAgainstWalls } from './drawList';
-import { Camera, drawPoly, FOG_LEVELS, NEAR, visible } from './engine';
-import { setPylonNames } from './landmarks';
+import { Camera, drawPoly, FOG_LEVELS, facesCamera, NEAR, visible } from './engine';
 import { drawMinimap } from './minimap';
-import { buildScene, type Scene } from './scene';
-import { drawSky, GROUND, SKY_HORIZON } from './sky';
+import { setPylonNames } from './oval';
+import { type Scene, sceneFor } from './scene';
+import { drawSky } from './sky';
 import { drawPuff } from './smoke';
 import { floodStreaks } from './streaks';
 import { drawGlow, drawOilSlicks, drawPools } from './surface';
 import { drawBillboard, drawTexQuad } from './texture';
-import { cabinMs, carsMs, mirrorMs, sample } from './timing';
+import { cabinMs, carsMs, mirrorMs, sample, worldMs } from './timing';
 
 export interface CockpitFrame {
   race: Race;
@@ -47,7 +46,6 @@ export const SHAKE_AMP = 0.12;
 const MIRROR_FAR = 600;
 const OWN_SMOKE = 15;
 
-let scene: Scene | null = null;
 const cam = new Camera();
 const mirrorCam = new Camera();
 // One fog colour for both cameras, so the car style cache is shared.
@@ -55,8 +53,9 @@ mirrorCam.fog = cam.fog;
 // Last LOD tier of each rival car (by colorIdx), per camera, for the LOD hysteresis.
 const lodMain = new Int8Array(64);
 const lodMirror = new Int8Array(64);
-// Time spent drawing rival cars this frame, main view and mirror together.
+// Time spent drawing rival cars, and the whole world pass, this frame (main view and mirror together).
 let carMs = 0;
+let worldTime = 0;
 
 function drawCar(g: CanvasRenderingContext2D, c: Camera, it: Item): void {
   const car = it.car!;
@@ -64,7 +63,13 @@ function drawCar(g: CanvasRenderingContext2D, c: Camera, it: Item): void {
 }
 
 function renderWorld(g: CanvasRenderingContext2D, c: Camera, f: CockpitFrame, cheap: boolean): void {
-  const scene = prewarmScene();
+  const t0 = performance.now();
+  drawWorld(g, c, f, cheap);
+  worldTime += performance.now() - t0;
+}
+
+function drawWorld(g: CanvasRenderingContext2D, c: Camera, f: CockpitFrame, cheap: boolean): void {
+  const scene = prewarmScene(f.race.track);
   for (const p of scene.ground) {
     const d = visible(p, c);
     if (d >= 0) drawPoly(g, c, p, d);
@@ -90,7 +95,7 @@ function renderWorld(g: CanvasRenderingContext2D, c: Camera, f: CockpitFrame, ch
 
   items.length = 0;
   for (const p of scene.solids) {
-    if (visible(p, c) < 0) continue;
+    if ((p.closed && !facesCamera(p, c)) || visible(p, c) < 0) continue;
     addItem(c.depth(p.cx, p.cy)).poly = p;
   }
   for (const q of cheap ? NO_ITEMS : scene.signs) {
@@ -189,9 +194,9 @@ function drawMirror(g: CanvasRenderingContext2D, w: number, h: number, f: Cockpi
   mirrorCam.flip = -1;
   mirrorCam.far = MIRROR_FAR;
   mirrorCam.fogNear = 180;
-  g.fillStyle = SKY_HORIZON;
+  g.fillStyle = prewarmScene(f.race.track).sky.horizon;
   g.fillRect(mx, my, mw, mirrorCam.oy - my);
-  g.fillStyle = GROUND;
+  g.fillStyle = prewarmScene(f.race.track).sky.ground;
   g.fillRect(mx, mirrorCam.oy, mw, mh);
   renderWorld(g, mirrorCam, f, true);
   const sheen = g.createLinearGradient(mx, my, mx + mw, my + mh);
@@ -208,12 +213,8 @@ function drawMirror(g: CanvasRenderingContext2D, w: number, h: number, f: Cockpi
 }
 
 // The 3D scene takes a few hundred ms to build; the race state calls this during the start lights.
-export function prewarmScene(): Scene {
-  if (!scene) {
-    trackCanvas(OVAL);
-    scene = buildScene();
-  }
-  return scene;
+export function prewarmScene(track: Track): Scene {
+  return sceneFor(track);
 }
 
 // Builds the cockpit layers on idle once the cockpit has been used this session.
@@ -265,6 +266,7 @@ export function drawCockpitView(g: CanvasRenderingContext2D, f: CockpitFrame): v
   // The car LOD counts device pixels (DPR and layout scale included).
   setCarPixelScale(f.pixelScale ?? 1);
   carMs = 0;
+  worldTime = 0;
   cam.focal = Math.max(v.h * 0.62, Math.min(v.h * 0.9, v.w * 0.55)) * (1 - 0.08 * Math.min(1, speed / 180));
   cam.ox = v.w / 2;
   cam.oy = Math.round(v.h * 0.42);
@@ -272,7 +274,8 @@ export function drawCockpitView(g: CanvasRenderingContext2D, f: CockpitFrame): v
   cam.flip = 1;
   cam.far = 1300;
   cam.fogNear = 260;
-  drawSky(g, cam, v.w, heading);
+  const scene = prewarmScene(f.race.track);
+  drawSky(g, cam, v.w, heading, scene.sky);
   renderWorld(g, cam, f, false);
   const t0 = performance.now();
   cabinIn.race = f.race;
@@ -283,14 +286,15 @@ export function drawCockpitView(g: CanvasRenderingContext2D, f: CockpitFrame): v
   cabinIn.arcFrom = f.arcFrom;
   cabinIn.lights = f.lights;
   cabinIn.standings = standings;
-  cabinIn.streaks = floodStreaks(cam, scene!.glows);
+  cabinIn.streaks = floodStreaks(cam, scene.glows);
   const jolt = drawCockpit(g, v.w, v.h, cabinIn);
   const t1 = performance.now();
   g.translate(jolt.x, jolt.y);
   drawMirror(g, v.w, v.h, f, ex, ey, heading);
-  drawMinimap(g, v.w, v.h, wheelRadius(v.w), f);
+  drawMinimap(g, v.w, v.h, wheelRadius(v.w), f, scene);
   sample(cabinMs, t1 - t0);
   sample(mirrorMs, performance.now() - t1);
   sample(carsMs, carMs);
+  sample(worldMs, worldTime);
   g.restore();
 }
