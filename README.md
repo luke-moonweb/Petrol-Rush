@@ -77,7 +77,8 @@ Open the address printed by Vite (by default http://localhost:5173).
 | `npm run dev` | Dev server with hot reload |
 | `npm run build` | Type-check and production build into `dist/` |
 | `npm run preview` | Serve the production build locally |
-| `npm test` | Run the test suite (Vitest) |
+| `npm test` | Fast tests (~5 s, skips the full-race simulations) |
+| `npm run test:all` | Every test, including full-race simulations (~35 s; CI runs this) |
 | `npm run typecheck` | TypeScript check only |
 | `npm run lint` | Lint and check formatting (Biome) |
 | `npm run lint:fix` | Apply safe lint fixes and format the code |
@@ -189,7 +190,7 @@ Handy for testing and tuning:
 | `?cars=20&laps=3` | Race options |
 | `?seed=123` | Repeatable race |
 | `?track=harbour` | Track for `?quick` and QUICK RACE: `oval`, `harbour`, `desert`, `city`, `forest`, `finale` |
-| `?debug` | Debug overlay, `]` speeds up time ×4/×8, `window.__game` and `window.__race` in the console |
+| `?debug` | Debug overlay, `]` speeds up time ×4/×8, `window.__game` and `window.__race` in the console, `__ff(seconds)` fast-forwards the game at once |
 | `?overlay=URL` | Semi-transparent 640×480 image over the screen for layout comparison |
 | `?touch` / `?touch=0` | Force touch controls on / off, regardless of the device |
 | `?drive=classic` | The old driving model (150 mph corner rule) for comparison; `?drive=grip` (default) is the grip model |
@@ -237,7 +238,8 @@ tests/             Vitest: oval golden master, track geometry, lap counting, phy
 ## 🧪 Tests
 
 ```bash
-npm test
+npm test          # fast tier, ~5 s
+npm run test:all  # everything, ~35 s – run before pushing
 ```
 
 The suite includes headless simulations of complete 20-car races on every circuit (including all

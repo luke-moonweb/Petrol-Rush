@@ -17,5 +17,5 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx biome ci .
-      - run: npm test
+      - run: npm run test:all
       - run: npm run build

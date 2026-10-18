@@ -1,18 +1,22 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { CONFIG, type DriveModel } from '../src/config';
+import { useFdlibm } from './sim/fdlibm';
 import { hashState, runFor, runRace } from './sim/golden';
 
 // The classic driving model is pinned bit for bit to main 1a2098f (recorded before the grip model
-// existed). If one of these changes, the classic model is no longer the old game. The hashes are
-// recorded on CI (Linux x64); macOS arm64 rounds differently, so these tests fail locally there.
+// existed). If one of these changes, the classic model is no longer the old game. sin/cos/atan2 come
+// from a JS port of fdlibm so the hashes are the same on every platform (see sim/fdlibm.ts).
 describe('classic driving model golden master (main 1a2098f)', () => {
   let saved: DriveModel;
+  let restoreMath: () => void;
   beforeAll(() => {
     saved = CONFIG.DRIVE_MODEL;
     CONFIG.DRIVE_MODEL = 'classic';
+    restoreMath = useFdlibm();
   });
   afterAll(() => {
     CONFIG.DRIVE_MODEL = saved;
+    restoreMath();
   });
 
   it('20 cars, seed 99, after 20 s', () => {
