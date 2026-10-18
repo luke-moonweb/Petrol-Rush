@@ -1,11 +1,13 @@
 import { CONFIG } from '../config';
-import { LANES, type Track, wrapAngle } from '../track/common';
+import { LANES, NUM_SECTORS, type Track, wrapAngle } from '../track/common';
+import type { CurvatureTable } from '../track/curvature';
 import { PIT_FUEL_MARGIN_LAPS } from '../track/pitAi';
 import { racingLine } from '../track/racingLine';
 import { type Car, isServicing } from './car';
 import { canSaveToFinish, lapsOfFuel, lapsToFinish } from './fuel';
 import { type OilSlick, oilRadius } from './oil';
-import { brakeAt, type DriveInput, gripAt, maxCurvature } from './physics';
+import { hash01 } from './persona';
+import { brakeAt, type DriveInput, gripAt, limitMph, maxCurvature } from './physics';
 import { gripFrac, lineUse, planLineSpeed, planSpeed } from './planner';
 
 export interface AiView {
@@ -19,10 +21,10 @@ export interface AiView {
   pitAuto?: boolean;
 }
 
-function laneFree(track: Track, car: Car, lane: number, cars: Car[]): boolean {
+function laneFree(track: Track, car: Car, lane: number, cars: Car[], backPx = 55): boolean {
   const lo = Math.min(car.d, lane) - 14;
   const hi = Math.max(car.d, lane) + 14;
-  const back = car.speed < 30 ? -25 : -55;
+  const back = car.speed < 30 ? -25 : -backPx;
   const front = car.speed < 30 ? 50 : 90;
   for (const o of cars) {
     if (o === car) continue;
@@ -67,14 +69,16 @@ export function aiInput(car: Car, view: AiView, dt: number): DriveInput {
     // A car already diving for the pit entry stays on its line (it only slows for oil and
     // hazards); a lane change there would make it miss the pit road.
     const diving = track.pit.diving(car);
-    takeLine(car, view, plan, !diving && pit.laneD === ai.lane);
+    takeLine(car, view, plan, !diving && pit.laneD === ai.lane && ai.blockLane === null);
     avoidOil(car, view, plan, dt, diving);
     avoidHazards(car, view, plan, dt, diving);
     followTraffic(car, view, plan);
+    blockInside(car, view, plan, diving);
   }
   if (pit.lane === null && ai.pitPhase === 'none' && !plan.oilLane) avoidSideRub(car, view, plan);
   // (any of the above that picked a lane takes the car off the racing line)
   if (plan.line && ai.lane !== nearestLane(car.d)) plan.line = ai.onLine = false;
+  planSlide(car, track, plan, dt);
   paceTarget(car, view, plan, dt);
   steerAndPedals(car, track, pit.lane, plan, out);
   if (recover(car, view, out, dt)) return out;
@@ -127,8 +131,16 @@ function takeLine(car: Car, view: AiView, plan: Plan, ok: boolean): void {
     ai.lane = nearestLane(car.d);
   } else if (ai.onLine) {
     ai.onLine = false;
-    ai.lane = plan.laneD = nearestLane(car.d);
+    ai.lane = plan.laneD = laneOffLine(track, car, view.cars);
   }
+}
+
+/** Leaving the line: the nearest lane no car alongside is on (in a bend the nearest can be its lane). */
+function laneOffLine(track: Track, car: Car, cars: Car[]): number {
+  const taken = (lane: number) =>
+    cars.some((o) => onTrack(track, car, o) && Math.abs(track.deltaS(car.s, o.s)) < LINE_OVERLAP_PX && Math.abs(o.d - lane) < LINE_GAP_PX);
+  const lanes = [...LANES].sort((p, q) => Math.abs(p - car.d) - Math.abs(q - car.d));
+  return lanes.find((l) => !taken(l)) ?? lanes[0]!;
 }
 
 /** Another car racing on the track (not in its box, not on the pit lane unless moving out of it). */
@@ -259,8 +271,8 @@ function followTraffic(car: Car, view: AiView, plan: Plan): void {
   const pxm = CONFIG.PX_PER_MPH;
   const curves = track.curves();
   const turnNow = curves.at(car.s) !== 0;
-  // Lane changes wait until no curvature is close ahead.
-  const laneChangeOk = !turnNow && curves.maxAbsAhead(car.s, LANE_CHANGE_CLEAR, 8) === 0;
+  // Lane changes wait until no curvature is close ahead (how close: the driver's personality).
+  const laneChangeOk = !turnNow && curves.maxAbsAhead(car.s, ai.persona.passClearPx, 8) === 0;
   const vpx = Math.max(0, car.speed) * pxm;
   const range = Math.max(110, (vpx * vpx) / (2 * CONFIG.BRAKE_MPH_S * pxm * 0.8) + 60);
   let ahead: Car | null = null;
@@ -286,7 +298,8 @@ function followTraffic(car: Car, view: AiView, plan: Plan): void {
   if (ahead && ahead.speed < plan.target) {
     let changed = false;
     const blockedHard = ahead.speed < 60 && car.speed - ahead.speed > 15;
-    const canChange = ai.laneCooldown <= 0 && ai.pitPhase === 'none' && (blockedHard || (laneChangeOk && car.speed > 50));
+    const eager = ahead.speed < plan.target - ai.persona.passMph;
+    const canChange = ai.laneCooldown <= 0 && ai.pitPhase === 'none' && (blockedHard || (eager && laneChangeOk && car.speed > 50));
     if (canChange) {
       const options = LANES.filter((l) => l !== plan.laneD && Math.abs(l - plan.laneD) < 25).sort(
         (p, q) => Math.abs(p - car.d) - Math.abs(q - car.d),
@@ -301,7 +314,7 @@ function followTraffic(car: Car, view: AiView, plan: Plan): void {
       }
     }
     if (!changed) {
-      const room = Math.max(0, gap - 46);
+      const room = Math.max(0, gap - 46 - ai.persona.gapPx);
       const v0 = Math.max(0, ahead.speed);
       const follow = Math.sqrt(v0 * v0 + (2 * CONFIG.BRAKE_MPH_S * 0.7 * room) / pxm) - (gap < 42 ? 4 : 0);
       plan.target = Math.min(plan.target, Math.max(0, follow));
@@ -316,8 +329,14 @@ function avoidSideRub(car: Car, view: AiView, plan: Plan): void {
   const rub = sideRubber(track, car, view.cars);
   if (!rub) return;
   const away = Math.sign(car.d - rub.car.d) || (car.id < rub.car.id ? -1 : 1);
-  const options = LANES.filter((l) => (l - car.d) * away > 3).sort((p, q) => Math.abs(p - car.d) - Math.abs(q - car.d));
-  const free = options.find((l) => laneFree(track, car, l, view.cars)) ?? (car.contactPrev > 0 ? options[0] : undefined);
+  // (lanes beyond the one it is on: in a long bend the pursuit of a lane runs well inside it, so a lane
+  // a little away from where the car is can still be the one the other car is on)
+  const options = LANES.filter((l) => (l - car.d) * away > 3 && (l - ai.lane) * away > 3).sort(
+    (p, q) => Math.abs(p - car.d) - Math.abs(q - car.d),
+  );
+  // (moving across in a bend can mean braking for a tighter lane: a car behind on it needs more room)
+  const back = track.curves().at(car.s) !== 0 ? RUB_BACK_BEND_PX : 55;
+  const free = options.find((l) => laneFree(track, car, l, view.cars, back)) ?? (car.contactPrev > 0 ? options[0] : undefined);
   if (free !== undefined) {
     ai.lane = plan.laneD = free;
     ai.laneCooldown = 1;
@@ -331,9 +350,10 @@ function avoidSideRub(car: Car, view: AiView, plan: Plan): void {
 function paceTarget(car: Car, view: AiView, plan: Plan, dt: number): void {
   const ai = car.ai;
   const dPlan = ai.pitPhase === 'none' ? plan.laneD : car.d;
+  const slideGrip = ai.slide === 1 || ai.slide === 2 ? SLIDE_GRIP : 1;
   const corner = plan.line
-    ? planLineSpeed(racingLine(view.track), car.s, lineUse(car), gripFrac(car), car.speed)
-    : planSpeed(view.track.curves(), car.s, car.d, dPlan, gripFrac(car), car.speed);
+    ? planLineSpeed(racingLine(view.track), car.s, lineUse(car), gripFrac(car) * slideGrip, car.speed, ai.persona.brake)
+    : planSpeed(view.track.curves(), car.s, car.d, dPlan, gripFrac(car), car.speed, ai.persona.brake);
   plan.target = Math.min(plan.target, corner);
 
   if (ai.creepTime > 0) {
@@ -371,10 +391,126 @@ function steerAndPedals(car: Car, track: Track, pitLane: number | null, plan: Pl
     const v = car.speed * pxm;
     const G = CONFIG.GRIP;
     const fLong = out.brake ? brakeAt(car.speed) / CONFIG.BRAKE_MPH_S_HIGH : 0;
-    const mu = gripAt(v) * Math.sqrt(1 - (G.FC_K * fLong) ** 2);
+    const ellipse = Math.sqrt(1 - (G.FC_K * fLong) ** 2);
+    const faded = gripAt(v) * ellipse;
+    // (in a turn-in slide it asks for more: over the faded grip, towards the full grip)
+    const mu = car.ai.slide === 2 ? faded + SLIDE_REACH * (G.GRIP * ellipse - faded) : faded;
     const cap = Math.min(1, mu / (v * v * maxCurvature(v)));
-    out.steer = Math.max(-cap, Math.min(cap, out.steer));
+    out.steer = catchSlide(car, cap) ?? Math.max(-cap, Math.min(cap, out.steer));
   }
+}
+
+/**
+ * Turn-in slide. Now and then (the personality's chance, scaled by the difficulty; one decision per corner,
+ * made on the straight before it, from a hash, not the race RNG) the driver plans the next corner at
+ * SLIDE_GRIP x its grip fraction: it arrives faster than the faded grip allows, and on the line its
+ * steering asks for more, up to SLIDE_REACH of the grip the fade took away (steerAndPedals). The car slides
+ * in (physics.ts lateralBudget) and the rear steps out; at SLIDE_CATCH_RAD of slip the driver countersteers
+ * until the rear is back in line. Only on the racing line with no car alongside.
+ */
+function planSlide(car: Car, track: Track, plan: Plan, dt: number): void {
+  const ai = car.ai;
+  const k = track.curves().at(car.s);
+  ai.slideTime += dt;
+  const slip = wrapAngle(car.heading - car.moveAngle) * ai.slideDir;
+  if (ai.slide === 0 || ai.slide === 3) {
+    if (ai.slide === 3 && (slip < SLIDE_DONE_RAD || ai.slideTime > SLIDE_CATCH_S)) ai.slide = 0;
+    if (k !== 0) {
+      ai.slideRun = -1;
+      return;
+    }
+    if (ai.slideRun >= 0 || ai.slide !== 0) return;
+    // (on the straight before a corner: one roll for it)
+    ai.slideRun = car.s;
+    const lap = Math.floor(car.sectorsPassed / NUM_SECTORS);
+    const roll = hash01(Math.floor(ai.temper * 2 ** 30), lap, Math.floor(car.s / 64));
+    // (only into a corner fast enough for the grip to have faded: under the knee there is nothing to slide on)
+    if (roll < ai.persona.slide * ai.level.slide && nextLineCornerMph(car, track) > SLIDE_MIN_MPH) ai.slide = 1;
+    return;
+  }
+  if (!plan.line || plan.lineShift !== 0) {
+    ai.slide = 0;
+    return;
+  }
+  if (ai.slide === 1 && k !== 0) {
+    ai.slide = 2;
+    ai.slideDir = Math.sign(k);
+    ai.slideTime = 0;
+  } else if (ai.slide === 2 && (k === 0 || slip > SLIDE_CATCH_RAD)) {
+    ai.slide = 3;
+    ai.slideTime = 0;
+  }
+}
+
+/** The racing line's grip-limited speed (mph) in the next corner ahead of the car, at its grip fraction. */
+function nextLineCornerMph(car: Car, track: Track): number {
+  const line = racingLine(track);
+  let best: { ds: number; k: number } | null = null;
+  for (const z of line.zones(lineUse(car))) {
+    const ds = (((z.start - car.s) % line.len) + line.len) % line.len;
+    if (!best || ds < best.ds) best = { ds, k: z.k };
+  }
+  return best ? limitMph(best.k, gripFrac(car)) : Infinity;
+}
+
+/** Catching a turn-in slide: a countersteer while the slip is over the physics' slide threshold, else null. */
+function catchSlide(car: Car, cap: number): number | null {
+  const ai = car.ai;
+  if (ai.slide !== 3) return null;
+  const slip = wrapAngle(car.heading - car.moveAngle) * ai.slideDir;
+  return slip > SLIDE_COUNTER_RAD ? -ai.slideDir * Math.min(cap, (slip - SLIDE_DONE_RAD) * SLIDE_COUNTER_GAIN) : null;
+}
+
+/**
+ * Blocker: with a car close behind before a corner, move to the inside lane once and hold it through the
+ * corner (planned as a lane, so slower than the racing line). No weaving: one move, and no following the
+ * attacker; anything else that picks a lane (traffic, oil, a hazard, the pits) ends the block.
+ */
+function blockInside(car: Car, view: AiView, plan: Plan, diving: boolean): void {
+  const ai = car.ai;
+  const track = view.track;
+  const curves = track.curves();
+  if (ai.blockLane !== null) {
+    const inCorner = curves.at(car.s) !== 0;
+    if (inCorner) ai.blockIn = true;
+    const done = ai.blockIn && !inCorner;
+    if (done || ai.lane !== ai.blockLane || ai.pitPhase !== 'none' || plan.oilLane || ai.hazardTime > 0) {
+      ai.blockLane = null;
+      ai.blockIn = false;
+    } else plan.laneD = ai.blockLane;
+    return;
+  }
+  if (!ai.persona.blocks || ai.pitPhase !== 'none' || diving || plan.oilLane || ai.hazardTime > 0 || ai.laneCooldown > 0) return;
+  // (before the corner, with room to move across before the turn-in)
+  const k = nextCurve(curves, car.s, BLOCK_LOOK_PX);
+  if (k === 0 || curves.maxAbsAhead(car.s, BLOCK_MIN_PX, 8) !== 0) return;
+  const attacker = view.cars.some((o) => {
+    if (!onTrack(track, car, o)) return false;
+    const ds = track.deltaS(car.s, o.s);
+    return ds > -BLOCK_BEHIND_PX && ds < -CONFIG.CAR_LEN * 0.6 && o.speed > car.speed - BLOCK_CLOSING_MPH;
+  });
+  if (!attacker) return;
+  const inside = k > 0 ? LANES[LANES.length - 1]! : LANES[0]!;
+  // (the way across must be clear; the attacker, in line behind, is not in the way)
+  const across = Math.sign(inside - car.d);
+  const inWay = view.cars.some((o) => {
+    if (!onTrack(track, car, o)) return false;
+    const ds = track.deltaS(car.s, o.s);
+    return ds > -BLOCK_SIDE_BACK_PX && ds < BLOCK_SIDE_FRONT_PX && (o.d - car.d) * across > LINE_INLINE_PX;
+  });
+  if (inWay) return;
+  ai.lane = plan.laneD = ai.blockLane = inside;
+  ai.blockIn = false;
+  plan.line = ai.onLine = false;
+}
+
+/** The signed curvature of the first bend within `look` px ahead of s (0 if none). */
+function nextCurve(curves: CurvatureTable, s: number, look: number): number {
+  for (let ds = 0; ds <= look; ds += 8) {
+    const k = curves.at(s + ds);
+    if (k !== 0) return k;
+  }
+  return 0;
 }
 
 /**
@@ -453,6 +589,29 @@ function isHazard(track: Track, o: Car, me: Car): boolean {
 }
 
 const AI_RECOVER_MPH = 10;
+/** avoidSideRub in a bend: the lane it moves to must be free this far behind (px). */
+const RUB_BACK_BEND_PX = 100;
+
+/** Turn-in slide (planSlide): the corner planned at SLIDE_GRIP x the grip fraction, the steering reaching SLIDE_REACH of the faded-away grip. */
+const SLIDE_GRIP = 1.25;
+const SLIDE_REACH = 0.6;
+/** Only into a corner whose line the driver takes faster than this (mph). */
+const SLIDE_MIN_MPH = 145;
+/** Catches the slide at this slip (rad); countersteers over SLIDE_COUNTER_RAD; done under SLIDE_DONE_RAD or after SLIDE_CATCH_S. */
+const SLIDE_CATCH_RAD = 0.12;
+const SLIDE_COUNTER_RAD = 0.09;
+const SLIDE_DONE_RAD = 0.04;
+const SLIDE_COUNTER_GAIN = 6;
+const SLIDE_CATCH_S = 1;
+/** Blocker (blockInside): an attacker this close behind (px) and no more than BLOCK_CLOSING_MPH slower. */
+const BLOCK_BEHIND_PX = 80;
+const BLOCK_CLOSING_MPH = 5;
+/** It moves for a bend this far ahead (px), but not once one is closer than BLOCK_MIN_PX. */
+const BLOCK_LOOK_PX = 420;
+const BLOCK_MIN_PX = 120;
+/** A car this far behind / ahead (px), and across towards the inside, keeps it from moving. */
+const BLOCK_SIDE_BACK_PX = 60;
+const BLOCK_SIDE_FRONT_PX = 90;
 
 const LANE_CHANGE_CLEAR = 160;
 /**

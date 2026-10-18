@@ -1,4 +1,4 @@
-import { LAP_CHOICES, QUALIFYING_CHOICES, type RaceOptions } from '../config';
+import { DIFFICULTY_CHOICES, LAP_CHOICES, QUALIFYING_CHOICES, type RaceOptions } from '../config';
 import { driverName } from '../gfx/vehicles';
 import {
   type GpSetup,
@@ -20,9 +20,10 @@ import { menuScreen } from '../ui/menus/common';
 import { drawGpHub, type GpHubMode, type GpRoundView, type GpSetupRow, type GpStandingView } from '../ui/menus/gp';
 import { ordinal } from '../ui/text';
 import { type Game, loadOptions, type State, tapSide } from './game';
+import { DIFFICULTY_LABELS } from './race/options';
 import { RaceState } from './race/state';
 
-const SETUP_LABELS = ['CARS', 'LAPS', 'YOUR CAR', 'GRID POSITION'];
+const SETUP_LABELS = ['CARS', 'LAPS', 'YOUR CAR', 'GRID POSITION', 'DIFFICULTY'];
 const QUALIFYING_LABELS: Record<string, string> = {
   last: 'BACK OF GRID',
   middle: 'MIDDLE OF GRID',
@@ -49,7 +50,13 @@ export class GrandPrixState implements State {
     this.gp = gp;
     this.mode = !gp ? 'setup' : isOver(gp) ? 'final' : 'season';
     const o = loadOptions(game.params);
-    this.setup = { cars: o.cars, laps: gp?.laps ?? GP_DEFAULT_LAPS, playerColor: o.playerColor, qualifying: o.qualifying };
+    this.setup = {
+      cars: o.cars,
+      laps: gp?.laps ?? GP_DEFAULT_LAPS,
+      playerColor: o.playerColor,
+      qualifying: o.qualifying,
+      difficulty: o.difficulty,
+    };
   }
 
   private rows(): GpSetupRow[] {
@@ -60,6 +67,7 @@ export class GrandPrixState implements State {
       { label: SETUP_LABELS[1]!, value: `${s.laps} PER RACE` },
       { label: SETUP_LABELS[2]!, carColor: s.playerColor },
       { label: SETUP_LABELS[3]!, value: QUALIFYING_LABELS[s.qualifying]! },
+      { label: SETUP_LABELS[4]!, value: DIFFICULTY_LABELS[s.difficulty]! },
     ];
   }
 
@@ -146,6 +154,11 @@ export class GrandPrixState implements State {
         s.qualifying = QUALIFYING_CHOICES[(idx + delta + QUALIFYING_CHOICES.length) % QUALIFYING_CHOICES.length]!;
         break;
       }
+      case 4: {
+        const idx = DIFFICULTY_CHOICES.indexOf(s.difficulty);
+        s.difficulty = DIFFICULTY_CHOICES[(idx + delta + DIFFICULTY_CHOICES.length) % DIFFICULTY_CHOICES.length]!;
+        break;
+      }
     }
     this.setup = s;
   }
@@ -170,6 +183,7 @@ export class GrandPrixState implements State {
       laps: gp.laps,
       playerColor: gp.playerColor,
       qualifying: gp.qualifying,
+      difficulty: gp.difficulty,
     };
     const before = standings(gp);
     const ctx = {

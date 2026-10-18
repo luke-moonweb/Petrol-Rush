@@ -213,6 +213,9 @@ export const CONFIG = {
 
 export type Qualifying = 'last' | 'middle' | 'pole' | 'random';
 
+/** How hard the AI field is (race/persona.ts LEVELS). */
+export type Difficulty = 'easy' | 'normal' | 'hard';
+
 export type CollisionMode = 'realistic' | 'classic';
 
 export interface RaceRules {
@@ -228,6 +231,7 @@ export interface RaceOptions {
   laps: number;
   playerColor: number;
   qualifying: Qualifying;
+  difficulty: Difficulty;
 }
 
 export const DEFAULT_OPTIONS: RaceOptions = {
@@ -236,7 +240,9 @@ export const DEFAULT_OPTIONS: RaceOptions = {
   laps: 18,
   playerColor: 0,
   qualifying: 'last',
+  difficulty: 'normal',
 };
 
 export const LAP_CHOICES = [1, 2, 3, 5, 10, 15, 18, 20, 25, 30, 40, 50, 75, 100];
 export const QUALIFYING_CHOICES: Qualifying[] = ['last', 'middle', 'pole', 'random'];
+export const DIFFICULTY_CHOICES: Difficulty[] = ['easy', 'normal', 'hard'];

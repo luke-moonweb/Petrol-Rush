@@ -65,9 +65,10 @@ function aiCompare(spec: CornerSpec, skills: number[], lane: string | undefined)
   const f = (x: number, w: number, p = 0) => (x === Infinity ? 'inf' : x.toFixed(p)).padStart(w);
   return skills.map((skill) => {
     const r = runCorner({ ...spec, driver: 'ai', mode: 'flat', skill, lane: lane !== undefined ? Number(lane) : undefined });
+    const slip = r.maxSlipDeg >= 2 ? ` ${r.maxSlipDeg.toFixed(0)}deg` : '';
     const d = r.t - human.best.t;
     const what = r.spun ? 'SPIN' : r.wallHits > 0 ? `wall${r.wallHits}` : r.loose ? 'loose' : 'ok';
-    return `${f(spec.r, 5)} ${f(spec.deg, 3)} ${f(skill, 5, 2)} ${(lane ?? 'out').padStart(5)} | ${f(r.t, 5, 2)} ${f(r.vMin, 5)} ${what.padStart(5)} | ${f(human.best.t, 7, 2)} ${f(human.vBest, 5, 1)} | ${d >= 0 ? '+' : ''}${d.toFixed(2)}`;
+    return `${f(spec.r, 5)} ${f(spec.deg, 3)} ${f(skill, 5, 2)} ${(lane ?? 'out').padStart(5)} | ${f(r.t, 5, 2)} ${f(r.vMin, 5)} ${what.padStart(5)} | ${f(human.best.t, 7, 2)} ${f(human.vBest, 5, 1)} | ${d >= 0 ? '+' : ''}${d.toFixed(2)}${slip}`;
   });
 }
 
@@ -79,6 +80,9 @@ it('corner lab', () => {
     use: o.use !== undefined ? Number(o.use) : undefined,
     insist: o.insist === '1',
     react: o.react !== undefined ? Number(o.react) : undefined,
+    persona: o.persona as CornerSpec['persona'],
+    level: o.level as CornerSpec['level'],
+    slide: o.slide === '1',
   };
   const drivers = (o.driver ? o.driver.split(',') : ['line', 'human']) as LabDriver[];
   const out: string[] = [];

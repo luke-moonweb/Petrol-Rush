@@ -20,7 +20,7 @@ import { GP_DEFS } from '../src/track/gp';
 import { getTrack, trackIds } from '../src/track/tracks';
 
 const TRACKS = GP_DEFS.map((d) => d.id);
-const SETUP: GpSetup = { cars: 20, laps: 3, playerColor: 4, qualifying: 'last' };
+const SETUP: GpSetup = { cars: 20, laps: 3, playerColor: 4, qualifying: 'last', difficulty: 'normal' };
 
 function gp(setup = SETUP): GrandPrix {
   return newGrandPrix(setup, 1234, TRACKS);

@@ -1,4 +1,4 @@
-import { CONFIG, LAP_CHOICES, QUALIFYING_CHOICES, type Qualifying } from '../config';
+import { CONFIG, DIFFICULTY_CHOICES, type Difficulty, LAP_CHOICES, QUALIFYING_CHOICES, type Qualifying } from '../config';
 import { createRng, lerp } from '../sim/rng';
 import type { Race } from './race';
 
@@ -14,6 +14,8 @@ export interface DriverSkill {
   pitFuelLaps: number;
   reaction: number;
   fuelSave: number;
+  /** The personality draw (race/persona.ts personaOf). */
+  temper: number;
 }
 
 export interface GpEntry {
@@ -34,6 +36,7 @@ export interface GpSetup {
   laps: number;
   playerColor: number;
   qualifying: Qualifying;
+  difficulty: Difficulty;
 }
 
 export interface GrandPrix extends GpSetup {
@@ -67,9 +70,12 @@ export function newGrandPrix(setup: GpSetup, seed: number, tracks: string[]): Gr
         pitFuelLaps: lerp(CONFIG.AI_PIT_FUEL_LAPS[0], CONFIG.AI_PIT_FUEL_LAPS[1], rng()),
         reaction: lerp(CONFIG.AI_REACTION_S[0], CONFIG.AI_REACTION_S[1], rng()),
         fuelSave: lerp(CONFIG.AI_FUEL_SAVE[0], CONFIG.AI_FUEL_SAVE[1], rng()),
+        temper: 0,
       },
     });
   }
+  // (the personality draws come after all the others, so the drivers' other skills stay as they were)
+  for (const e of entries) if (e.skill) e.skill.temper = rng();
   return { version: FORMAT_VERSION, seed, ...setup, cars: n, tracks, entries, results: [], restarts: 0 };
 }
 
@@ -163,7 +169,10 @@ function parseSkill(v: unknown): DriverSkill | null {
   // fuelSave came later: a championship saved before it gets the middle of the range
   const fuelSave = s.fuelSave === undefined ? 0.5 : s.fuelSave;
   if (!isNum(fuelSave, 0, 1)) return null;
-  return { topMph: s.topMph, turnMph: s.turnMph, pitFuelLaps: s.pitFuelLaps, reaction: s.reaction, fuelSave };
+  // (so did the personality: a neutral driver in the normal mix)
+  const temper = s.temper === undefined ? 0.5 : s.temper;
+  if (!isNum(temper, 0, 1)) return null;
+  return { topMph: s.topMph, turnMph: s.turnMph, pitFuelLaps: s.pitFuelLaps, reaction: s.reaction, fuelSave, temper };
 }
 
 /** Reads a saved championship; anything unexpected (old format, edited, corrupt) gives null. */
@@ -179,6 +188,9 @@ export function parseGp(raw: string | null, knownTracks: string[]): GrandPrix | 
   if (!isNum(o.seed, 0, 2 ** 32) || !isNum(o.cars, 1, NUM_COLORS) || !isColor(o.playerColor)) return null;
   if (!isNum(o.laps, 1, LAP_CHOICES[LAP_CHOICES.length - 1]!) || !isNum(o.restarts, 0, 1e6)) return null;
   if (!QUALIFYING_CHOICES.includes(o.qualifying as Qualifying)) return null;
+  // (a championship saved before the difficulty option races at normal)
+  const difficulty = o.difficulty === undefined ? 'normal' : o.difficulty;
+  if (!DIFFICULTY_CHOICES.includes(difficulty as Difficulty)) return null;
   const tracks = o.tracks;
   if (!Array.isArray(tracks) || tracks.length === 0 || !tracks.every((t) => typeof t === 'string' && knownTracks.includes(t))) return null;
   const rawEntries = o.entries;
@@ -214,6 +226,7 @@ export function parseGp(raw: string | null, knownTracks: string[]): GrandPrix | 
     laps: o.laps,
     playerColor: o.playerColor,
     qualifying: o.qualifying as Qualifying,
+    difficulty: difficulty as Difficulty,
     tracks: tracks as string[],
     entries,
     results,

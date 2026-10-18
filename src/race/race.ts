@@ -7,6 +7,7 @@ import { type Car, initProgress, lapsCompleted, progress, updateProgress } from 
 import { draftOf, logLapFuel, nominalLapFuel } from './fuel';
 import type { DriverSkill } from './grandprix';
 import { type OilSlick, oilRadius } from './oil';
+import { LEVELS, PERSONAS, personaOf } from './persona';
 import { collideCars, type DriveInput, NO_INPUT, startSpin, stepCar } from './physics';
 import { updatePit } from './pit';
 
@@ -85,6 +86,7 @@ export class Race {
       pitFuelLaps: lerp(CONFIG.AI_PIT_FUEL_LAPS[0], CONFIG.AI_PIT_FUEL_LAPS[1], this.rng()),
       reaction: lerp(CONFIG.AI_REACTION_S[0], CONFIG.AI_REACTION_S[1], this.rng()),
       fuelSave: lerp(CONFIG.AI_FUEL_SAVE[0], CONFIG.AI_FUEL_SAVE[1], this.rng()),
+      temper: this.rng(),
     };
   }
 
@@ -103,6 +105,9 @@ export class Race {
 
   private makeCar(slot: number, colorIdx: number, isPlayer: boolean, skill: DriverSkill): Car {
     const { s, d } = this.track.gridSlot(slot);
+    // (the difficulty and the personalities are the opponents': the player's car, when the AI drives it, races plain)
+    const difficulty = isPlayer ? 'normal' : (this.opts.difficulty ?? 'normal');
+    const level = LEVELS[difficulty];
     const p = this.track.pointAt(s, d);
     const car: Car = {
       id: slot,
@@ -166,7 +171,7 @@ export class Race {
         fuelSave: skill.fuelSave,
         economy: false,
         stuckTime: 0,
-        reaction: skill.reaction,
+        reaction: skill.reaction * level.reaction,
         hazardTime: 0,
         recoverTime: 0,
         creepTime: 0,
@@ -179,6 +184,15 @@ export class Race {
         lapFuel: -1,
         refuelledThisLap: false,
         onLine: false,
+        temper: skill.temper,
+        persona: isPlayer ? PERSONAS.neutral : personaOf(skill.temper, difficulty),
+        level,
+        blockLane: null,
+        blockIn: false,
+        slide: 0,
+        slideTime: 0,
+        slideDir: 1,
+        slideRun: -1,
       },
     };
     const st = this.track.project(car.x, car.y);

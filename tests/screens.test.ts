@@ -76,12 +76,15 @@ describe('screens, headless', () => {
     press(game, 'navLeft', 6); // 18 → 1
     press(game, 'down', 2); // GRID POSITION
     press(game, 'navRight'); // middle → pole
+    press(game, 'down'); // DIFFICULTY
+    press(game, 'navRight'); // normal → hard
     shots.settings = frame(game);
     press(game, 'down');
     press(game, 'enter'); // START RACE
     expect(screen(game).phase).toBe('running');
     const race = screen(game).race!;
     expect(race.laps).toBe(1);
+    expect(race.opts.difficulty).toBe('hard');
 
     run(game, 3);
     expect(race.started).toBe(false);
@@ -131,7 +134,7 @@ describe('screens, headless', () => {
     press(game, 'down');
     press(game, 'enter'); // RACE SETTINGS
     press(game, 'navRight'); // TRACK: oval → harbour
-    press(game, 'down', 5);
+    press(game, 'down', 6);
     press(game, 'enter'); // START RACE
     const race = screen(game).race!;
     expect(race.track.id).toBe('harbour');

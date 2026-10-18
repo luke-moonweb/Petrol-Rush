@@ -39,6 +39,10 @@ are no image, audio or font files in the project.
 - 🛢️ **Oil on track** – any car that drives into a slick spins. AI drivers avoid oil even more than
   each other (but react with a human-like delay).
 - 🚦 **Smart, beatable AI** – lane changes, overtaking, avoiding wrecks, staggered pit stops.
+  Every driver has a character: gentle ones brake early and leave room, aggressive ones brake late
+  and pass sooner, blockers cover the inside before a corner when you close in, and now and then a
+  driver slides into a corner and catches it. **DIFFICULTY** (Easy / Normal / Hard, in the race
+  settings and the Grand Prix setup) sets their pace, reactions, mistakes and the mix of characters.
 - 📻 **Radio spotter** – "Caution! Crash ahead!" through the browser's speech synthesis with a
   radio squelch, plus a yellow-flag banner in the HUD.
 - 🔊 **Four engine sounds** to choose from: V8 MUSCLE, JET TURBINE, 8-BIT ARCADE and RC TOY, with
@@ -177,8 +181,8 @@ Pick the number of cars, laps per race, your colour and starting position, then 
 
 - Points go to the top ten; penalties count, ties are broken by count-back (more wins, then more
   2nd places …).
-- AI drivers keep their pace for the whole season and line up by the standings; you start from the
-  grid position you chose.
+- AI drivers keep their pace and character for the whole season and line up by the standings; you
+  start from the grid position you chose, at the difficulty you chose.
 - When you cross the line, the rest of the field finishes in the background. **RETIRE** in the race
   menu ends your race with a DNF (no points). Restarting a race is allowed (and counted).
 - The championship is saved after every round – **CONTINUE** from the Grand Prix screen after a reload.
@@ -223,8 +227,8 @@ src/
     race/          race screen: flow, sound, race-only drawing
   track/           Track interface, oval geometry and pit road, segment circuits, GP calendar,
                    straight pit lane and the pit-lane AI shared by both
-  race/            cars, physics & collisions, AI, oil, pit stops, race logic & classification,
-                   Grand Prix championship (points, standings, save)
+  race/            cars, physics & collisions, AI (personalities and difficulty), oil, pit stops,
+                   race logic & classification, Grand Prix championship (points, standings, save)
   ui/              HUD, race overlays, text, palette
     menus/         title, controls, settings and credits screens
   gfx/             3D-to-sprite renderer, liveries, particles, world drawing

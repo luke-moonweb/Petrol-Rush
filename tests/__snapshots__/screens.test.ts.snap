@@ -3,12 +3,12 @@
 exports[`screens, headless > a race on a Grand Prix circuit, top-down and in the cockpit; fingerprints of both 1`] = `
 {
   "cockpit": {
-    "calls": 20577,
-    "hash": "5c5bf98d",
+    "calls": 19939,
+    "hash": "e18ba2ac",
   },
   "topDown": {
-    "calls": 90849,
-    "hash": "45ffdfdd",
+    "calls": 90803,
+    "hash": "78436054",
   },
 }
 `;
@@ -16,40 +16,40 @@ exports[`screens, headless > a race on a Grand Prix circuit, top-down and in the
 exports[`screens, headless > title → race menu → settings → a race with the cockpit, pause and menu → results; fingerprints of each screen 1`] = `
 {
   "cockpit": {
-    "calls": 5602,
-    "hash": "656ad3d2",
+    "calls": 4585,
+    "hash": "ff3feb24",
   },
   "paused": {
-    "calls": 5308,
-    "hash": "d0c3a8d8",
+    "calls": 4291,
+    "hash": "12f817bc",
   },
   "raceMenu": {
     "calls": 3093,
     "hash": "32a5cb50",
   },
   "raceMenuLive": {
-    "calls": 5449,
-    "hash": "bafcdac7",
+    "calls": 4432,
+    "hash": "34a12637",
   },
   "results": {
-    "calls": 14105,
-    "hash": "f74b42d5",
+    "calls": 13206,
+    "hash": "64bdc20b",
   },
   "settings": {
-    "calls": 2592,
-    "hash": "2064ecfe",
+    "calls": 2618,
+    "hash": "502b6467",
   },
   "startLights": {
     "calls": 1022,
     "hash": "14ece257",
   },
   "title": {
-    "calls": 53494,
-    "hash": "e5dd99e7",
+    "calls": 52862,
+    "hash": "5e1edeab",
   },
   "topDown": {
-    "calls": 2865,
-    "hash": "bb33c8ab",
+    "calls": 2492,
+    "hash": "95dca468",
   },
 }
 `;

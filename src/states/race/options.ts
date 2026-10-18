@@ -1,11 +1,11 @@
-import { LAP_CHOICES, QUALIFYING_CHOICES, type RaceOptions } from '../../config';
+import { DIFFICULTY_CHOICES, LAP_CHOICES, QUALIFYING_CHOICES, type RaceOptions } from '../../config';
 import { NUM_COLORS } from '../../race/race';
 import { getTrack, trackIds } from '../../track/tracks';
 import type { SettingRow } from '../../ui/overlays';
 
 // RACE SETTINGS screen of a quick race: the rows and how left / right change them.
 
-export const OPTION_LABELS = ['TRACK', 'CARS', 'LAPS', 'YOUR CAR', 'GRID POSITION', 'START RACE'];
+export const OPTION_LABELS = ['TRACK', 'CARS', 'LAPS', 'YOUR CAR', 'GRID POSITION', 'DIFFICULTY', 'START RACE'];
 export const START_ROW = OPTION_LABELS.indexOf('START RACE');
 
 export const QUALIFYING_LABELS: Record<string, string> = {
@@ -14,6 +14,8 @@ export const QUALIFYING_LABELS: Record<string, string> = {
   pole: 'POLE POSITION',
   random: 'RANDOM',
 };
+
+export const DIFFICULTY_LABELS: Record<string, string> = { easy: 'EASY', normal: 'NORMAL', hard: 'HARD' };
 
 /** The options with row `row` stepped by `delta` (-1 / 1), wrapping around. */
 export function changeOption(opts: RaceOptions, row: number, delta: number): RaceOptions {
@@ -41,6 +43,11 @@ export function changeOption(opts: RaceOptions, row: number, delta: number): Rac
       o.qualifying = QUALIFYING_CHOICES[(idx + delta + QUALIFYING_CHOICES.length) % QUALIFYING_CHOICES.length]!;
       break;
     }
+    case 5: {
+      const idx = DIFFICULTY_CHOICES.indexOf(o.difficulty);
+      o.difficulty = DIFFICULTY_CHOICES[(idx + delta + DIFFICULTY_CHOICES.length) % DIFFICULTY_CHOICES.length]!;
+      break;
+    }
   }
   return o;
 }
@@ -58,6 +65,8 @@ export function optionRows(o: RaceOptions): SettingRow[] {
         return { label, carColor: o.playerColor };
       case 4:
         return { label, value: QUALIFYING_LABELS[o.qualifying] };
+      case 5:
+        return { label, value: DIFFICULTY_LABELS[o.difficulty] };
       default:
         return { label, action: true };
     }
