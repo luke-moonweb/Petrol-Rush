@@ -10,24 +10,24 @@ exports[`screens, headless > a race on a Grand Prix circuit draws top-down and o
 exports[`screens, headless > title → race menu → settings → a race with the cockpit, pause and menu → results; fingerprints of each screen 1`] = `
 {
   "cockpit": {
-    "calls": 5364,
-    "hash": "a871e638",
+    "calls": 5603,
+    "hash": "aae7aec7",
   },
   "paused": {
-    "calls": 5070,
-    "hash": "4a6cc76c",
+    "calls": 5309,
+    "hash": "b86157b3",
   },
   "raceMenu": {
     "calls": 3093,
     "hash": "32a5cb50",
   },
   "raceMenuLive": {
-    "calls": 5211,
-    "hash": "1f2e8da3",
+    "calls": 5450,
+    "hash": "de99d49e",
   },
   "results": {
-    "calls": 17575,
-    "hash": "6bdac83d",
+    "calls": 18522,
+    "hash": "7e9a8bab",
   },
   "settings": {
     "calls": 2592,

@@ -39,13 +39,13 @@ function pitArrow(color: string): () => HTMLCanvasElement {
 }
 
 /** The top of the label kerb and the pit wall. */
-export function pitBase(P: Parts, pit: PitScene): void {
+function pitBase(P: Parts, pit: PitScene): void {
   const y = (d: number) => pit.y0 + d;
   P.island.push(ground(rect(pit.x0 + 10, y(PIT_D.LABEL_TOP), pit.x1 - 10, y(PIT_D.BOX_TOP), pit.curbH + 0.04), night(COL.curbFace, 1.4)));
   box(P.solids, pit.wallX0, y(PIT_D.WALL_TOP), pit.wallX1, y(PIT_D.SEP), 0, 7, night(COL.sep, 1.8), night(COL.sepTop));
 }
 
-export function pitBoxes(P: Parts, pit: PitScene): void {
+function pitBoxes(P: Parts, pit: PitScene): void {
   const boxLine = hexRgb(COL.box);
   for (let i = 0; i < pit.numBoxes; i++) {
     const x0 = pit.boxX(i) - pit.boxW / 2;
@@ -60,7 +60,7 @@ export function pitBoxes(P: Parts, pit: PitScene): void {
 }
 
 /** The PIT LANE and PIT EXIT lines, the exit light and the chevrons. */
-export function pitLines(P: Parts, pit: PitScene): void {
+function pitLines(P: Parts, pit: PitScene): void {
   const boxTop = pit.y0 + PIT_D.BOX_TOP;
   const wallTop = pit.y0 + PIT_D.WALL_TOP;
   const lineCol = hexRgb('#FFC85A');
@@ -95,7 +95,7 @@ export function pitLines(P: Parts, pit: PitScene): void {
 }
 
 /** PIT ROAD / PETROL RUSH along the kerb behind the boxes. */
-export function pitSigns(P: Parts, pit: PitScene): void {
+function pitSigns(P: Parts, pit: PitScene): void {
   const y = pit.y0 + PIT_D.BOX_TOP + 0.4;
   let k = 0;
   for (let x = pit.x0 + 64; x < pit.x1 - 30; x += 128, k++) {
@@ -103,4 +103,11 @@ export function pitSigns(P: Parts, pit: PitScene): void {
     const color = k % 2 ? COL.labelAlt : COL.label;
     P.signs.push(texQuad(upright(x - 52, y, x + 52, y, 0.4, pit.curbH - 0.4), label(320, 16, text, COL.curbFace, color, 13), { far: 600 }));
   }
+}
+
+export function pitScene(P: Parts, pit: PitScene): void {
+  pitBase(P, pit);
+  pitBoxes(P, pit);
+  pitLines(P, pit);
+  pitSigns(P, pit);
 }

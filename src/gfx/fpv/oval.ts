@@ -1,21 +1,4 @@
-import {
-  CX_L,
-  CX_R,
-  CY,
-  FINISH_X,
-  HALF_W,
-  islandHull,
-  PIT_ROAD_Y,
-  PIT_X0,
-  PIT_X1,
-  pointAt,
-  R_IN,
-  R_OUT,
-  RC,
-  TRACK_LEN,
-  WALL_X0,
-  WALL_X1,
-} from '../../track/oval';
+import { CX_L, CX_R, CY, islandHull, PIT_ROAD_Y, PIT_X0, PIT_X1, R_IN, R_OUT, RC, WALL_X0, WALL_X1 } from '../../track/oval';
 import { OVAL } from '../../track/ovalTrack';
 import { HELI, PYLON, palmSpots } from '../track/oval/infield';
 import { OVAL_PIT_PAINT } from '../track/oval/pit';
@@ -23,7 +6,7 @@ import { COL, FONT_BLACK } from '../track/style';
 import { trackCanvas } from '../world';
 import { hexRgb, makePoly } from './engine';
 import { type P3, rect, upright, wall } from './geom';
-import { box, ground, insideHull, label, night, type Parts, pieces, strip } from './kit';
+import { ground, insideHull, label, night, type Parts, pieces } from './kit';
 import type { PitScene } from './pitScene';
 import type { SceneSpec } from './spec';
 import { lazyCanvas, texQuad } from './texture';
@@ -32,7 +15,6 @@ import { lazyCanvas, texQuad } from './texture';
 // the heliport, the leader pylon and the palms. The only fpv file that reads the oval's geometry.
 
 export const ISLAND_H = 6;
-const WALL_H = 10;
 
 const pylonNames: string[] = ['BEL', 'TAN', 'FER', 'CAL'];
 let pylonCanvas: HTMLCanvasElement | null = null;
@@ -116,29 +98,6 @@ function ovalGround(P: Parts): void {
   P.ground.push(ground(stadium(R_IN, 0.01), night(COL.pitSurface)));
 }
 
-function ovalRibbon(P: Parts): void {
-  const lane = night('#FFF8E8', 0.85);
-  for (const d of [-19, 0, 19]) {
-    for (let s = 0; s < TRACK_LEN; s += 32) P.decals.push(makePoly(strip(OVAL, s, s + 12, d - 0.8, d + 0.8, 0.02), lane));
-  }
-  const edge = night('#FFF8E8');
-  for (let s = 0; s < TRACK_LEN; s += 24) P.decals.push(makePoly(strip(OVAL, s, s + 24, -HALF_W + 0.5, -HALF_W + 2, 0.02), edge));
-  for (let y = CY + R_IN, row = 0; y < CY + R_OUT; y += 5, row++) {
-    for (let c = 0; c < 3; c++) {
-      const col = (row + c) % 2 ? '#17142B' : '#FFF8E8';
-      P.decals.push(makePoly(rect(FINISH_X - 7 + c * 5, y, FINISH_X - 2 + c * 5, y + 5, 0.03), hexRgb(col)));
-    }
-  }
-
-  const red = night(COL.wallDark);
-  const cream = night(COL.wallLight, 0.9);
-  for (let s = 0, k = 0; s < TRACK_LEN; s += 18, k++) {
-    const a = pointAt(s, HALF_W);
-    const b = pointAt(s + 18, HALF_W);
-    P.solids.push(makePoly(wall(a.x, a.y, b.x, b.y, 0, WALL_H), k % 2 ? cream : red));
-  }
-}
-
 /** The infield island: grass on top, a kerb all round. */
 function ovalIsland(P: Parts): void {
   const hull = islandHull();
@@ -164,36 +123,6 @@ function ovalIsland(P: Parts): void {
       lip.back = grass;
       P.solids.push(low, lip);
     });
-  }
-}
-
-function ovalMasts(P: Parts): void {
-  const mast = (x: number, y: number, fx: number, fy: number) => {
-    box(P.solids, x - 1.5, y - 1.5, x + 1.5, y + 1.5, 0, 78, hexRgb('#2a2834'), hexRgb('#2a2834'));
-    const lx = x + fx * 1.6;
-    const ly = y + fy * 1.6;
-    P.solids.push(makePoly(wall(lx + fy * 6, ly - fx * 6, lx - fy * 6, ly + fx * 6, 78, 84), hexRgb('#FFF4D0'), true));
-    P.glows.push({ x: lx, y: ly, z: 81, r: 22, color: '255,214,140', flood: true });
-  };
-  for (let x = CX_L; x <= CX_R; x += 200) {
-    mast(x, CY - R_OUT - 12, 0, 1);
-    mast(x + 100, CY + R_OUT + 14, 0, -1);
-  }
-  for (const cx of [CX_L, CX_R]) {
-    const s = cx === CX_R ? 1 : -1;
-    for (let a = -1.2; a <= 1.21; a += 0.6) {
-      const ux = s * Math.cos(a);
-      const uy = Math.sin(a);
-      mast(cx + ux * (R_OUT + 14), CY + uy * (R_OUT + 14), -ux, -uy);
-    }
-  }
-  for (let x = CX_L; x <= CX_R; x += 200) {
-    P.pools.push({ x, y: CY - RC, r: 70, z: 0.015 });
-    P.pools.push({ x: x + 100, y: CY + RC, r: 70, z: 0.015 });
-  }
-  for (const cx of [CX_L, CX_R]) {
-    const s = cx === CX_R ? 1 : -1;
-    for (let a = -1.2; a <= 1.21; a += 0.6) P.pools.push({ x: cx + s * Math.cos(a) * RC, y: CY + Math.sin(a) * RC, r: 62, z: 0.015 });
   }
 }
 
@@ -267,14 +196,18 @@ const OVAL_PIT: PitScene = {
   ],
 };
 
+const NO_KERBS = [0, 0] as const;
+
 export const OVAL_SPEC: SceneSpec = {
   track: OVAL,
+  kerbs: () => NO_KERBS,
+  // The outside wall all round; the infield island's own kerb is the inside edge.
+  barrier: (side) => (side > 0 ? 'wall' : 'none'),
   pit: OVAL_PIT,
   paddock: { dx: 0, dy: 0, z: ISLAND_H },
+  look: { horizon: '#0B0A16', shoulder: COL.grass, lamp: '255,214,140', mastStep: 75 },
   ground: ovalGround,
-  ribbon: ovalRibbon,
   base: ovalIsland,
-  masts: ovalMasts,
   extras(P) {
     heliport(P);
     pylon(P);
