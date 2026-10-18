@@ -316,7 +316,7 @@ describe('cockpit car order between cars', () => {
   }
 
   it('orders a pack of five without the cycle that pairwise nudges ran into', async () => {
-    const { orderCarsAgainstCars } = await import('../src/gfx/fpv/view');
+    const { orderCarsAgainstCars } = await import('../src/gfx/fpv/drawList');
     const { Camera } = await import('../src/gfx/fpv/engine');
     const c = new Camera();
     c.set(0, 0, 9.2, 0);
@@ -333,7 +333,7 @@ describe('cockpit car order between cars', () => {
   });
 
   it('leaves no wrong visible overlap in random packs, for any camera yaw, the mirror and wall bounds', async () => {
-    const { orderCarsAgainstCars } = await import('../src/gfx/fpv/view');
+    const { orderCarsAgainstCars } = await import('../src/gfx/fpv/drawList');
     const { Camera } = await import('../src/gfx/fpv/engine');
     let seed = 12345;
     const rnd = () => {
@@ -414,7 +414,7 @@ describe('cockpit car order between cars', () => {
   });
 
   it('keeps two cars behind the same wall in their order', async () => {
-    const { orderCarsAgainstCars } = await import('../src/gfx/fpv/view');
+    const { orderCarsAgainstCars } = await import('../src/gfx/fpv/drawList');
     const { Camera } = await import('../src/gfx/fpv/engine');
     const c = new Camera();
     c.set(0, 0, 9.2, 0);
@@ -428,7 +428,7 @@ describe('cockpit car order between cars', () => {
   });
 
   it('does not order a rival that wraps round the camera', async () => {
-    const { orderCarsAgainstCars } = await import('../src/gfx/fpv/view');
+    const { orderCarsAgainstCars } = await import('../src/gfx/fpv/drawList');
     const { Camera } = await import('../src/gfx/fpv/engine');
     const c = new Camera();
     c.set(0, 0, 9.2, 0);
@@ -443,7 +443,7 @@ describe('cockpit car order between cars', () => {
   });
 
   it('never moves a car behind a wall it stands in front of', async () => {
-    const { orderCarsAgainstCars } = await import('../src/gfx/fpv/view');
+    const { orderCarsAgainstCars } = await import('../src/gfx/fpv/drawList');
     const { Camera } = await import('../src/gfx/fpv/engine');
     const c = new Camera();
     c.set(0, 0, 9.2, 0);
@@ -460,7 +460,7 @@ describe('cockpit car order between cars', () => {
   });
 
   it('reorders draw items of side-by-side cars that centre depth gets wrong', async () => {
-    const { orderCarsAgainstCars } = await import('../src/gfx/fpv/view');
+    const { orderCarsAgainstCars } = await import('../src/gfx/fpv/drawList');
     const { Camera } = await import('../src/gfx/fpv/engine');
     const c = new Camera();
     c.set(0, 0, 9.2, 0);

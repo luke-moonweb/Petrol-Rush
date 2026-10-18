@@ -1,23 +1,24 @@
-import { CONFIG } from '../../config';
 import type { Box } from '../../layout';
 import type { Car } from '../../race/car';
-import { oilRadius } from '../../race/oil';
 import type { Race } from '../../race/race';
 import { NO_WARN, type Warn } from '../../race/warnings';
-import { createRng } from '../../sim/rng';
-import { wrapAngle } from '../../track/common';
-import { CX_L, CX_R, CY, PIT_DRIVE_Y, PIT_X0, PIT_X1, R_IN, R_OUT, WORLD_W } from '../../track/oval';
 import { OVAL } from '../../track/ovalTrack';
-import { PR } from '../../ui/theme';
 import type { Particles } from '../particles';
-import { CAR_SCHEMES, driverName } from '../vehicles';
+import { driverName } from '../vehicles';
 import { trackCanvas } from '../world';
-import { carPaintOrder, drawCarModel, footprintAngles, setCarPixelScale } from './cars';
-import { type CabinView, cockpitUsed, drawCockpit, prewarmCockpit, reducedMotion, type Streak, wheelRadius } from './cockpit';
-import { Camera, clipProject, drawGlowAt, drawPoly, FOG_LEVELS, fillProjected, NEAR, type Poly, visible } from './engine';
+import { drawCarModel, setCarPixelScale } from './cars';
+import { type CabinView, cockpitUsed, drawCockpit, prewarmCockpit, reducedMotion, wheelRadius } from './cockpit';
+import { addItem, byDepth, CAR_REACH, type Item, items, NO_ITEMS, orderCarsAgainstCars, orderCarsAgainstWalls } from './drawList';
+import { Camera, drawPoly, FOG_LEVELS, NEAR, visible } from './engine';
 import { setPylonNames } from './landmarks';
-import { buildScene, type Glow, type Scene } from './scene';
-import { type Billboard, drawBillboard, drawTexQuad, type TexQuad } from './texture';
+import { drawMinimap } from './minimap';
+import { buildScene, type Scene } from './scene';
+import { drawSky, GROUND, SKY_HORIZON } from './sky';
+import { drawPuff } from './smoke';
+import { floodStreaks } from './streaks';
+import { drawGlow, drawOilSlicks, drawPools } from './surface';
+import { drawBillboard, drawTexQuad } from './texture';
+import { cabinMs, carsMs, mirrorMs, sample } from './timing';
 
 export interface CockpitFrame {
   race: Race;
@@ -44,17 +45,7 @@ export const MIRROR_RISE = 1;
 // Largest vertical speed shake of the cockpit camera (world units).
 export const SHAKE_AMP = 0.12;
 const MIRROR_FAR = 600;
-const SKY_TOP = '#05040C';
-const SKY_HORIZON = '#221C3C';
-const GROUND = '#0B0A16';
-const CAR_REACH = 26;
-const OIL_MIN_PX = 6;
 const OWN_SMOKE = 15;
-const MAX_PUFF_PX = 60;
-const FLOOD_DEPTH = 176;
-const FLOOD_SIDE = 140;
-const MAX_STREAKS = 3;
-const OVERLAY_SAMPLES = 60;
 
 let scene: Scene | null = null;
 const cam = new Camera();
@@ -67,329 +58,9 @@ const lodMirror = new Int8Array(64);
 // Time spent drawing rival cars this frame, main view and mirror together.
 let carMs = 0;
 
-interface Star {
-  a: number;
-  e: number;
-  size: number;
-}
-interface Tower {
-  a0: number;
-  a1: number;
-  e: number;
-  lit: number;
-}
-let stars: Star[] = [];
-let skyline: Tower[] = [];
-
-function initSky(): void {
-  const rng = createRng(1337);
-  stars = Array.from({ length: 140 }, () => ({ a: rng() * Math.PI * 2, e: 0.08 + rng() * 0.7, size: rng() < 0.15 ? 2 : 1 }));
-  skyline = [];
-  for (let a = 0; a < Math.PI * 2; ) {
-    const w = 0.03 + rng() * 0.07;
-    skyline.push({ a0: a, a1: a + w, e: 0.02 + rng() * 0.07, lit: rng() });
-    a += w + rng() * 0.02;
-  }
-}
-
-const wx = new Float32Array(64);
-const wy = new Float32Array(64);
-const wz = new Float32Array(64);
-
-function screenX(c: Camera, rel: number): number {
-  return c.ox + c.flip * c.focal * Math.tan(rel);
-}
-
-function drawSky(g: CanvasRenderingContext2D, c: Camera, w: number, yaw: number): void {
-  const sky = g.createLinearGradient(0, 0, 0, c.oy);
-  sky.addColorStop(0, SKY_TOP);
-  sky.addColorStop(1, SKY_HORIZON);
-  g.fillStyle = sky;
-  g.fillRect(0, 0, w, c.oy);
-  const lim = Math.atan(c.halfW / c.focal) + 0.05;
-  g.fillStyle = 'rgba(255,255,255,0.6)';
-  for (const st of stars) {
-    const rel = wrapAngle(st.a - yaw);
-    if (Math.abs(rel) > lim) continue;
-    g.fillRect(screenX(c, rel), c.oy - c.focal * Math.tan(st.e), st.size, st.size);
-  }
-  for (const t of skyline) {
-    const r0 = wrapAngle(t.a0 - yaw);
-    const r1 = r0 + (t.a1 - t.a0);
-    if (r1 < -lim || r0 > lim) continue;
-    const xa = screenX(c, Math.max(-lim, r0));
-    const xb = screenX(c, Math.min(lim, r1));
-    const y = c.oy - c.focal * Math.tan(t.e);
-    g.fillStyle = '#100E1E';
-    g.fillRect(Math.min(xa, xb), y, Math.abs(xb - xa), c.oy - y + 1);
-    if (t.lit > 0.55) {
-      g.fillStyle = 'rgba(255,200,110,0.35)';
-      g.fillRect(Math.min(xa, xb) + 2, y + 3, 2, 2);
-    }
-  }
-  g.fillStyle = GROUND;
-  g.fillRect(0, c.oy, w, 10_000);
-}
-
-function drawGlow(g: CanvasRenderingContext2D, c: Camera, gl: Glow): void {
-  drawGlowAt(g, c, gl.x, gl.y, gl.z, gl.r, gl.color);
-}
-
 function drawCar(g: CanvasRenderingContext2D, c: Camera, it: Item): void {
   const car = it.car!;
   drawCarModel(g, c, car.colorIdx, it.x!, it.y!, it.h!, it.dist!, car.braking, c === mirrorCam ? lodMirror : lodMain);
-}
-
-// Centre depth alone can paint a car over the one beside it. Cars whose footprints overlap as seen from the
-// camera are ordered by a vertical plane between the footprints (the car on the camera's side is drawn
-// later). For disjoint convex footprints that relation has no cycles, so a topological sort settles it in
-// one pass. A car is never moved out of the window its walls allow (walls win over cars).
-const carItems: Item[] = [];
-const CAR_PAIR_DIST = 80;
-const MAX_CARS = 64;
-const drawsBefore = new Uint8Array(MAX_CARS * MAX_CARS);
-const indegree = new Int32Array(MAX_CARS);
-const placed = new Uint8Array(MAX_CARS);
-const angLo = new Float64Array(MAX_CARS);
-const angHi = new Float64Array(MAX_CARS);
-const startD = new Float64Array(MAX_CARS);
-const ORDER_GAP = 0.01;
-
-export function orderCarsAgainstCars(c: Camera, list: Item[]): void {
-  carItems.length = 0;
-  for (const it of list) if (it.car && carItems.length < MAX_CARS) carItems.push(it);
-  const n = carItems.length;
-  if (n < 2) return;
-  for (let i = 0; i < n; i++) {
-    const it = carItems[i]!;
-    footprintAngles(c, it.x!, it.y!, it.h!, angLo, angHi, i);
-    drawsBefore.fill(0, i * MAX_CARS, i * MAX_CARS + n);
-    indegree[i] = 0;
-    placed[i] = 0;
-    startD[i] = it.d;
-  }
-  let edges = 0;
-  for (let i = 0; i < n; i++) {
-    const a = carItems[i]!;
-    for (let j = i + 1; j < n; j++) {
-      const b = carItems[j]!;
-      if (Math.abs(a.x! - b.x!) > CAR_PAIR_DIST || Math.abs(a.y! - b.y!) > CAR_PAIR_DIST) continue;
-      // An interval wider than half a turn wraps round the camera (a rival on top of the player): no order.
-      if (angHi[i]! - angLo[i]! > Math.PI || angHi[j]! - angLo[j]! > Math.PI) continue;
-      if (angLo[i]! >= angHi[j]! || angLo[j]! >= angHi[i]!) continue;
-      const o = carPaintOrder(a.x!, a.y!, a.h!, b.x!, b.y!, b.h!, c.x, c.y);
-      if (o > 0) {
-        drawsBefore[i * MAX_CARS + j] = 1;
-        indegree[j]!++;
-        edges++;
-      } else if (o < 0) {
-        drawsBefore[j * MAX_CARS + i] = 1;
-        indegree[i]!++;
-        edges++;
-      }
-    }
-  }
-  if (edges === 0) return;
-  // Kahn's algorithm. Items are drawn in decreasing d, so a car gets a d below every car drawn before it.
-  for (let step = 0; step < n; step++) {
-    let next = -1;
-    for (let i = 0; i < n; i++) {
-      if (placed[i] || indegree[i]! > 0) continue;
-      if (next < 0 || carItems[i]!.d > carItems[next]!.d) next = i;
-    }
-    if (next < 0) {
-      // A cycle (should not happen for disjoint footprints): fall back to the depths before this pass.
-      for (let i = 0; i < n; i++) carItems[i]!.d = startD[i]!;
-      return;
-    }
-    placed[next] = 1;
-    const it = carItems[next]!;
-    let firstBefore = Infinity;
-    for (let p = 0; p < n; p++) if (drawsBefore[p * MAX_CARS + next]) firstBefore = Math.min(firstBefore, carItems[p]!.d);
-    let d = Math.min(it.d, firstBefore - ORDER_GAP);
-    const lo = it.wallLo;
-    if (lo !== undefined && d <= lo) {
-      // Stay strictly inside the window between the wall and the cars drawn before; only when that window is
-      // empty does the wall win.
-      d = firstBefore > lo && firstBefore !== Infinity ? (lo + firstBefore) / 2 : lo + ORDER_GAP;
-    }
-    it.d = d;
-    for (let q = 0; q < n; q++) if (drawsBefore[next * MAX_CARS + q]) indegree[q]!--;
-  }
-}
-
-function drawOilSlicks(g: CanvasRenderingContext2D, c: Camera, race: Race, far: number): void {
-  for (const o of race.oil) {
-    const d = c.dist(o.x, o.y);
-    if (d > far || !c.inView(o.x, o.y, 20)) continue;
-    const r = oilRadius(o);
-    const fade = Math.max(0, Math.min(1, (CONFIG.OIL_LIFE_S - o.age) / CONFIG.OIL_FADE_S));
-    const ring = (k: number, style: string) => {
-      for (let i = 0; i < 16; i++) {
-        const a = (i / 16) * Math.PI * 2;
-        wx[i] = o.x + Math.cos(a) * r * k;
-        wy[i] = o.y + Math.sin(a) * r * k * 0.8;
-        wz[i] = 0.05;
-      }
-      fillProjected(g, clipProject(c, wx, wy, wz, 16), style);
-    };
-    const grow = Math.max(1, (OIL_MIN_PX * d) / (c.focal * r * 0.8));
-    const rr = (k: number, style: string) => ring(k * Math.min(grow, 3), style);
-    g.globalAlpha = fade;
-    rr(1, 'rgba(4,3,8,0.9)');
-    g.globalCompositeOperation = 'lighter';
-    rr(0.9, 'rgba(200,120,220,0.22)');
-    rr(0.7, 'rgba(70,180,170,0.3)');
-    rr(0.35, 'rgba(230,180,80,0.18)');
-    g.globalCompositeOperation = 'source-over';
-    g.globalAlpha = 1;
-    const glint = Math.max(0, Math.min(1, (d - 40) / 40));
-    if (glint > 0) {
-      g.globalAlpha = glint * fade;
-      drawGlow(g, c, { x: o.x, y: o.y, z: 0.6, r: Math.min(14, 4 + d * 0.012), color: '127,227,217' });
-      g.globalAlpha = 1;
-    }
-  }
-}
-
-function drawPools(g: CanvasRenderingContext2D, c: Camera, sc: Scene, far: number, onIsland: boolean): void {
-  g.globalCompositeOperation = 'lighter';
-  for (const p of sc.pools) {
-    if (p.z > 1 !== onIsland) continue;
-    const d = c.dist(p.x, p.y);
-    if (d - p.r > far || !c.inView(p.x, p.y, p.r)) continue;
-    const fade = d > c.fogNear ? Math.max(0, 1 - (d - c.fogNear) / (far - c.fogNear)) : 1;
-    g.globalAlpha = 0.045 * fade;
-    for (const k of POOL_RINGS) {
-      for (let i = 0; i < 16; i++) {
-        const t = (i / 16) * Math.PI * 2;
-        wx[i] = p.x + Math.cos(t) * p.r * k;
-        wy[i] = p.y + Math.sin(t) * p.r * k;
-        wz[i] = p.z;
-      }
-      fillProjected(g, clipProject(c, wx, wy, wz, 16), 'rgb(255,214,140)');
-    }
-  }
-  g.globalAlpha = 1;
-  g.globalCompositeOperation = 'source-over';
-}
-
-interface Puff {
-  x: number;
-  y: number;
-  z: number;
-  r: number;
-  a: number;
-  spark: boolean;
-}
-
-interface Item {
-  d: number;
-  poly?: Poly;
-  car?: Car;
-  x?: number;
-  y?: number;
-  h?: number;
-  dist?: number;
-  // A car must stay drawn before (d above) this wall item's d.
-  wallLo?: number;
-  glow?: Glow;
-  sign?: TexQuad;
-  bill?: Billboard;
-  puff?: Puff;
-  // Pooled storage behind `puff`.
-  puffData: Puff;
-}
-
-// Draw list, reused every frame (the mirror reuses it after the main view): no per-frame garbage.
-const items: Item[] = [];
-const itemPool: Item[] = [];
-const walls: Item[] = [];
-const NO_ITEMS: never[] = [];
-const byDepth = (a: Item, b: Item) => b.d - a.d;
-
-function addItem(d: number): Item {
-  let it = itemPool[items.length];
-  if (!it) {
-    it = { d, puffData: { x: 0, y: 0, z: 0, r: 0, a: 0, spark: false } };
-    itemPool.push(it);
-  }
-  it.d = d;
-  it.poly = undefined;
-  it.car = undefined;
-  it.glow = undefined;
-  it.sign = undefined;
-  it.bill = undefined;
-  it.puff = undefined;
-  items.push(it);
-  return it;
-}
-
-// Centroid depth alone misplaces a car next to a wall piece. For walls close to a car, the side of the
-// wall plane the car is on (compared with the camera) decides which of the two must be drawn first.
-function orderCarsAgainstWalls(c: Camera, items: Item[]): void {
-  walls.length = 0;
-  for (const it of items) if (it.poly?.plane) walls.push(it);
-  for (const it of items) {
-    if (!it.car) continue;
-    const x = it.x!;
-    const y = it.y!;
-    let front = Infinity;
-    let behind = -Infinity;
-    for (const w of walls) {
-      const p = w.poly!;
-      const reach = p.radius + CAR_REACH;
-      if (Math.abs(p.cx - x) > reach || Math.abs(p.cy - y) > reach) continue;
-      const [nx, ny, k] = p.plane!;
-      const sCar = nx * x + ny * y - k;
-      const sCam = nx * c.x + ny * c.y - k;
-      if (sCar * sCam >= 0) front = Math.min(front, w.d);
-      else behind = Math.max(behind, w.d);
-    }
-    if (front !== Infinity) it.d = Math.min(it.d, front - 0.01);
-    if (behind !== -Infinity && behind > it.d) it.d = behind + 0.01;
-    // The car pass may lower d but never down to a wall the car stands in front of.
-    it.wallLo = behind === -Infinity ? undefined : behind;
-  }
-}
-
-let smoke: HTMLCanvasElement | null = null;
-function smokeSprite(): HTMLCanvasElement {
-  if (!smoke) {
-    smoke = document.createElement('canvas');
-    smoke.width = 64;
-    smoke.height = 64;
-    const g = smoke.getContext('2d')!;
-    const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
-    gr.addColorStop(0, 'rgba(138,134,160,1)');
-    gr.addColorStop(0.5, 'rgba(138,134,160,0.5)');
-    gr.addColorStop(1, 'rgba(138,134,160,0)');
-    g.fillStyle = gr;
-    g.fillRect(0, 0, 64, 64);
-  }
-  return smoke;
-}
-
-function drawPuff(g: CanvasRenderingContext2D, c: Camera, p: Puff): void {
-  const dx = p.x - c.x;
-  const dy = p.y - c.y;
-  const z = dx * c.cos + dy * c.sin;
-  if (z < NEAR * 2) return;
-  const k = c.focal / z;
-  const sx = c.ox + c.flip * (-dx * c.sin + dy * c.cos) * k;
-  const sy = c.oy - (p.z - c.z) * k;
-  const r = Math.min(MAX_PUFF_PX, Math.max(p.spark ? 1 : 0.5, p.r * k));
-  g.globalAlpha = p.a;
-  if (p.spark) {
-    g.globalCompositeOperation = 'lighter';
-    g.fillStyle = '#FFD040';
-    g.fillRect(sx - r / 2, sy - r / 2, r, r);
-    g.globalCompositeOperation = 'source-over';
-  } else {
-    g.globalAlpha = p.a * 0.6;
-    g.drawImage(smokeSprite(), sx - r, sy - r, r * 2, r * 2);
-  }
-  g.globalAlpha = 1;
 }
 
 function renderWorld(g: CanvasRenderingContext2D, c: Camera, f: CockpitFrame, cheap: boolean): void {
@@ -499,91 +170,6 @@ function addPuff(spark: boolean, x: number, y: number, t: number, size: number):
   it.puff = p;
 }
 
-const MAP_H = CY + R_OUT + 12;
-const POOL_RINGS = [1, 0.6];
-
-function stadiumPath(g: CanvasRenderingContext2D, r: number, kx: number, ky: number, x0: number, y0: number): void {
-  g.beginPath();
-  for (let a = -90; a <= 270; a += 10) {
-    const t = (a * Math.PI) / 180;
-    const cx = a <= 90 ? CX_R : CX_L;
-    const x = x0 + (cx + r * Math.cos(t)) * kx;
-    const y = y0 + (CY + r * Math.sin(t)) * ky;
-    if (a === -90) g.moveTo(x, y);
-    else g.lineTo(x, y);
-  }
-  g.closePath();
-}
-
-function drawMinimap(g: CanvasRenderingContext2D, w: number, h: number, wheelR: number, f: CockpitFrame): void {
-  const pad = 6;
-  const room = w / 2 - wheelR - 16;
-  const mw = Math.round(Math.max(90, Math.min(340, w * 0.24, room - pad * 2)));
-  const mh = Math.round(Math.max(mw / 4.5, Math.min(h * 0.1, mw / 3)));
-  const x0 = w - mw - pad - 8;
-  const y0 = h - mh - pad - 8;
-  const kx = mw / WORLD_W;
-  const ky = mh / MAP_H;
-  g.save();
-  g.fillStyle = 'rgba(10,9,18,0.88)';
-  g.beginPath();
-  g.roundRect(x0 - pad, y0 - pad, mw + pad * 2, mh + pad * 2, 6);
-  g.fill();
-  g.strokeStyle = 'rgba(18,181,166,0.55)';
-  g.lineWidth = 1;
-  g.stroke();
-  g.clip();
-  stadiumPath(g, R_OUT, kx, ky, x0, y0);
-  g.fillStyle = '#3A3946';
-  g.fill();
-  g.strokeStyle = 'rgba(255,248,232,0.8)';
-  g.stroke();
-  stadiumPath(g, R_IN, kx, ky, x0, y0);
-  g.fillStyle = 'rgba(10,9,18,1)';
-  g.fill();
-  g.strokeStyle = 'rgba(255,248,232,0.8)';
-  g.stroke();
-  g.strokeStyle = 'rgba(127,227,217,0.6)';
-  g.lineWidth = Math.max(1, mh * 0.04);
-  g.beginPath();
-  g.moveTo(x0 + PIT_X0 * kx, y0 + PIT_DRIVE_Y * ky);
-  g.lineTo(x0 + PIT_X1 * kx, y0 + PIT_DRIVE_Y * ky);
-  g.stroke();
-  g.fillStyle = '#FFF8E8';
-  g.fillRect(x0 + (WORLD_W / 2) * kx - 1, y0 + (CY + R_IN) * ky, 2, (R_OUT - R_IN) * ky);
-
-  const p = f.race.player;
-  const px = x0 + f.ix(p) * kx;
-  const py = y0 + f.iy(p) * ky;
-  // On the squashed map an angle is mapped through the axis scales.
-  const mapAngle = (a: number) => Math.atan2(Math.sin(a) * ky, Math.cos(a) * kx);
-  const ang = mapAngle(f.ih(p));
-  g.fillStyle = 'rgba(127,227,217,0.25)';
-  g.beginPath();
-  g.moveTo(px, py);
-  g.arc(px, py, mh * 0.6, ang - 0.5, ang + 0.5);
-  g.closePath();
-  g.fill();
-  for (const car of f.race.cars) {
-    if (car === p) continue;
-    g.fillStyle = car.finished ? '#8A86A0' : CAR_SCHEMES[car.colorIdx % CAR_SCHEMES.length]!.body;
-    g.fillRect(x0 + f.ix(car) * kx - 2, y0 + f.iy(car) * ky - 2, 4, 4);
-  }
-  g.translate(px, py);
-  g.rotate(ang);
-  g.fillStyle = PR.teal;
-  g.strokeStyle = '#0A0910';
-  g.lineWidth = 1.5;
-  g.beginPath();
-  g.moveTo(7, 0);
-  g.lineTo(-4.5, -4.5);
-  g.lineTo(-4.5, 4.5);
-  g.closePath();
-  g.stroke();
-  g.fill();
-  g.restore();
-}
-
 function drawMirror(g: CanvasRenderingContext2D, w: number, h: number, f: CockpitFrame, ex: number, ey: number, yaw: number): void {
   const mw = Math.round(Math.max(140, Math.min(420, w * 0.26)));
   const mh = Math.round(mw * 0.25);
@@ -619,60 +205,6 @@ function drawMirror(g: CanvasRenderingContext2D, w: number, h: number, f: Cockpi
   g.beginPath();
   g.roundRect(mx, my, mw, mh, mh * 0.35);
   g.stroke();
-}
-
-const streaks: Streak[] = [];
-const streakPool: Streak[] = Array.from({ length: MAX_STREAKS }, () => ({ x: 0, k: 0 }));
-
-// The strongest floodlight masts just ahead, strongest first. The returned list is reused every frame.
-export function floodStreaks(c: Camera, glows: Glow[]): Streak[] {
-  streaks.length = 0;
-  for (const gl of glows) {
-    if (!gl.flood) continue;
-    const dx = gl.x - c.x;
-    const dy = gl.y - c.y;
-    const d = dx * c.cos + dy * c.sin;
-    const lat = -dx * c.sin + dy * c.cos;
-    if (d <= 0 || d >= FLOOD_DEPTH || Math.abs(lat) >= FLOOD_SIDE) continue;
-    const t = 1 - d / FLOOD_DEPTH;
-    const k = t * t * (3 - 2 * t);
-    // Insert into the sorted top list, dropping the weakest when it is full.
-    let i = streaks.length;
-    if (i === MAX_STREAKS) {
-      if (k <= streaks[i - 1]!.k) continue;
-      i--;
-    } else streaks.push(streakPool[i]!);
-    const slot = streaks[i]!;
-    while (i > 0 && streaks[i - 1]!.k < k) {
-      streaks[i] = streaks[i - 1]!;
-      i--;
-    }
-    streaks[i] = slot;
-    slot.x = c.ox + (c.focal * lat) / d;
-    slot.k = k;
-  }
-  return streaks;
-}
-
-const cabinMs: number[] = [];
-const mirrorMs: number[] = [];
-const carsMs: number[] = [];
-const sortScratch: number[] = [];
-
-function sample(list: number[], ms: number): void {
-  list.push(ms);
-  if (list.length > OVERLAY_SAMPLES) list.shift();
-}
-
-function median(list: number[]): number {
-  sortScratch.length = 0;
-  for (const v of list) sortScratch.push(v);
-  sortScratch.sort((a, b) => a - b);
-  return sortScratch[Math.floor(sortScratch.length / 2)] ?? 0;
-}
-
-export function cockpitOverlayMs(): { cabin: number; mirror: number; cars: number } {
-  return { cabin: median(cabinMs), mirror: median(mirrorMs), cars: median(carsMs) };
 }
 
 // The 3D scene takes a few hundred ms to build; the race state calls this during the start lights.
@@ -712,7 +244,6 @@ const cabinIn: CabinView = {
 };
 
 export function drawCockpitView(g: CanvasRenderingContext2D, f: CockpitFrame): void {
-  if (stars.length === 0) initSky();
   const standings = f.race.standings();
   updatePylon(standings);
   const v = f.view;

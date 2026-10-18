@@ -26,4 +26,51 @@ describe('module structure', () => {
       .map(([path]) => path);
     expect(offenders).toEqual([]);
   });
+
+  // The simulation (race, track, sim, config) is the deterministic core the golden masters pin. It
+  // never reaches into the presentation, so a change only in gfx / ui / audio / states cannot change
+  // how a race runs (npm test is enough there; see CLAUDE.md).
+  const SIM = ['../src/race/', '../src/track/', '../src/sim/', '../src/config.ts'];
+  const inSim = (path: string) => SIM.some((p) => path.startsWith(p));
+  /** '../src/race/ai.ts' + '../track/common' → '../src/track/common.ts' */
+  const resolve = (from: string, rel: string) => {
+    const parts = from.split('/').slice(0, -1);
+    for (const p of rel.split('/')) {
+      if (p === '..') parts.pop();
+      else if (p !== '.') parts.push(p);
+    }
+    return `${parts.join('/')}.ts`;
+  };
+  const importsOf = (path: string, code: string) => [...code.matchAll(/from '(\.{1,2}\/[^']+)'/g)].map((m) => resolve(path, m[1]!));
+
+  it('the simulation imports nothing from the presentation', () => {
+    const offenders = Object.entries(SOURCES)
+      .filter(([path]) => inSim(path))
+      .flatMap(([path, code]) =>
+        importsOf(path, code)
+          .filter((dep) => !inSim(dep))
+          .map((dep) => `${path} -> ${dep}`),
+      );
+    expect(offenders).toEqual([]);
+  });
+
+  it('the simulation has no randomness, clock or DOM of its own (only the seeded RNG; saving a Grand Prix may use localStorage)', () => {
+    const offenders = Object.entries(SOURCES)
+      .filter(([path]) => inSim(path))
+      .flatMap(([path, code]) =>
+        [...code.matchAll(/Math\.random|Date\.now|new Date|performance\.now|\bdocument\.|\bwindow\./g)].map((m) => `${path}: ${m[0]}`),
+      );
+    expect(offenders).toEqual([]);
+  });
+
+  it('only the screens (states) and main import the screens', () => {
+    const offenders = Object.entries(SOURCES)
+      .filter(([path]) => !path.startsWith('../src/states/') && path !== '../src/main.ts')
+      .flatMap(([path, code]) =>
+        importsOf(path, code)
+          .filter((dep) => dep.startsWith('../src/states/'))
+          .map((dep) => `${path} -> ${dep}`),
+      );
+    expect(offenders).toEqual([]);
+  });
 });
