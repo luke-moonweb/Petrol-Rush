@@ -19,19 +19,30 @@ export const PLAN = {
   LINE_MARGIN: 6,
   /** Share of the width the racing line uses: the slowest reaction draw to the fastest. */
   LINE_USE: [0.75, 1] as [number, number],
+  /** The difficulty never takes a driver's grip fraction over this (over the faded grip the car slides). */
+  GRIP_FRAC_MAX: 0.985,
 };
 
-/** Share of the width an AI driver's racing line uses, from the existing reaction draw (no new RNG draw). */
+/**
+ * Share of the width an AI driver's racing line uses, from the existing reaction draw (no new RNG draw),
+ * times the difficulty's factor.
+ */
 export function lineUse(car: Car): number {
   const [r0, r1] = CONFIG.AI_REACTION_S;
-  const t = Math.max(0, Math.min(1, (car.ai.reaction - r0) / (r1 - r0)));
+  // (ai.reaction carries the difficulty's factor: the drawn reaction sets the precision)
+  const drawn = car.ai.reaction / car.ai.level.reaction;
+  const t = Math.max(0, Math.min(1, (drawn - r0) / (r1 - r0)));
   const [u0, u1] = PLAN.LINE_USE;
-  return u1 - (u1 - u0) * t;
+  return Math.min(1, (u1 - (u1 - u0) * t) * car.ai.level.line);
 }
 
-/** Grip fraction an AI driver uses, from the existing turnMph draw (141..149), so the race RNG order is unchanged. */
+/**
+ * Grip fraction an AI driver uses, from the existing turnMph draw (141..149), so the race RNG order is
+ * unchanged, times the difficulty's factor.
+ */
 export function gripFrac(car: Car): number {
-  return (car.ai.turnMph / 150) ** 2;
+  const f = (car.ai.turnMph / 150) ** 2;
+  return car.ai.level.grip === 1 ? f : Math.min(PLAN.GRIP_FRAC_MAX, f * car.ai.level.grip);
 }
 
 /** Cornering speed (mph) on curvature k at lateral offset d, using grip fraction f. */
@@ -44,9 +55,9 @@ export function cornerMph(k: number, d: number, f: number): number {
  * Highest speed (mph) a car at s can carry and still slow down in time for every corner ahead,
  * on line dNow close by and dAhead further on, at grip fraction f.
  */
-export function planSpeed(table: CurvatureTable, s: number, dNow: number, dAhead: number, f: number, mph: number): number {
+export function planSpeed(table: CurvatureTable, s: number, dNow: number, dAhead: number, f: number, mph: number, brake = 1): number {
   const pxm = CONFIG.PX_PER_MPH;
-  const b = CONFIG.BRAKE_MPH_S * PLAN.BRAKE_FRAC;
+  const b = CONFIG.BRAKE_MPH_S * PLAN.BRAKE_FRAC * brake;
   const v = Math.max(0, mph);
   const range = Math.max(PLAN.LOOK_MIN, (v * v * pxm) / (2 * b) + PLAN.LOOK_MARGIN);
   const len = table.len;
@@ -68,9 +79,9 @@ export function planSpeed(table: CurvatureTable, s: number, dNow: number, dAhead
 }
 
 /** planSpeed on the racing line: every corner's line arc ahead, for a driver using `use` of the width. */
-export function planLineSpeed(line: RacingLine, s: number, use: number, f: number, mph: number): number {
+export function planLineSpeed(line: RacingLine, s: number, use: number, f: number, mph: number, brake = 1): number {
   const pxm = CONFIG.PX_PER_MPH;
-  const b = CONFIG.BRAKE_MPH_S * PLAN.BRAKE_FRAC;
+  const b = CONFIG.BRAKE_MPH_S * PLAN.BRAKE_FRAC * brake;
   const v = Math.max(0, mph);
   const range = Math.max(PLAN.LOOK_MIN, (v * v * pxm) / (2 * b) + PLAN.LOOK_MARGIN);
   const len = line.len;

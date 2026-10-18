@@ -1,4 +1,5 @@
 import { NUM_SECTORS, type Track } from '../track/common';
+import type { Level, Persona } from './persona';
 
 export type PitPhase = 'none' | 'entering' | 'fueling' | 'exiting' | 'parked';
 
@@ -37,6 +38,23 @@ export interface AiState {
   refuelledThisLap: boolean;
   /** On the racing line (no car alongside), not on a lane. */
   onLine: boolean;
+  /** The driver's personality draw (0..1) and the personality it gives (race/persona.ts). */
+  temper: number;
+  persona: Persona;
+  /** The difficulty level the driver races at. */
+  level: Level;
+  /** Blocker: the inside lane held through the next corner (null when not blocking). */
+  blockLane: number | null;
+  /** Blocker: the held corner has started (the block ends where it does). */
+  blockIn: boolean;
+  /** Turn-in slide (ai.ts planSlide): 0 none, 1 planned for the next corner, 2 sliding in, 3 catching the rear. */
+  slide: 0 | 1 | 2 | 3;
+  /** Seconds into the current slide phase. */
+  slideTime: number;
+  /** The way the slid corner turns (+1 / -1). */
+  slideDir: number;
+  /** Start (s) of the corner the slide was decided for (one decision per corner). */
+  slideRun: number;
 }
 
 export interface Car {

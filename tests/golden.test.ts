@@ -15,13 +15,13 @@ describe('driving model golden master', () => {
   });
 
   it('20 cars, seed 99, after 20 s', () => {
-    expect(hashState(runFor(99, 20, 18, 20))).toBe('f617bae1');
+    expect(hashState(runFor(99, 20, 18, 20))).toBe('37e06561');
   }, 30_000);
 
   it('full 18-lap races, seeds 1234 and 7', () => {
     const a = runRace(1234);
-    expect([a.time.toFixed(4), a.cars.reduce((s, c) => s + c.crashes, 0), hashState(a)]).toEqual(['329.5333', 0, '2d1b7ea4']);
+    expect([a.time.toFixed(4), a.cars.reduce((s, c) => s + c.crashes, 0), hashState(a)]).toEqual(['332.2833', 0, '8bd9f7b2']);
     const b = runRace(7);
-    expect([b.time.toFixed(4), b.cars.reduce((s, c) => s + c.crashes, 0), hashState(b)]).toEqual(['328.0167', 0, 'ce109616']);
+    expect([b.time.toFixed(4), b.cars.reduce((s, c) => s + c.crashes, 0), hashState(b)]).toEqual(['328.9500', 0, '4420090e']);
   }, 60_000);
 });

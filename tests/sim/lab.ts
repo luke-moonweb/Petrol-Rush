@@ -2,9 +2,11 @@
 // A corner is a radius and an angle; the car drives the widest line through it that uses a share of
 // the track width, entering at a chosen speed. Walls are those of the game tracks. The command line
 // is tests/lab/corner.lab.ts (`npm run lab`); tests/corners.test.ts pins the targets.
+import type { Difficulty } from '../../src/config';
 import { CONFIG } from '../../src/config';
 import { aiInput } from '../../src/race/ai';
 import type { Car } from '../../src/race/car';
+import { LEVELS, PERSONAS, type PersonaKind } from '../../src/race/persona';
 import { type DriveInput, limitMph, maxCurvature, stepCar } from '../../src/race/physics';
 import { PlayerSteering } from '../../src/race/steering';
 import { LANES, type PitLane, type Track, type WallNormal, wrapAngle } from '../../src/track/common';
@@ -39,6 +41,11 @@ export interface CornerSpec {
   skill?: number;
   /** ai: its lane (default: the outside lane of the corner). */
   lane?: number;
+  /** ai: its personality (default neutral) and difficulty (default normal). */
+  persona?: PersonaKind;
+  level?: Difficulty;
+  /** ai: always slides in at the turn-in (turnInSlide). */
+  slide?: boolean;
 }
 
 export interface CornerRun {
@@ -191,7 +198,9 @@ function setup(spec: CornerSpec): Ctx {
     const k = spec.skill ?? 1;
     car.isPlayer = false;
     car.ai.turnMph = CONFIG.AI_TURN_MPH[0] + (CONFIG.AI_TURN_MPH[1] - CONFIG.AI_TURN_MPH[0]) * k;
-    car.ai.reaction = CONFIG.AI_REACTION_S[1] + (CONFIG.AI_REACTION_S[0] - CONFIG.AI_REACTION_S[1]) * k;
+    car.ai.level = LEVELS[spec.level ?? 'normal'];
+    car.ai.reaction = (CONFIG.AI_REACTION_S[1] + (CONFIG.AI_REACTION_S[0] - CONFIG.AI_REACTION_S[1]) * k) * car.ai.level.reaction;
+    car.ai.persona = { ...PERSONAS[spec.persona ?? 'neutral'], ...(spec.slide ? { slide: 99 } : {}) };
     car.ai.topMph = CONFIG.MAX_MPH;
     car.ai.lane = spec.lane ?? -c.sign * LANES[LANES.length - 1]!;
     car.d = -c.sign * c.hw;

@@ -35,7 +35,11 @@ export class TitleState implements State {
   }
 
   private newDemo(): Race {
-    const race = new Race({ track: 'oval', cars: 20, laps: DEMO_LAPS, playerColor: 0, qualifying: 'random' }, this.demoSeed++, true);
+    const race = new Race(
+      { track: 'oval', cars: 20, laps: DEMO_LAPS, playerColor: 0, qualifying: 'random', difficulty: 'normal' },
+      this.demoSeed++,
+      true,
+    );
     race.start();
     const dt = 1 / CONFIG.STEP_HZ;
     for (let t = 0; t < DEMO_WARMUP_S; t += dt) race.step(dt, null);

@@ -1,5 +1,5 @@
 import type { GameAudio } from '../audio/audio';
-import { DEFAULT_OPTIONS, LAP_CHOICES, QUALIFYING_CHOICES, type RaceOptions } from '../config';
+import { DEFAULT_OPTIONS, DIFFICULTY_CHOICES, LAP_CHOICES, QUALIFYING_CHOICES, type RaceOptions } from '../config';
 import type { Input } from '../input';
 import { loadPrefs, type Prefs } from '../prefs';
 import type { TouchLayout } from '../touch';
@@ -62,6 +62,7 @@ export function loadOptions(params: Params): RaceOptions {
         laps: typeof o.laps === 'number' ? o.laps : opts.laps,
         playerColor: typeof o.playerColor === 'number' ? o.playerColor : opts.playerColor,
         qualifying: QUALIFYING_CHOICES.includes(o.qualifying as never) ? o.qualifying! : opts.qualifying,
+        difficulty: DIFFICULTY_CHOICES.includes(o.difficulty as never) ? o.difficulty! : opts.difficulty,
       };
     }
   } catch {}
