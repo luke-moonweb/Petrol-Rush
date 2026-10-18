@@ -26,10 +26,10 @@ parameters. This file covers only what saves time when making changes.
 - `src/config.ts`: every tuning constant (the grip model's are under `CONFIG.GRIP`).
 - `src/race/physics.ts`: `stepCar` (the grip driving model) and walls. `collideCars` sits at the end of the file.
 - `src/race/race.ts`: the `Race` class, which handles the step, laps, pit stops, penalties and classification.
-- `src/race/ai.ts`: `aiInput`. The pit-lane AI is in `src/track/pitAi.ts`.
-- `src/states/race/state.ts`: the race screen.
-  - Phases, start lights, the menu, and the camera toggle (KeyC).
-  - `render()` picks the top-down or the cockpit view.
+- `src/race/ai.ts`: `aiInput`, a short sequence of named steps (`avoidOil`, `followTraffic`, `paceTarget`, …). The pit-lane AI is in `src/track/pitAi.ts`.
+- `src/states/race/`: the race screen.
+  - `state.ts` (`RaceState`): phases, start lights, drawing; `render()` picks the top-down or the cockpit view.
+  - `controls.ts` (keys to drive input), `camera.ts` (top-down camera), `notices.ts` (crash / radio / penalty), `menu.ts` and `options.ts` (race menu and RACE SETTINGS).
 - `src/gfx/fpv/*`: the cockpit view, oval only.
   - `view.ts` draws the frame, `cockpit.ts` draws the cabin, and `cabin.ts` holds the readouts.
   - `cars.ts` draws the rival cars; their 3D models are in `src/gfx/carFpv.ts`.
@@ -48,7 +48,8 @@ parameters. This file covers only what saves time when making changes.
 - **Never wait in real time.** With the browser pane hidden, `requestAnimationFrame` does not fire and the game stands still.
   - Instead, call `__ff(30)` in `javascript_tool`. It simulates 30 s of game time in about 0.25 s and draws the frame.
   - Then take a screenshot, or read the state from `window.__race` (`__race.race.cars`, `__race.race.time`).
-- The game pauses when the window loses focus. That doesn't stop `__ff`, but the screenshot shows the PAUSED overlay.
+- The game pauses when the window loses focus (and drops held keys): set `__race.phase = 'running'` before `__ff`. For a car that drives itself, set `__race.race.autoPlayer = true`.
+- `?quick` starts with the options saved in the browser, so name the track (`&track=oval`); the cockpit view (`__game.prefs.camera = 'cockpit'`) is oval only.
 - Check numbers (lap times, positions, spins) in headless tests (`tests/sim/harness.ts`), not in the browser. Use the browser for a final screenshot of a visual change.
 
 ## Git and deploy
@@ -59,6 +60,8 @@ parameters. This file covers only what saves time when making changes.
 - Commit messages are plain English sentences (see `git log`).
 
 ## Way of working (keeps changes quick)
+
+- Keep functions short (about 80 lines at most): when a change touches a longer one, split it into named steps first (as `aiInput`), with the golden masters green.
 
 - For a small or medium change, the main agent does it directly: no spec, critic, designer or tester subagents.
 - For a large feature: at most **one** combined review agent and **one** review round.

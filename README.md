@@ -130,7 +130,7 @@ browser does not support it (iPhone Safari).
   quick tap is enough for a small slide) or it spins. A slide costs more time than braking would
   have. Braking or lifting off in the corner uses grip too: the nose tucks in and the tail gets
   lighter.
-- **Warnings:** the red zone on the speedometer and an optional bar above your car show the limit
+- **Warnings:** the red zone on the speedometer shows the limit
   speed of the next corner; the **SKID** lamp lights only when the car really slides, blinks faster
   the more it slides and stays lit through a spin. The cockpit LED strip shows the start lights,
   then how close you are to top speed (one LED per 5 mph from 140, all lit at 180).
@@ -154,7 +154,6 @@ browser does not support it (iPhone Safari).
 |---|---|
 | Engine sound | V8 MUSCLE · JET TURBINE · 8-BIT ARCADE · RC TOY |
 | Crash penalties | On / Off |
-| Speed warning bar | On / Off |
 | Collisions | **Realistic** – the car hit in the rear or rear side spins, the hitter does not · **Classic** – in a hard crash both cars spin |
 | Race | Track, number of cars (up to 20), laps (1–100), your car colour, starting position (last / middle / pole / random) |
 
