@@ -1,5 +1,5 @@
 import type { Rng } from '../../../sim/rng';
-import { CY, FINISH_X, PIT_LABEL_TOP, RC, STANDS_BOTTOM, STANDS_X1 } from '../../../track/oval';
+import { CURB_H, CY, FINISH_X, PIT_LABEL_TOP, RC, STANDS_BOTTOM, STANDS_X1 } from '../../../track/oval';
 import { shade } from '../../sprites';
 import { drawHauler3d } from '../../vehicles';
 import { COL, FONT_BLACK } from '../style';
@@ -34,6 +34,13 @@ export const PAD_L0 = 440;
 const PAD_R0 = RC_X1 + 18;
 export const UNIT_W = 72;
 export const UNIT_GAP = 3;
+/** Back edge of the paddock tarmac (the pit road's label kerb starts here). */
+export const PAD_BOTTOM = PIT_LABEL_TOP;
+/** Front of the grandstand's lowest tier, and of race control. */
+export const STAND_FRONT = STANDS_BOTTOM - CURB_H;
+export const RC_FRONT = CY + 25;
+/** The row of light pools in front of the garages and the grandstand. */
+export const POOL_ROW_Y = CY - 14;
 
 export function unitXs(): number[] {
   const xs: number[] = [];

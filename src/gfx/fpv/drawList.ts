@@ -1,7 +1,7 @@
 import type { Car } from '../../race/car';
 import { carPaintOrder, footprintAngles } from './cars';
 import type { Camera, Poly } from './engine';
-import type { Glow } from './scene';
+import type { Glow } from './kit';
 import type { Billboard, TexQuad } from './texture';
 
 // The cockpit view's draw list (reused every frame, no garbage) and the depth order of its items:

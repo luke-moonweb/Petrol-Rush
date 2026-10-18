@@ -1,33 +1,39 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`screens, headless > a race on a Grand Prix circuit draws top-down and offers no cockpit 1`] = `
+exports[`screens, headless > a race on a Grand Prix circuit, top-down and in the cockpit; fingerprints of both 1`] = `
 {
-  "calls": 90849,
-  "hash": "960d6ba8",
+  "cockpit": {
+    "calls": 20577,
+    "hash": "5c5bf98d",
+  },
+  "topDown": {
+    "calls": 90849,
+    "hash": "45ffdfdd",
+  },
 }
 `;
 
 exports[`screens, headless > title → race menu → settings → a race with the cockpit, pause and menu → results; fingerprints of each screen 1`] = `
 {
   "cockpit": {
-    "calls": 5364,
-    "hash": "a871e638",
+    "calls": 5602,
+    "hash": "656ad3d2",
   },
   "paused": {
-    "calls": 5070,
-    "hash": "4a6cc76c",
+    "calls": 5308,
+    "hash": "d0c3a8d8",
   },
   "raceMenu": {
     "calls": 3093,
     "hash": "32a5cb50",
   },
   "raceMenuLive": {
-    "calls": 5211,
-    "hash": "1f2e8da3",
+    "calls": 5449,
+    "hash": "bafcdac7",
   },
   "results": {
-    "calls": 13966,
-    "hash": "f55ffbcd",
+    "calls": 14105,
+    "hash": "f74b42d5",
   },
   "settings": {
     "calls": 2592,

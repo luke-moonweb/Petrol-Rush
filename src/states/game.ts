@@ -11,7 +11,7 @@ export interface State {
   render(g: CanvasRenderingContext2D, alpha: number): void;
   onBlur?(): void;
   touchLayout?(): TouchLayout;
-  // False hides the touch CAM button (the cockpit view exists on the oval only).
+  // False hides the touch CAM button.
   touchCamera?(): boolean;
   tap?(hit: Hit | null, x: number): void;
   hover?(hit: Hit, x: number): void;

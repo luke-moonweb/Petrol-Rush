@@ -4,14 +4,13 @@ import { describe, expect, it } from 'vitest';
 const SOURCES = import.meta.glob<string>('../src/**/*.ts', { query: '?raw', import: 'default', eager: true });
 
 // Oval geometry constants must not leak into code shared by every track, or new tracks would
-// silently use the oval's numbers. The cockpit view (gfx/fpv) is an oval renderer too: the race state
-// only offers it on the oval.
+// silently use the oval's numbers. In the cockpit view (gfx/fpv) only the oval's scene adapter reads them.
 const OVAL_ONLY = [
   '../src/track/oval.ts',
   '../src/track/ovalPit.ts',
   '../src/track/ovalTrack.ts',
   '../src/gfx/track/oval/',
-  '../src/gfx/fpv/',
+  '../src/gfx/fpv/oval.ts',
 ];
 
 describe('module structure', () => {
@@ -22,7 +21,7 @@ describe('module structure', () => {
   it('only the oval itself and its renderer import the oval geometry', () => {
     const offenders = Object.entries(SOURCES)
       .filter(([path]) => !OVAL_ONLY.some((ok) => path.startsWith(ok)))
-      .filter(([, code]) => /from '(\.\.?\/)+(track\/)?oval'/.test(code))
+      .filter(([path, code]) => importsOf(path, code).includes('../src/track/oval.ts'))
       .map(([path]) => path);
     expect(offenders).toEqual([]);
   });
