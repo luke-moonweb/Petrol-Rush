@@ -131,7 +131,8 @@ function slideScale(v: number): number {
 export function maxCurvature(v: number): number {
   const C = CONFIG;
   const a = Math.max(Math.abs(v), 1);
-  return Math.min(1 / C.MIN_TURN_RADIUS, C.MAX_TURN_RATE / a, (C.GRIP.STEER_CAP * gripAt(a)) / (a * a));
+  // (of the full grip: over the faded grip the car slides, see lateralBudget)
+  return Math.min(1 / C.MIN_TURN_RADIUS, C.MAX_TURN_RATE / a, (C.GRIP.STEER_CAP * C.GRIP.GRIP) / (a * a));
 }
 
 /** Grip-limited cornering speed (mph) on a line of curvature k (1/px), at grip fraction f: v^2 |k| = f gripAt(v). */
@@ -233,6 +234,17 @@ export function stepCar(car: Car, input: DriveInput, dt: number, track: StepTrac
   car.moveAngle = wrapAngle(car.moveAngle);
 }
 
+/**
+ * Lateral budget for a demand aWant (px/s^2) with muAv of grip left and muFull the unfaded grip. Over the
+ * faded grip, up to the full grip, the car slides into the corner on a line DRIFT_SHARE as curved as asked
+ * (that part of the demand is absorbed); the demand beyond counts as over the limit (u > 1) against muAv.
+ */
+function lateralBudget(aWant: number, muAv: number, muFull: number): { muLat: number; u: number } {
+  const T = CONFIG.GRIP.DRIFT_SHARE;
+  const absorbed = Math.max(0, Math.min(aWant - muAv, (CONFIG.GRIP.DRIFT_MAX * (muFull - muAv)) / T));
+  return { muLat: muAv + T * absorbed, u: (aWant - absorbed) / muAv };
+}
+
 function gripStep(car: Car, input: DriveInput, dt: number, v: number, aLong: number): void {
   const C = CONFIG;
   const G = C.GRIP;
@@ -242,10 +254,11 @@ function gripStep(car: Car, input: DriveInput, dt: number, v: number, aLong: num
   // the yaw rates below (rad/s) were set for the full grip: they scale with it, so a slide keeps its
   // proportion to how fast the tyres can turn the course
   const share = grip / G.GRIP;
-  const muAv = grip * Math.sqrt(Math.max(0, 1 - (G.FC_K * fLong) ** 2));
+  const ellipse = Math.sqrt(Math.max(0, 1 - (G.FC_K * fLong) ** 2));
+  const muAv = grip * ellipse;
   const kCmd = input.steer * maxCurvature(v);
   const aCmd = v * v * kCmd;
-  const u = Math.abs(aCmd) / muAv;
+  const { muLat, u } = lateralBudget(Math.abs(aCmd), muAv, G.GRIP * ellipse);
   const over = Math.max(0, u - 1);
   let slip = wrapAngle(car.heading - car.moveAngle);
 
@@ -254,7 +267,8 @@ function gripStep(car: Car, input: DriveInput, dt: number, v: number, aLong: num
   // back and only a share of it bends the course outwards.
   const counter = slip !== 0 && Math.sign(kCmd) === -Math.sign(slip) && Math.abs(slip) > G.SLIDE_SLIP_MIN;
   const aSteer = counter ? aCmd * G.COUNTER_COURSE : aCmd;
-  const aLat = Math.max(-muAv, Math.min(muAv, aSteer + G.ALIGN * v * slip));
+  const aLat = Math.max(-muLat, Math.min(muLat, aSteer + G.ALIGN * v * slip));
+  const drift = Math.max(0, Math.abs(aLat) - muAv);
   car.moveAngle += (aLat / v) * dt;
 
   // Weight transfer: lifting or braking moves load to the front over WEIGHT_S (smoothed, so a
@@ -289,10 +303,13 @@ function gripStep(car: Car, input: DriveInput, dt: number, v: number, aLong: num
     u > G.TUCK_FREE_U || car.rearStress > G.TUCK_FREE_STRESS || car.rearLoose
       ? 1
       : Math.max(0, Math.min(1, (G.TUCK_SLIP - slip * dir) / G.TUCK_FADE));
-  const muFront = muAv * (1 + G.FRONT_GAIN * car.weightFwd * tuckRoom);
+  const muFront = muAv * (1 + G.FRONT_GAIN * car.weightFwd * tuckRoom) + (muLat - muAv);
   let yaw = dir * Math.min(Math.abs(v * kCmd), muFront / v);
   const load = Math.min(1, Math.abs(aLat) / grip);
   if (load > 0.5) yaw += Math.sign(aLat) * G.LIFT_YAW * share * car.weightFwd * ((load - 0.5) / 0.5) * tuckRoom;
+  // turn-in slide: the rear steps out in proportion to how much of the turn the slide carries
+  const slide = Math.max(0, Math.min(1, (drift / (G.GRIP * ellipse) - G.DRIFT_FREE) / (G.DRIFT_FULL - G.DRIFT_FREE)));
+  if (slide > 0 && !counter) yaw += dir * G.DRIFT_YAW * slide;
   if (car.rearLoose) {
     const swing = slideScale(v) * share;
     yaw += dir * G.OS_KICK * swing * Math.min(over, 0.5);
@@ -302,7 +319,9 @@ function gripStep(car: Car, input: DriveInput, dt: number, v: number, aLong: num
   slip = wrapAngle(car.heading - car.moveAngle);
 
   // Scrub: sliding tyres cost speed.
-  const drag = muAv * (G.SCRUB * Math.min(over, 1) + G.SLIP_DRAG * Math.abs(Math.sin(slip)));
+  // (a loose rear slides on the full tyre force, so a caught slide still costs time at speed)
+  const slideMu = car.rearLoose ? G.GRIP : muAv;
+  const drag = muAv * G.SCRUB * Math.min(over, 1) + slideMu * G.SLIP_DRAG * Math.abs(Math.sin(slip)) + G.DRIFT_COST * drift;
   car.speed = Math.max(0, car.speed - (drag / pxm) * dt);
 
   car.gripOver = over;

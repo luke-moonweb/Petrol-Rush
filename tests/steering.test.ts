@@ -56,8 +56,9 @@ describe('grip model: corner assist from curvature', () => {
 describe('grip model: straight assist', () => {
   it('straightens a small angle when not steering, turning nose and travel direction together', () => {
     const car = carAt(S_BOTTOM + 100, 0, 150);
-    car.heading = 0.08;
-    car.moveAngle = 0.06;
+    // (micro-drift only: STRAIGHT_FULL_DEG is 1 deg)
+    car.heading = 0.015;
+    car.moveAngle = 0.012;
     for (let i = 0; i < 60; i++) {
       stepCar(car, { steer: 0, gas: false, brake: false, toggleReverse: false, straightTo: trackHeadingAt(car.x, car.y) }, 1 / 60, OVAL);
     }
@@ -71,14 +72,14 @@ describe('grip model: straight assist', () => {
       stepCar(car, { steer: 0, gas: true, brake: false, toggleReverse: false, straightTo: 0 }, 1 / 60, OVAL);
       return ((deg * Math.PI) / 180 - car.heading) * 60;
     };
-    const rates = [3, 6, 8, 10, 12, 14, 20].map(turned);
+    const rates = [0.5, 1, 1.25, 1.5, 1.75, 2, 3].map(turned);
     for (let i = 1; i < rates.length; i++) expect(rates[i]!).toBeLessThanOrEqual(rates[i - 1]! + 1e-9);
     expect(rates[0]).toBeCloseTo(CONFIG.STRAIGHT_ASSIST_RATE, 6);
     expect(rates[2]).toBeGreaterThan(0.2);
     expect(Math.abs(rates[6]!)).toBeLessThan(1e-9);
   });
 
-  it('a 100 ms tap at 180 mph is a small correction that stays (a few px), not undone', () => {
+  it('a 100 ms tap at 180 mph is a correction that stays, not undone', () => {
     const car = carAt(S_BOTTOM + 50, 0, 180);
     const ps = new PlayerSteering();
     for (let t = 0; t < 2; t += 1 / 60) {
@@ -86,12 +87,12 @@ describe('grip model: straight assist', () => {
       stepCar(car, { steer: st.steer, straightTo: st.straightTo, gas: true, brake: false, toggleReverse: false }, 1 / 60, OVAL);
       Object.assign(car, project(car.x, car.y));
     }
-    // (under 1 px since the grip fades above KNEE_MPH: at top speed the car steers about 4 x less sharply)
-    expect(car.d).toBeGreaterThan(0.3);
-    expect(car.d).toBeLessThan(10);
+    // (the straight assist only takes out micro-drift, so the heading the tap set stays and the car keeps going that way)
+    expect(car.d).toBeGreaterThan(2);
+    expect(car.d).toBeLessThan(HALF_W - CAR_R);
   });
 
-  it('a 200 ms press at 180 mph from the centre line is caught by the assist before the wall (designer L5)', () => {
+  it('a 200 ms press at 180 mph from the centre line is kept: the assist does not undo it', () => {
     const car = carAt(S_BOTTOM + 50, 0, 180);
     const ps = new PlayerSteering();
     let maxD = 0;
@@ -101,9 +102,8 @@ describe('grip model: straight assist', () => {
       Object.assign(car, project(car.x, car.y));
       maxD = Math.max(maxD, car.d);
     }
-    // (a few px since the grip fades above KNEE_MPH)
-    expect(maxD).toBeGreaterThan(2);
-    expect(maxD).toBeLessThan(HALF_W - CAR_R - 2);
+    // (no longer caught: the straight assist only takes out micro-drift; the car runs on to the wall without spinning)
+    expect(maxD).toBeGreaterThan(15);
     expect(car.spinTime).toBe(0);
   });
 });
@@ -180,7 +180,8 @@ describe('grip model: key and touch steering cap (designer H2)', () => {
     expect(opened(more, 1)).toBeGreaterThan(1.25);
     expect(opened(more, 0.4)).toBeGreaterThan(opened(small, 0.4));
     // 44 % over the grip: full lock (STEER_CAP x the grip) within half a second
-    expect(opened(overBy(0.44, -28.5), 0.5, -28.5)).toBeCloseTo(G.STEER_CAP, 6);
+    // (full lock asks STEER_CAP x the full grip, more than STEER_CAP x the faded grip)
+    expect(opened(overBy(0.44, -28.5), 0.5, -28.5)).toBeGreaterThanOrEqual(G.STEER_CAP);
   });
 
   it('a key out of the bend (countersteer) or a released key never overdrives', () => {

@@ -34,7 +34,7 @@ export const CONFIG = {
   CORNER_ASSIST_IN_S: 0.15,
   STEER_RAMP_TURN_S: 0.15,
   STEER_RELEASE_S: 0.2,
-  STRAIGHT_ASSIST_RATE: 0.6,
+  STRAIGHT_ASSIST_RATE: 0.3,
   MIN_TURN_RADIUS: 34,
 
   // Grip model. Lateral limit on a line of radius r: v^2 / r = gripAt(v) (race/physics.ts): GRIP up to
@@ -49,6 +49,20 @@ export const CONFIG = {
     /** A loose rear swings at SLIDE_SOFT x its full rate up to SLIDE_SOFT_MPH, rising to the full rate at KNEE_MPH. */
     SLIDE_SOFT: 0.5,
     SLIDE_SOFT_MPH: 100,
+    /**
+     * Turn-in slide: over the faded grip the car still turns, up to DRIFT_MAX of the grip the fade took
+     * away, on a line DRIFT_SHARE as curved as asked (a little wider), paying DRIFT_COST x the extra
+     * lateral acceleration in speed. Meanwhile the rear steps out: the nose turns DRIFT_YAW rad/s (at the
+     * full slide) faster than the course, so the rear lets go unless the driver countersteers; a loose
+     * rear drags with the full grip (SLIP_DRAG), so even a caught slide costs time.
+     */
+    DRIFT_SHARE: 0.75,
+    DRIFT_MAX: 1,
+    DRIFT_COST: 0.3,
+    DRIFT_YAW: 1,
+    /** The step-out starts once the slide carries DRIFT_FREE of the full grip and is full at DRIFT_FULL. */
+    DRIFT_FREE: 0.05,
+    DRIFT_FULL: 0.35,
     /** Share of the grip that full braking at top speed takes away. */
     FC_K: 0.6,
     /** 1/s: how fast the tyres pull the direction of travel back to the nose. */
@@ -106,9 +120,9 @@ export const CONFIG = {
     SLIDE_SLIP_MIN: 0.08,
     /** Grip use above which a rear hit spins at REAR_SPIN_TURN_MPH. */
     LOADED_USE: 0.7,
-    /** Straight assist: full strength up to FULL_DEG of heading error, fading out by OFF_DEG. */
-    STRAIGHT_FULL_DEG: 5,
-    STRAIGHT_OFF_DEG: 20,
+    /** Straight assist: full strength up to FULL_DEG of heading error, fading out by OFF_DEG (micro-drift only: a heading the player set stays). */
+    STRAIGHT_FULL_DEG: 1,
+    STRAIGHT_OFF_DEG: 2,
     /** Walls: glancing below GLANCE_DEG (straightened, friction only), spin above SPIN_DEG and SPIN_MPH. */
     WALL_GLANCE_DEG: 15,
     WALL_SPIN_DEG: 30,
