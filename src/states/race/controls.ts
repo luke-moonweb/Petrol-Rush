@@ -3,10 +3,13 @@ import type { Input } from '../../input';
 import type { DriveInput } from '../../race/physics';
 import type { Race } from '../../race/race';
 import { PlayerSteering } from '../../race/steering';
+import { NO_STEER_FLAGS, type SteerFlags, SteerPlaytest } from './steerPlaytest';
 
 /** The player's keys / touch buttons turned into this step's drive input. */
 export class PlayerControls {
-  private readonly steering = new PlayerSteering();
+  private steering: PlayerSteering;
+  // PLAYTEST ONLY (debug flags steer, assist, fine): the steering set per race and the overlay's numbers.
+  private readonly playtest: SteerPlaytest;
   // Set while the hold-to-reverse key (↓ / S) put the car in reverse, so releasing it leaves reverse.
   private reverseHeld = false;
   /** Seconds left of the STOP TO ENGAGE REVERSE hint. */
@@ -15,8 +18,14 @@ export class PlayerControls {
   private steerVis = 0;
   private prevSteerVis = 0;
 
+  constructor(flags: SteerFlags = NO_STEER_FLAGS) {
+    this.playtest = new SteerPlaytest(flags);
+    this.steering = new PlayerSteering(undefined, this.playtest.options());
+  }
+
+  /** A new race. */
   reset(): void {
-    this.steering.resetAssist();
+    this.steering = new PlayerSteering(this.steering.track, this.playtest.options());
     this.reverseHeld = false;
     this.steerVis = this.prevSteerVis = 0;
   }
@@ -29,9 +38,32 @@ export class PlayerControls {
     return this.prevSteerVis + (this.steerVis - this.prevSteerVis) * alpha;
   }
 
+  /** The steering wheel (-1..1, the share of the key cap). */
+  get wheel(): number {
+    return this.steering.wheel;
+  }
+
+  /** The race is paused or lost focus: the keys are let go, the wheel centres (the assist blend stays). */
+  release(): void {
+    this.steering.release();
+  }
+
+  /** The debug overlay: the wheel, its limit and the overdrive (and the playtest's numbers). */
+  debugLines(raceOver: boolean): string[] {
+    const st = this.steering;
+    return [
+      `wheel ${st.wheel.toFixed(2)}  limit ${st.limit.toFixed(2)}  overdrive ${st.overdrive.toFixed(2)}`,
+      ...this.playtest.lines(raceOver),
+    ];
+  }
+
   update(input: Input, race: Race, dt: number): DriveInput {
     const p = race.player;
-    const steerKey = (input.isDown('right') ? 1 : 0) - (input.isDown('left') ? 1 : 0);
+    // With both arrows held the one pressed last steers (a fast change of direction never lets go of the
+    // wheel), and a tap shorter than a step still counts for one step.
+    const left = input.lastPress('left');
+    const right = input.lastPress('right');
+    const steerKey = right > left ? 1 : left > right ? -1 : 0;
     this.steering.track = race.track;
     const drive: DriveInput = {
       steer: 0,
@@ -41,7 +73,12 @@ export class PlayerControls {
       toggleReverse: input.pressed('reverse') && !input.isDown('reverse'),
     };
     this.holdReverse(race, drive, input.isDown('reverse'));
-    const st = this.steering.update(p, steerKey, dt, drive.brake);
+    // Under the pit autopilot the player's keys do not steer: the wheel centres, and a key still held when
+    // it hands back is not a fresh press (the straight assist stays on).
+    const fine = this.playtest.flags.fine && input.isDown('fine');
+    const st = this.steering.update(p, race.pitAuto ? 0 : steerKey, dt, drive.brake, fine);
+    if (race.pitAuto) this.steering.rearm(steerKey);
+    else if (race.started) this.playtest.step(p, steerKey, dt, race.time);
     drive.steer = race.pitAuto ? 0 : st.steer;
     drive.straightTo = race.pitAuto ? undefined : st.straightTo;
     this.prevSteerVis = this.steerVis;

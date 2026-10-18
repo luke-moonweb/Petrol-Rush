@@ -117,6 +117,17 @@ describe('keys: braking matters (designer H1, M3)', () => {
     }
   });
 
+  it('a small excess does not pay: 10 % too fast into turn 1 is no faster to the end of the top straight than braking to the limit', () => {
+    // (the key wheel reaches the cap later than the old ramp did; the overdrive counts the key held into the
+    // bend, so insisting a little too fast still slides wide and costs time)
+    for (const d of [-9.5, 0]) {
+      const braked = entry(d, 1, {}, 1600);
+      const over = entry(d, 1.1, {}, 1600);
+      expect(over.spun, `d ${d}`).toBe(false);
+      expect(over.time - braked.time, `d ${d}`).toBeGreaterThanOrEqual(0);
+    }
+  });
+
   it('a player who insists through the slide (no countersteer) spins only when clearly too fast', () => {
     for (const d of [-28.5, -9.5, 0]) {
       expect(entry(d, 1.05, { insist: true }).spun, `d ${d} x1.05`).toBe(false);

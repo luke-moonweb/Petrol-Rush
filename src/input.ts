@@ -1,6 +1,18 @@
 export type BindableAction = 'left' | 'right' | 'gas' | 'brake' | 'reverse' | 'camera' | 'pause' | 'menu' | 'help' | 'mute';
 
-export type Action = BindableAction | 'up' | 'down' | 'navLeft' | 'navRight' | 'enter' | 'back' | 'clear' | 'fit' | 'debugSpeed';
+export type Action =
+  | BindableAction
+  | 'up'
+  | 'down'
+  | 'navLeft'
+  | 'navRight'
+  | 'enter'
+  | 'back'
+  | 'clear'
+  | 'fit'
+  | 'debugSpeed'
+  // PLAYTEST ONLY (debug flag fine=1): the precision key
+  | 'fine';
 
 export type Bindings = Record<BindableAction, [string | null, string | null]>;
 
@@ -135,6 +147,11 @@ export class Input {
   private keymap = new Map<string, Action[]>();
   private virtualDown = new Set<Action>();
   private virtualPressed = new Set<Action>();
+  // When each key (and virtual action) last went down, in order: the newer of two held keys wins.
+  private pressSeq = 0;
+  private readonly codeAt = new Map<string, number>();
+  private readonly virtualAt = new Map<Action, number>();
+  private readonly extra: [string, Action][] = [];
   private bindings: Bindings;
   capture = false;
   onFirstInteraction: (() => void) | null = null;
@@ -147,7 +164,10 @@ export class Input {
       const code = norm(e.code);
       if (this.keymap.has(code) || (this.capture && !e.metaKey)) e.preventDefault();
       this.onFirstInteraction?.();
-      if (!e.repeat) this.pressedCodes.add(code);
+      if (!e.repeat) {
+        this.pressedCodes.add(code);
+        this.codeAt.set(code, ++this.pressSeq);
+      }
       this.down.add(code);
     });
     target.addEventListener('keyup', (e) => {
@@ -175,6 +195,7 @@ export class Input {
   private rebuild(): void {
     this.keymap.clear();
     for (const [code, actions] of Object.entries(FIXED)) this.keymap.set(code, [...actions]);
+    for (const [code, action] of this.extra) this.keymap.set(code, [...(this.keymap.get(code) ?? []), action]);
     for (const { action } of BINDABLE) {
       for (const code of this.bindings[action]) {
         if (!code) continue;
@@ -186,13 +207,23 @@ export class Input {
   }
 
   setVirtual(action: Action, held: boolean): void {
-    if (held && !this.virtualDown.has(action)) this.virtualPressed.add(action);
+    if (held && !this.virtualDown.has(action)) {
+      this.virtualPressed.add(action);
+      this.virtualAt.set(action, ++this.pressSeq);
+    }
     if (held) this.virtualDown.add(action);
     else this.virtualDown.delete(action);
   }
 
   tapVirtual(action: Action): void {
     this.virtualPressed.add(action);
+    this.virtualAt.set(action, ++this.pressSeq);
+  }
+
+  /** PLAYTEST ONLY (debug flag fine=1): a fixed key for an extra action. */
+  addFixed(code: string, action: Action): void {
+    this.extra.push([code, action]);
+    this.rebuild();
   }
 
   private lostFocus(): void {
@@ -213,6 +244,17 @@ export class Input {
     if (this.virtualPressed.has(action)) return true;
     for (const code of this.pressedCodes) if (this.keymap.get(code)?.includes(action)) return true;
     return false;
+  }
+
+  /**
+   * When the newest key for the action that is held, or was pressed this step (a tap shorter than a step
+   * still counts), went down: 0 if none. Of two actions the larger is the one pressed last.
+   */
+  lastPress(action: Action): number {
+    let at = this.virtualDown.has(action) || this.virtualPressed.has(action) ? (this.virtualAt.get(action) ?? 0) : 0;
+    for (const codes of [this.down, this.pressedCodes])
+      for (const code of codes) if (this.keymap.get(code)?.includes(action)) at = Math.max(at, this.codeAt.get(code) ?? 0);
+    return at;
   }
 
   firstPressedCode(): string | null {
