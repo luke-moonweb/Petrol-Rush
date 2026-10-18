@@ -1,5 +1,4 @@
 /// <reference types="vite/client" />
-import { posix } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const SOURCES = import.meta.glob<string>('../src/**/*.ts', { query: '?raw', import: 'default', eager: true });
@@ -33,8 +32,16 @@ describe('module structure', () => {
   // how a race runs (npm test is enough there; see CLAUDE.md).
   const SIM = ['../src/race/', '../src/track/', '../src/sim/', '../src/config.ts'];
   const inSim = (path: string) => SIM.some((p) => path.startsWith(p));
-  const importsOf = (path: string, code: string) =>
-    [...code.matchAll(/from '(\.{1,2}\/[^']+)'/g)].map((m) => `${posix.join(posix.dirname(path), m[1]!)}.ts`);
+  /** '../src/race/ai.ts' + '../track/common' → '../src/track/common.ts' */
+  const resolve = (from: string, rel: string) => {
+    const parts = from.split('/').slice(0, -1);
+    for (const p of rel.split('/')) {
+      if (p === '..') parts.pop();
+      else if (p !== '.') parts.push(p);
+    }
+    return `${parts.join('/')}.ts`;
+  };
+  const importsOf = (path: string, code: string) => [...code.matchAll(/from '(\.{1,2}\/[^']+)'/g)].map((m) => resolve(path, m[1]!));
 
   it('the simulation imports nothing from the presentation', () => {
     const offenders = Object.entries(SOURCES)
