@@ -2,8 +2,12 @@ import { describe, expect, it } from 'vitest';
 import { gpTracks } from '../src/track/gp';
 import { runRace } from './sim/harness';
 
+// Whole races: on a CI runner, beside the other slow-tier files, one can take several times its local
+// time, past vitest's default 5 s.
+const RACE_TIMEOUT_MS = 20_000;
+
 for (const track of gpTracks()) {
-  describe(`headless races on ${track.name}`, () => {
+  describe(`headless races on ${track.name}`, { timeout: RACE_TIMEOUT_MS }, () => {
     it('20 AI cars finish 3 laps without getting stuck or leaving the world', () => {
       const r = runRace({ track, seed: 1234, laps: 3 });
       console.log(
