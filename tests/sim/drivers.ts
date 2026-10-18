@@ -132,6 +132,54 @@ export class HumanKeys {
   }
 }
 
+/** The tapper's habits (the defaults; tests/sim/steerLab.ts searches around them). */
+export const TAPPER = {
+  /** Reaction delay (s) between the line's need and the key. */
+  REACT: 0.18,
+  /** Share of the reaction delay anticipated from how fast the need changes. */
+  ANT: 1,
+  /** Shortest time a key stays down or up (s): the human tapping limit. */
+  DWELL: 0.08,
+  /** Owed steer (share of full lock x s) that presses a key. */
+  TH: 0.004,
+  /** Line-tracking gain (1/s) of the steer the tapper wants. */
+  W: 4,
+};
+
+export type TapperHabits = typeof TAPPER;
+
+/**
+ * A skilled key player for comparing input layers: it knows the steer the line needs (seen REACT s late,
+ * extrapolated) and taps the key like a delta-sigma modulator with a minimum dwell, so on average the
+ * game's steer follows the need. Unlike HumanKeys it modulates as finely as a fast human can.
+ */
+export class TapperKeys {
+  private readonly hist: number[] = [];
+  private owed = 0;
+  private key = 0;
+  private since = -1;
+
+  constructor(readonly habits: TapperHabits = TAPPER) {}
+
+  /** want: the steer (share of full lock) the line needs now; given: the steer the game gave last step. */
+  step(time: number, want: number, given: number): number {
+    const h = this.habits;
+    this.hist.push(want);
+    const i = Math.max(0, this.hist.length - 1 - Math.round(h.REACT / DT));
+    const rate = i > 0 ? (this.hist[i]! - this.hist[i - 1]!) / DT : 0;
+    const target = this.hist[i]! + rate * h.REACT * h.ANT;
+    this.owed = Math.max(-0.05, Math.min(0.05, this.owed + (target - given) * DT));
+    if (this.since < 0 || time - this.since >= h.DWELL) {
+      const key = this.owed > h.TH ? 1 : this.owed < -h.TH ? -1 : 0;
+      if (key !== this.key) {
+        this.key = key;
+        this.since = time;
+      }
+    }
+    return this.key;
+  }
+}
+
 /** The oval with other walls (or none): for physics runs on test tracks. */
 export function withWalls(constrain: (c: Car) => WallNormal | null): StepTrack {
   return { ...OVAL, constrain };
