@@ -19,17 +19,23 @@ export interface AiView {
   oil?: readonly OilSlick[];
   /** The player's car is under the pit autopilot (it merges by hand after the hand-back). */
   pitAuto?: boolean;
+  /** The player drives its car (not the AI): it may brake to a stop anywhere (standing). */
+  playerDriving?: boolean;
 }
 
-function laneFree(track: Track, car: Car, lane: number, cars: Car[], backPx = 55, skip: Car | null = null): boolean {
+function laneFree(track: Track, car: Car, lane: number, cars: Car[], backPx = 55, around: Car | null = null): boolean {
   const lo = Math.min(car.d, lane) - 14;
   const hi = Math.max(car.d, lane) + 14;
   const back = car.speed < 30 ? -25 : -backPx;
   const front = car.speed < 30 ? 50 : 90;
   for (const o of cars) {
-    if (o === car || o === skip) continue;
+    if (o === car || o === around) continue;
     const ds = track.deltaS(car.s, o.s);
-    if (ds > back && ds < front && o.d > lo && o.d < hi) return false;
+    // (driving around a standing car from slow: a car coming up behind needs time to see us move out)
+    const behind = around ? Math.min(back, -(o.speed - car.speed) * CONFIG.PX_PER_MPH * AROUND_BEHIND_S) : back;
+    // (and a faster car ahead is pulling away from where it pulls out)
+    const away = around !== null && ds > 0 && o.speed > car.speed + 10;
+    if (ds > behind && ds < front && o.d > lo && o.d < hi && !away) return false;
     // (a car going to or from the pits also takes up the line it is moving to, and as it is slow
     // there, from as far ahead as it takes to slow down to its speed)
     const jd = track.pit.joiningD(o);
@@ -59,7 +65,17 @@ export function aiInput(car: Car, view: AiView, dt: number): DriveInput {
     ai.mergeWait = 0;
   }
   const pit = track.pit.plan(car, view, ai.topMph, ai.lane, dt);
-  const plan: Plan = { target: pit.target, laneD: pit.laneD, oilLane: false, line: false, lineShift: 0, held: false, free: false, steerShift: 0 };
+  const plan: Plan = {
+    target: pit.target,
+    laneD: pit.laneD,
+    oilLane: false,
+    line: false,
+    lineShift: 0,
+    look: null,
+    held: false,
+    free: false,
+    steerShift: 0,
+  };
 
   if (pit.lane !== null) {
     ai.onLine = false;
@@ -98,6 +114,8 @@ interface Plan {
   line: boolean;
   /** On the line: how far (px) it is moved across, to keep clear of a car alongside (holdOff) or, on the free line, to pass. */
   lineShift: number;
+  /** A shorter look-ahead (px) for the steering: getting across quickly round a standing car (goAround). */
+  look: number | null;
   /** On the line: holdOff moved it (on the free line: a car ahead of ours did). No gas meanwhile. */
   held: boolean;
   /** On the free line (hard, freeLine): moved across freely, no lanes. */
@@ -433,12 +451,16 @@ function followTraffic(car: Car, view: AiView, plan: Plan): void {
       }
     }
   }
+  // (round a standing car only by goAround: a lane next to it can be too close to pass)
+  const stop = ahead !== null && standing(view, car, ahead);
+  if (ahead && stop && goAround(car, view, plan, ahead, gap)) return;
   if (ahead && ahead.speed < plan.target) {
     let changed = false;
-    const blockedHard = ahead.speed < 60 && car.speed - ahead.speed > 15;
+    const blockedHard = !stop && ahead.speed < 60 && car.speed - ahead.speed > 15;
     const eager = ahead.speed < plan.target - ai.persona.passMph;
     // (on the free line a pass moves the line across instead: passTarget)
-    const canChange = !plan.free && ai.laneCooldown <= 0 && ai.pitPhase === 'none' && (blockedHard || (eager && laneChangeOk && car.speed > 50));
+    const canChange =
+      !plan.free && !stop && ai.laneCooldown <= 0 && ai.pitPhase === 'none' && (blockedHard || (eager && laneChangeOk && car.speed > 50));
     if (canChange) {
       const options = LANES.filter((l) => l !== plan.laneD && Math.abs(l - plan.laneD) < 25).sort(
         (p, q) => Math.abs(p - car.d) - Math.abs(q - car.d),
@@ -453,12 +475,125 @@ function followTraffic(car: Car, view: AiView, plan: Plan): void {
       }
     }
     if (!changed) {
-      const room = Math.max(0, gap - 46 - ai.persona.gapPx);
-      const v0 = Math.max(0, ahead.speed);
+      // (behind a standing car it stops where that one stops, further back: with room to steer round it
+      // once a lane is free)
+      const wait = stop ? (nearestPass(view, car, ahead)?.room ?? 0) + 6 : 0;
+      const room = Math.max(0, gap + (stop ? stopDist(ahead) : 0) - Math.max(46 + ai.persona.gapPx, wait));
+      const v0 = stop ? 0 : Math.max(0, ahead.speed);
       const follow = Math.sqrt(v0 * v0 + (2 * CONFIG.BRAKE_MPH_S * 0.7 * room) / pxm) - (gap < 42 ? 4 : 0);
       plan.target = Math.min(plan.target, Math.max(0, follow));
     }
   }
+}
+
+/**
+ * A car standing (or crawling) on the track, in line with it: one to drive around, never to queue behind.
+ * Pit traffic is left to the pit logic, and a spun or crossways car to avoidHazards.
+ */
+function standing(view: AiView, car: Car, o: Car): boolean {
+  if (view.time <= AROUND_GRACE_S || car.ai.pitPhase !== 'none' || o.ai.pitPhase !== 'none' || !onTrack(view.track, car, o)) return false;
+  if (o.spinTime > 0 || Math.abs(wrapAngle(view.track.headingAt(o.x, o.y) - o.heading)) > AROUND_ALIGNED_RAD) return false;
+  if (Math.abs(o.speed) < AROUND_STOPPED_MPH) return true;
+  // (or braking towards a stop on a straight, with no bend it could be braking for; a car crawling round
+  // another one is not braking, and is followed. A player at the wheel can stop anywhere: from higher up,
+  // unless it is braking for a car ahead of it)
+  const curves = view.track.curves();
+  const human = o.isPlayer && view.playerDriving === true;
+  if (!o.braking || o.speed >= (human ? AROUND_PLAYER_STOPPING_MPH : AROUND_STOPPING_MPH)) return false;
+  if (curves.at(o.s) !== 0 || curves.maxAbsAhead(o.s, stopDist(o) + LANE_CHANGE_CLEAR, 8) !== 0) return false;
+  return o.speed < AROUND_STOPPING_MPH || !view.cars.some((c) => c !== o && inWayAhead(view.track, o, c));
+}
+
+/** `c` is slower than `o` and ahead of it within its braking distance, near its line: something `o` may be braking for. */
+function inWayAhead(track: Track, o: Car, c: Car): boolean {
+  const ds = track.deltaS(o.s, c.s);
+  return c.speed < o.speed && ds > 0 && ds < stopDist(o) + LANE_CHANGE_CLEAR && Math.abs(c.d - o.d) < AROUND_CLEAR_PX;
+}
+
+/** How far (px) a braking car still runs before it stops (at the hard braking rate). */
+function stopDist(o: Car): number {
+  return o.braking ? (Math.max(0, o.speed) ** 2 * CONFIG.PX_PER_MPH) / (2 * CONFIG.BRAKE_MPH_S_HIGH) : 0;
+}
+
+/**
+ * A standing car ahead on our line: pass it AROUND_CLEAR_PX across from it, on the side the car is already
+ * heading for, else the side it gets to soonest whose way across is free of moving cars, slow enough until
+ * across to get there before reaching it. False when no side is free or there is no room left to get
+ * across: then it follows (waits further back), and watchStuck backs it out if it is already too close.
+ */
+function goAround(car: Car, view: AiView, plan: Plan, o: Car, gap: number): boolean {
+  const ai = car.ai;
+  if (ai.pitPhase !== 'none') return false;
+  const chosen = aroundSide(ai, o);
+  // (where it will stand: a car braking to a stop still runs on)
+  const reach = gap + stopDist(o) - CONFIG.CAR_LEN;
+  // (a pass already under way carries on, slower, a little short of the room)
+  const room = (p: { side: number; need: number }) => reach - p.need * AROUND_SLOPE + (p.side === chosen ? AROUND_COMMIT_PX : 0);
+  const pass = passes(view, car, o)
+    .filter((p) => room(p) >= 0)
+    .sort((p, q) => Number(p.side !== chosen) - Number(q.side !== chosen) || p.need - q.need)
+    .find((p) => p.side === chosen || laneFree(view.track, car, p.d, view.cars, 55, o));
+  if (!pass) return false;
+  if (pass.side !== chosen) ai.laneCooldown = Math.max(ai.laneCooldown, 1.2);
+  ai.lane = sideLane(o, pass.side, pass.d);
+  plan.laneD = pass.d;
+  ai.blockLane = null;
+  if (pass.need > 0) {
+    plan.look = AROUND_LOOK_PX;
+    const left = Math.max(0, reach - pass.need * AROUND_SLOPE);
+    const v = left > 0 ? Math.sqrt(AROUND_MPH ** 2 + (2 * CONFIG.BRAKE_MPH_S * 0.7 * left) / CONFIG.PX_PER_MPH) : AROUND_CRAWL_MPH;
+    plan.target = Math.min(plan.target, v);
+  }
+  return true;
+}
+
+/**
+ * The ways past a standing car `o`: per side, the d of the pass (AROUND_CLEAR_PX across, inside the road and
+ * clear of every other standing car near it) and how far (px) across the car still has to move to get there.
+ */
+function passes(view: AiView, car: Car, o: Car): { side: number; d: number; need: number }[] {
+  const edge = HALF_W - CONFIG.CAR_WID / 2 - AROUND_EDGE_PX;
+  const clear = AROUND_CLEAR_PX - 2;
+  const out: { side: number; d: number; need: number }[] = [];
+  for (const side of [-1, 1]) {
+    const d = Math.max(-edge, Math.min(edge, o.d + side * AROUND_CLEAR_PX));
+    if (Math.abs(d - o.d) < clear || !aroundClear(view, car, o, d)) continue;
+    out.push({ side, d, need: Math.max(0, clear - (car.d - o.d) * side) });
+  }
+  return out;
+}
+
+/** The side of `o` (-1 / 1) the car's lane is on, 0 if the lane is not clear of it. */
+function aroundSide(ai: Car['ai'], o: Car): number {
+  return Math.abs(ai.lane - o.d) >= AROUND_CLEAR_PX / 2 ? Math.sign(ai.lane - o.d) : 0;
+}
+
+/** ai.lane remembers the side of a pass: the lane on that side of `o` nearest to the pass. */
+function sideLane(o: Car, side: number, d: number): number {
+  return LANES.filter((l) => Math.sign(l - o.d) === side).sort((p, q) => Math.abs(p - d) - Math.abs(q - d))[0] ?? nearestLane(d);
+}
+
+/**
+ * A pass at d is AROUND_CLEAR_PX across from every other car standing still ahead of us near `o` too (one
+ * still moving, as a car slowing to pass it, is followed instead).
+ */
+function aroundClear(view: AiView, car: Car, o: Car, d: number): boolean {
+  const track = view.track;
+  return !view.cars.some(
+    (c) =>
+      c !== o &&
+      Math.abs(c.speed) < AROUND_STOPPED_MPH &&
+      track.deltaS(car.s, c.s) > 0 &&
+      Math.abs(track.deltaS(o.s, c.s)) < AROUND_QUEUE_PX &&
+      Math.abs(d - c.d) < AROUND_CLEAR_PX - 2 &&
+      onTrack(track, car, c),
+  );
+}
+
+/** The quickest pass round `o` (null if there is none), and the gap (px, centre to centre) it needs behind `o` to get across. */
+function nearestPass(view: AiView, car: Car, o: Car): { side: number; d: number; room: number } | null {
+  const best = passes(view, car, o).sort((p, q) => p.need - q.need)[0];
+  return best ? { side: best.side, d: best.d, room: CONFIG.CAR_LEN + best.need * AROUND_SLOPE } : null;
 }
 
 /** Rubbing side by side: move away from the other car and let it by if it is ahead. */
@@ -511,7 +646,7 @@ function paceTarget(car: Car, view: AiView, plan: Plan, dt: number): void {
 /** Steer for a point ahead on the planned line, gas / brake for the target, within the grip. */
 function steerAndPedals(car: Car, track: Track, pitLane: number | null, plan: Plan, out: DriveInput): void {
   const pxm = CONFIG.PX_PER_MPH;
-  const look = 40 + Math.max(0, car.speed) * pxm * 0.22;
+  const look = plan.look ?? 40 + Math.max(0, car.speed) * pxm * 0.22;
   let tx: number;
   let ty: number;
   if (pitLane !== null) {
@@ -707,12 +842,16 @@ function watchStuck(car: Car, view: AiView, dt: number): void {
   const misaligned = Math.abs(herr) > (car.contactPrev > 0 ? 0.35 : 0.7);
   if (view.started && !servicing && car.spinTime <= 0 && Math.abs(car.speed) < 4 && !car.finished) {
     ai.stuckTime += dt;
-    const blocked = noseBlocked(car, view.cars);
-    if (ai.stuckTime > 0.8 && (misaligned || blocked)) {
-      ai.lane = bestLane(track, car, view.cars);
+    // (right behind a standing car, with no room to steer round it: back out first)
+    const nose = noseBlocked(car, view.cars);
+    const back = misaligned || nose ? null : backOut(car, view);
+    if (ai.stuckTime > 0.8 && (misaligned || nose || back)) {
+      // (backing out from a standing car keeps the side it will pass on)
+      ai.lane = back ? back.lane : bestLane(track, car, view.cars);
       ai.laneCooldown = 2;
-      if (!tailBlocked(car, view.cars)) ai.recoverTime = misaligned ? 1.1 : 0.7;
-      ai.creepTime = 2.5;
+      if (!tailBlocked(car, view.cars)) ai.recoverTime = misaligned ? 1.1 : back ? back.time : 0.7;
+      // (no creep into a standing car it is backing away from: goAround drives on once there is room)
+      ai.creepTime = back ? 0 : 2.5;
       ai.stuckTime = 0;
     } else if (ai.stuckTime > 4 && ai.pitPhase !== 'exiting') {
       ai.creepTime = 2;
@@ -721,6 +860,22 @@ function watchStuck(car: Car, view: AiView, dt: number): void {
   } else {
     ai.stuckTime = 0;
   }
+}
+
+/** Right behind a standing car with no room to get round it: how long (s) to back out, and the lane on the side to pass; null if not. */
+function backOut(car: Car, view: AiView): { time: number; lane: number } | null {
+  let worst: { short: number; lane: number } | null = null;
+  for (const o of view.cars) {
+    const ds = view.track.deltaS(car.s, o.s);
+    if (o === car || ds <= 0 || !standing(view, car, o)) continue;
+    const pass = nearestPass(view, car, o);
+    if (pass && pass.room > ds && (!worst || pass.room - ds > worst.short))
+      worst = { short: pass.room - ds, lane: sideLane(o, pass.side, pass.d) };
+  }
+  if (!worst) return null;
+  // (reversing gets to AI_RECOVER_MPH in about half a second; it backs out AROUND_BACK_OUT_PX more than it needs)
+  const time = Math.min(AROUND_BACK_OUT_MAX_S, 0.8 + (worst.short + AROUND_BACK_OUT_PX) / (AI_RECOVER_MPH * CONFIG.PX_PER_MPH));
+  return { time, lane: worst.lane };
 }
 
 function isHazard(track: Track, o: Car, me: Car): boolean {
@@ -754,6 +909,36 @@ const BLOCK_MIN_PX = 120;
 /** A car this far behind / ahead (px), and across towards the inside, keeps it from moving. */
 const BLOCK_SIDE_BACK_PX = 60;
 const BLOCK_SIDE_FRONT_PX = 90;
+
+/**
+ * Driving around a standing car (goAround): a car under AROUND_STOPPED_MPH, or braking under AROUND_STOPPING_MPH,
+ * once AROUND_GRACE_S into the race (not the grid).
+ */
+const AROUND_STOPPED_MPH = 10;
+const AROUND_STOPPING_MPH = 60;
+/** The player's car, at the wheel, counts as braking to a stop from under this (mph). */
+const AROUND_PLAYER_STOPPING_MPH = 90;
+const AROUND_GRACE_S = 5;
+/** ...and heading along the track within this (rad). */
+const AROUND_ALIGNED_RAD = 0.35;
+/** The lane passes this far across (px) from it, and from any standing car within AROUND_QUEUE_PX along. */
+const AROUND_CLEAR_PX = 22;
+const AROUND_QUEUE_PX = 120;
+/** Until across: px along per px across, at no more than AROUND_MPH when it gets there. */
+const AROUND_SLOPE = 2;
+const AROUND_MPH = 25;
+/** A pass under way carries on up to this far (px) short of that room, at AROUND_CRAWL_MPH. */
+const AROUND_COMMIT_PX = 14;
+const AROUND_CRAWL_MPH = 10;
+/** Until across, the steering looks this far ahead (px): a sharp move out, at the slow AROUND_MPH. */
+const AROUND_LOOK_PX = 20;
+/** A car coming up behind on the lane needs this long (s) at the closing speed. */
+const AROUND_BEHIND_S = 0.8;
+/** The pass keeps this far (px) off the edge of the road. */
+const AROUND_EDGE_PX = 3;
+/** Backing out from one: this far (px) beyond the room it needs, for no longer than AROUND_BACK_OUT_MAX_S. */
+const AROUND_BACK_OUT_PX = 12;
+const AROUND_BACK_OUT_MAX_S = 3;
 
 const LANE_CHANGE_CLEAR = 160;
 /**

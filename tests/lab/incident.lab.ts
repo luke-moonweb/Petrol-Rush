@@ -11,7 +11,15 @@ it('incident', () => {
   const id = process.env.IN_TRACK ?? 'oval';
   const seed = Number(process.env.IN_SEED ?? 6);
   const r = new Race(
-    { ...DEFAULT_OPTIONS, ...JSON.parse(process.env.CR_OPTS ?? '{}'), ...(process.env.IN_LEVEL ? { difficulty: process.env.IN_LEVEL } : {}), track: id, cars: 20, laps: 5, qualifying: 'middle' },
+    {
+      ...DEFAULT_OPTIONS,
+      ...JSON.parse(process.env.CR_OPTS ?? '{}'),
+      ...(process.env.IN_LEVEL ? { difficulty: process.env.IN_LEVEL } : {}),
+      track: id,
+      cars: 20,
+      laps: 5,
+      qualifying: 'middle',
+    },
     seed,
     true,
     undefined,

@@ -15,7 +15,13 @@ test('free line diagnosis', () => {
   const track = getTrack(id);
   const line = racingLine(track);
   const out: string[] = [];
-  const r = new Race({ ...DEFAULT_OPTIONS, difficulty: 'hard', track: id, cars: 20, laps: 5, qualifying: 'middle' } as never, seed, true, undefined, track);
+  const r = new Race(
+    { ...DEFAULT_OPTIONS, difficulty: 'hard', track: id, cars: 20, laps: 5, qualifying: 'middle' } as never,
+    seed,
+    true,
+    undefined,
+    track,
+  );
   r.start();
   let next = every;
   while (!r.allFinished() && r.time < Number(process.env.FL_UNTIL ?? 120)) {

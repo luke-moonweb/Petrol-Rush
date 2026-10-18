@@ -20,7 +20,13 @@ test('ablation', () => {
     let time = 0;
     const per: number[] = [];
     for (let seed = 1; seed <= seeds; seed++) {
-      const r = new Race({ ...DEFAULT_OPTIONS, difficulty: 'hard', track: id, cars: 20, laps: 5, qualifying: 'middle' } as never, seed, true, undefined, getTrack(id));
+      const r = new Race(
+        { ...DEFAULT_OPTIONS, difficulty: 'hard', track: id, cars: 20, laps: 5, qualifying: 'middle' } as never,
+        seed,
+        true,
+        undefined,
+        getTrack(id),
+      );
       r.start();
       const was = r.cars.map(() => false);
       const touch = r.cars.map(() => false);
@@ -41,7 +47,9 @@ test('ablation', () => {
       per.push(sp);
       time += r.time;
     }
-    out.push(`${id} ${set.padEnd(30)} spins ${spins} [${per.join(' ')}] contacts ${contacts} walls ${walls} time ${(time / seeds).toFixed(1)}`);
+    out.push(
+      `${id} ${set.padEnd(30)} spins ${spins} [${per.join(' ')}] contacts ${contacts} walls ${walls} time ${(time / seeds).toFixed(1)}`,
+    );
   }
   process.stdout.write(`${out.join('\n')}\n`);
 }, 1_200_000);

@@ -1,9 +1,9 @@
 import { test } from 'vitest';
 import { DEFAULT_OPTIONS } from '../../src/config';
-import { lineUse } from '../../src/race/planner';
 import { PERSONAS } from '../../src/race/persona';
-import { racingLine } from '../../src/track/racingLine';
+import { lineUse } from '../../src/race/planner';
 import { Race } from '../../src/race/race';
+import { racingLine } from '../../src/track/racingLine';
 import { getTrack } from '../../src/track/tracks';
 
 declare const process: { env: Record<string, string | undefined>; stdout: { write(s: string): void } };
