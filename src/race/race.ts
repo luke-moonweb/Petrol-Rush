@@ -219,10 +219,20 @@ export class Race {
       car.contactStrength = 0;
     }
     const track = this.track;
-    const view = { track, cars: this.cars, started: this.started, laps: this.laps, time: this.time, oil: this.oil, pitAuto: this.pitAuto };
+    const playerDriving = !this.playerAI && !this.pitAuto && !this.autoPlayer;
+    const view = {
+      track,
+      cars: this.cars,
+      started: this.started,
+      laps: this.laps,
+      time: this.time,
+      oil: this.oil,
+      pitAuto: this.pitAuto,
+      playerDriving,
+    };
     for (const car of this.cars) car.draft = draftOf(car, this.cars, track);
     for (const car of this.cars) {
-      const own = car.isPlayer && !this.playerAI && !this.pitAuto && !this.autoPlayer;
+      const own = car.isPlayer && playerDriving;
       const input = own ? (playerInput ?? NO_INPUT) : aiInput(car, view, dt);
       if (car.isPlayer) this.playerDrive = input;
       car.brakeHold = input.brake && Math.abs(car.speed) > 1 ? CONFIG.BRAKE_LIGHT_HOLD_S : Math.max(0, car.brakeHold - dt);
