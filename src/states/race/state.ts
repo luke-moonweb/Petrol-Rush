@@ -1,5 +1,5 @@
 import { CONFIG, type RaceOptions } from '../../config';
-import { stepCabin } from '../../gfx/fpv/cabin';
+import { PIT_SOON_LAPS, stepCabin } from '../../gfx/fpv/cabin';
 import { cockpitOverlayMs } from '../../gfx/fpv/timing';
 import { drawCockpitView, prewarmCockpitView, prewarmScene } from '../../gfx/fpv/view';
 import { Particles } from '../../gfx/particles';
@@ -16,7 +16,7 @@ import type { TouchLayout } from '../../touch';
 import { wrapAngle } from '../../track/common';
 import { getTrack } from '../../track/tracks';
 import type { Hit } from '../../ui/hit';
-import { drawHudPanel, drawHudTop, drawSkidLamp } from '../../ui/hud';
+import { drawHudPanel, drawHudTop, drawSkidLamp, fuelOutlook } from '../../ui/hud';
 import { drawPause, drawRaceMenu, drawRaceSettings, drawResults } from '../../ui/overlays';
 import { ordinal } from '../../ui/text';
 import { PR } from '../../ui/theme';
@@ -522,6 +522,9 @@ export class RaceState implements State {
     if (p.refueling) return 'REFUELING  –  GAS to leave';
     if (this.race.pitAuto) return 'PIT LANE  –  AUTO';
     if (p.fuel < CONFIG.LOW_FUEL && Math.floor(this.race.time * 2) % 2 === 0) return 'LOW FUEL';
+    // short of the finish at the player's own rate, when lifting can make it up or a stop is close
+    const fuel = fuelOutlook(this.race);
+    if (fuel.call === 'short' && (fuel.canSave || fuel.laps < PIT_SOON_LAPS)) return 'FUEL SHORT  –  SAVE OR PIT';
     if (this.notices.penaltyMsg > 0) return `PENALTY +${CONFIG.PENALTY_S} S  –  YOU CAUSED A CRASH`;
     if (this.controls.reverseHint > 0) return 'STOP TO ENGAGE REVERSE';
     if (p.reverse) return 'REVERSE';

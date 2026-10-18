@@ -2,7 +2,7 @@ import type { Car } from '../../race/car';
 import type { Race } from '../../race/race';
 import type { Warn } from '../../race/warnings';
 import { createRng } from '../../sim/rng';
-import { drawFuelGauge, drawSpeedo } from '../../ui/hud';
+import { drawFuelGauge, drawFuelLaps, drawSpeedo, type FuelOutlook, fuelOutlook } from '../../ui/hud';
 import { FONT_BLACK, PR } from '../../ui/theme';
 import { CAR_SCHEMES } from '../vehicles';
 import { cabinFor, cabinReadout, joltOffset, LED_COUNT, type Readout } from './cabin';
@@ -772,8 +772,12 @@ function drawSpeed(g: CanvasRenderingContext2D, gm: Geom, mph: number, arcFrom: 
   drawDial(g, gm, gm.cx, () => drawSpeedo(g, mph, 0, 0, SPEEDO_R, arcFrom));
 }
 
-function drawFuel(g: CanvasRenderingContext2D, gm: Geom, fuel: number, time: number): void {
-  drawDial(g, gm, gm.fuelCx, () => drawFuelGauge(g, fuel, time, 0, 0, FUEL_R));
+/** The fuel gauge, with the laps-of-fuel readout over it (the lamp row leaves no room under it). */
+function drawFuel(g: CanvasRenderingContext2D, gm: Geom, fuel: number, time: number, out: FuelOutlook | null): void {
+  drawDial(g, gm, gm.fuelCx, () => {
+    drawFuelGauge(g, fuel, time, 0, 0, FUEL_R);
+    drawFuelLaps(g, out, 0, -FUEL_R - 4);
+  });
 }
 
 function drawPod(g: CanvasRenderingContext2D, gm: Geom, r: Readout): void {
@@ -849,11 +853,13 @@ export function drawCockpit(g: CanvasRenderingContext2D, w: number, h: number, f
   const gm = lay.gm;
   const pos = p.finished ? race.shownPosition(p) : f.standings.indexOf(p) + 1;
   const ahead = p.finished ? undefined : f.standings[pos - 2];
+  const fuelOut = fuelOutlook(race);
   const r = cabinReadout({
     time: f.time,
     speed: p.speed,
     reverse: p.reverse,
     fuel: p.fuel,
+    fuelOut,
     lapsToGo: race.lapsToGo(p),
     started: race.started,
     finished: p.finished,
@@ -890,7 +896,7 @@ export function drawCockpit(g: CanvasRenderingContext2D, w: number, h: number, f
   drawFlecks(g, gm, cabin.oil, cabin.grit);
   drawLeds(g, gm, r.leds);
   drawSpeed(g, gm, p.speed, f.arcFrom);
-  drawFuel(g, gm, p.fuel, race.time);
+  drawFuel(g, gm, p.fuel, race.time, p.finished ? null : fuelOut);
   drawPod(g, gm, r);
   drawLamps(g, gm, r);
 

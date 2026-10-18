@@ -3,10 +3,10 @@ import type { Car } from '../../race/car';
 import { oilRadius } from '../../race/oil';
 import type { Race } from '../../race/race';
 import type { Warn } from '../../race/warnings';
+import type { FuelOutlook } from '../../ui/hud';
 import { PR } from '../../ui/theme';
 
 export const LED_COUNT = 9;
-export const FUEL_SEGS = CONFIG.FUEL_RANGE_LAPS;
 export const LED_GREEN = '#52E252';
 export const JOLT_PX = 3;
 export const JOLT_S = 0.12;
@@ -96,6 +96,8 @@ export interface CabinInput {
   speed: number;
   reverse: boolean;
   fuel: number;
+  /** The player's fuel against the finish (hud.ts `fuelOutlook`), as the HUD readout shows it. */
+  fuelOut: FuelOutlook;
   lapsToGo: number;
   started: boolean;
   finished: boolean;
@@ -120,7 +122,6 @@ export interface Lamps {
 
 export interface Readout {
   leds: (string | null)[];
-  fuelLaps: number;
   lamps: Lamps;
   podTop: string;
   podBottom: string;
@@ -154,11 +155,10 @@ function leds(s: CabinInput, mph: number): (string | null)[] {
 export function cabinReadout(s: CabinInput): Readout {
   const mph = Math.round(Math.abs(s.speed));
   const t = s.time;
-  const fuel = Math.max(0, Math.min(1, s.fuel));
-  const fuelLaps = fuel * FUEL_SEGS;
-  const low = fuel < CONFIG.LOW_FUEL;
+  const fuelLaps = s.fuelOut.laps;
+  const low = s.fuel < CONFIG.LOW_FUEL;
   const racing = s.started && !s.finished;
-  const short = racing && fuelLaps < s.lapsToGo;
+  const short = racing && s.fuelOut.call === 'short';
   const soon = short && fuelLaps < PIT_SOON_LAPS;
   const lamps: Lamps = s.finished
     ? { pit: false, fuel: false, skid: false, pen: false, rev: false }
@@ -190,7 +190,6 @@ export function cabinReadout(s: CabinInput): Readout {
   }
   return {
     leds: leds(s, mph),
-    fuelLaps,
     lamps,
     podTop,
     podBottom,
