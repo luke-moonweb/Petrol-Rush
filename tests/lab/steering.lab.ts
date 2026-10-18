@@ -8,6 +8,7 @@ import {
   ovalEntry,
   ovalKeyLap,
   ovalLaps,
+  ovalWallGrid,
   tapAngle,
   tapOverdrive,
   tapperScore,
@@ -105,6 +106,8 @@ function oval(): string[] {
     }),
   );
   out.push(`keys test 1 (lane / plan: outcome, top grip use): ${held.join('  ')}`);
+  const grid = ovalWallGrid(steer);
+  out.push(`wall contacts over 6 lanes x 10 plans: ${grid.walls}/60 ${grid.where.join(' ')}`);
   for (const d of [-9.5, 0]) {
     const base = ovalEntry(d, 1, { steer }, 1600);
     const rows = [1.05, 1.1, 1.15].map((f) => {

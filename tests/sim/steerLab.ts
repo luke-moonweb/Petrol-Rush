@@ -219,6 +219,17 @@ export function ovalLaps(d: number, planFrac: number, steer = B) {
   );
 }
 
+/** The human key player's wall contacts on the oval over a grid of lanes (-9.5..14.25) and braking plans (0.88..1.06 x the limit): runs with a contact, of 60. */
+export function ovalWallGrid(steer = B): { walls: number; where: string[] } {
+  const where: string[] = [];
+  for (const d of [-9.5, -4.75, 0, 4.75, 9.5, 14.25])
+    for (let i = 0; i < 10; i++) {
+      const f = 0.88 + 0.02 * i;
+      if (ovalLaps(d, f, steer).wallHits > 0) where.push(`${d}/${f.toFixed(2)}`);
+    }
+  return { walls: where.length, where };
+}
+
 /** The largest |AI - human| (s) of tests/corners.test.ts ("the AI keeps up"), and any AI wall or spin. */
 export function aiGap(steer = B): { worst: number; dirty: number } {
   let worst = 0;
