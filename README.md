@@ -78,7 +78,7 @@ Open the address printed by Vite (by default http://localhost:5173).
 | `npm run build` | Type-check and production build into `dist/` |
 | `npm run preview` | Serve the production build locally |
 | `npm test` | Fast tests (~5 s, skips the full-race simulations) |
-| `npm run test:all` | Every test, including full-race simulations (~35 s; CI runs this) |
+| `npm run test:all` | Every test, including full-race simulations (~20 s; CI runs this) |
 | `npm run typecheck` | TypeScript check only |
 | `npm run lint` | Lint and check formatting (Biome) |
 | `npm run lint:fix` | Apply safe lint fixes and format the code |
@@ -239,7 +239,7 @@ tests/             Vitest: oval golden master, track geometry, lap counting, phy
 
 ```bash
 npm test          # fast tier, ~5 s
-npm run test:all  # everything, ~35 s – run before pushing
+npm run test:all  # everything, ~20 s – run before pushing
 ```
 
 The suite includes headless simulations of complete 20-car races on every circuit (including all
