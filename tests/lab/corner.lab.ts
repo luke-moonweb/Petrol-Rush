@@ -1,6 +1,7 @@
 import { it } from 'vitest';
 import { CONFIG } from '../../src/config';
 import {
+  applySet,
   bestEntry,
   type CornerBest,
   type CornerSpec,
@@ -17,7 +18,7 @@ import {
 //   npm run lab                                         the corner map (R x angle, drivers line and human)
 //   LAB="r=140 deg=90" npm run lab                      best entry for one corner (lists: r=120,140; ranges: deg=45:180:45)
 //   LAB="r=140 deg=90 v=150:180:5 driver=human" npm run lab     one run per start speed (mode hold by default)
-//   keys: r deg dir=left|right use=0..1 driver=line|human|ai insist=1 react=s mode=flat|brake|hold v vc
+//   keys: r deg dir=left|right use=0..1 driver=line|human|tapper|ai insist=1 react=s mode=flat|brake|hold v vc
 //   driver=ai: the game AI alone on the corner, one run per skill (skill=1,0: fastest / slowest draw; lane=d),
 //     next to the human key player's best entry: LAB="deg=90,135 driver=ai" npm run lab
 //   trace=1 with one corner and one v / vc: the run step by step (every 0.1 s and every wall contact)
@@ -25,18 +26,6 @@ import {
 
 // (the project has no Node types; this is all the lab uses)
 declare const process: { env: Record<string, string | undefined>; stdout: { write(s: string): void } };
-
-function applySet(src: string): void {
-  for (const tok of src.split(/\s+/).filter(Boolean)) {
-    const [path, val] = tok.split('=');
-    const keys = path!.split('.');
-    let obj = CONFIG as unknown as Record<string, unknown>;
-    for (const k of keys.slice(0, -1)) obj = obj[k] as Record<string, unknown>;
-    const last = keys[keys.length - 1]!;
-    if (typeof obj?.[last] !== 'number') throw new Error(`LAB_SET: ${path} is not a number in CONFIG`);
-    obj[last] = Number(val);
-  }
-}
 
 function parse(src: string): Record<string, string> {
   return Object.fromEntries(

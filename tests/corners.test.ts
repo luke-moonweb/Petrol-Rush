@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
+import { CONFIG } from '../src/config';
+import { limitMph } from '../src/race/physics';
 import { labCorner } from './sim/curves';
-import { bestEntry, type CornerBest, runCorner } from './sim/lab';
+import { bestEntry, type CornerBest, cornerFor, runCorner } from './sim/lab';
 
 // The corner lab (tests/sim/lab.ts): its geometry, and the corner targets of the driving model.
 
@@ -73,9 +75,16 @@ describe('corner lab: the driving model', () => {
     }
   });
 
-  it('5: 10 % too fast forgives in a slow hairpin but not in a fast one', () => {
-    expect(bestEntry({ r: 60, deg: 180, driver: 'human' }).over!.spun).toBe(false);
-    expect(bestEntry({ r: 140, deg: 180, driver: 'human' }).over!.spun).toBe(true);
+  // (stated against the line's limit, not the key player's best entry: that one moves with the key steering)
+  it('5: 15 % over the line limit forgives in a slow hairpin but not in a fast one', () => {
+    for (const [r, spins] of [
+      [60, false],
+      [140, true],
+    ] as const) {
+      const spec = { r, deg: 180, driver: 'human' } as const;
+      const vc = Math.min(CONFIG.MAX_MPH, limitMph(1 / cornerFor(spec).rho) * 1.15);
+      expect(runCorner({ ...spec, mode: 'brake', vc }).spun, `R ${r}`).toBe(spins);
+    }
   });
 
   it('6: the racing line pays: using the whole width is >= 0.2 s faster through a 90 degree R 140', () => {

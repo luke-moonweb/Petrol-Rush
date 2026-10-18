@@ -205,7 +205,10 @@ export class RaceState implements State {
         }
         break;
     }
-    if (this.phase !== 'running') this.game.audio.silence();
+    if (this.phase !== 'running') {
+      this.game.audio.silence();
+      this.controls.release();
+    }
   }
 
   /** A race is under way (started, or the start lights are on) and the menu was opened from it. */
@@ -544,6 +547,7 @@ export class RaceState implements State {
       `mph ${p.speed.toFixed(1)}  fuel ${(p.fuel * 100).toFixed(1)}%  spin ${p.spinTime.toFixed(2)}`,
       `sector ${p.lastSector} passed ${p.sectorsPassed}  t ${this.race.time.toFixed(1)}`,
       `grip ${p.gripUse.toFixed(2)} slip ${((wrapAngle(p.heading - p.moveAngle) * 180) / Math.PI).toFixed(1)}° rear ${p.rearLoose ? 'LOOSE' : p.rearStress.toFixed(2)} limit ${warnings(p, this.race.track).vRef.toFixed(0)}`,
+      this.controls.debugLine(),
       ...(this.cockpit ? [this.overlayLine()] : []),
     ];
   }

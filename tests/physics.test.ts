@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { CONFIG, DEFAULT_OPTIONS } from '../src/config';
 import type { Car } from '../src/race/car';
-import { collideCars, limitMph, SteerRamp, stepCar } from '../src/race/physics';
+import { collideCars, limitMph, stepCar } from '../src/race/physics';
 import { Race } from '../src/race/race';
 import { wrapAngle } from '../src/track/common';
 import { laneCurvature } from '../src/track/curvature';
@@ -9,7 +9,7 @@ import { gpTracks } from '../src/track/gp';
 import { pointAt, project, S_TURN1 } from '../src/track/oval';
 import { OVAL } from '../src/track/ovalTrack';
 import { CurveTrack } from './sim/curves';
-import { runCurve } from './sim/drivers';
+import { runCurve, SteerRamp } from './sim/drivers';
 
 function carAt(s: number, mph: number): Car {
   const race = new Race({ ...DEFAULT_OPTIONS, cars: 1 }, 3);
@@ -65,7 +65,7 @@ describe('driving model', () => {
     expect(t).toBeLessThan(0.5);
   });
 
-  it('keyboard: a short tap is a small correction, holding gives a full turn', () => {
+  it('the stress drivers key ramp: a short tap is a small correction, holding gives a full turn', () => {
     const r = new SteerRamp();
     expect(r.update(1, 1 / 60)).toBeLessThan(0.3);
     let v = 0;

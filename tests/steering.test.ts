@@ -5,7 +5,11 @@ import { keyCap, PlayerSteering } from '../src/race/steering';
 import { laneCurvature } from '../src/track/curvature';
 import { CAR_R, HALF_W, pointAt, project, RC, S_BOTTOM, S_TURN1, S_TURN2, trackHeadingAt, wrapAngle } from '../src/track/oval';
 import { OVAL } from '../src/track/ovalTrack';
-import { freshCar } from './sim/drivers';
+import { CurveTrack } from './sim/curves';
+import { freshCar, placeCar, steerTrack, withWalls } from './sim/drivers';
+import { catchSteps, tapAngle, tapOverdrive, tapping, toStop } from './sim/steerLab';
+
+const OVAL_NO_WALLS = withWalls(() => null);
 
 function carAt(s: number, d: number, mph: number) {
   const car = freshCar();
@@ -196,5 +200,194 @@ describe('grip model: key and touch steering cap (designer H2)', () => {
     expect(ps.overdrive).toBeGreaterThan(0);
     hold(ps, car, 0, 1.2);
     expect(ps.overdrive).toBe(0);
+  });
+});
+
+describe('key wheel (STEERING_PLAN B1, B2, B6)', () => {
+  const STEP = 1 / 60;
+  const run = (ps: PlayerSteering, car: ReturnType<typeof carAt>, key: number, steps: number) => {
+    let st = ps.update(car, key, STEP);
+    for (let i = 1; i < steps; i++) st = ps.update(car, key, STEP);
+    return st.steer;
+  };
+
+  it('a longer tap turns further, and even a one-step tap on a straight stays (no all or nothing)', () => {
+    for (const mph of [140, 180]) {
+      const turned = [1, 2, 3, 4].map((n) => tapAngle(mph, n));
+      expect(turned[0], `${mph} mph`).toBeGreaterThan(0.05);
+      for (let i = 1; i < turned.length; i++) expect(turned[i]!, `${mph} mph`).toBeGreaterThan(turned[i - 1]! * 1.3);
+    }
+  });
+
+  it('the stop (the key cap) comes after the same time at any speed, on a straight and in a corner', () => {
+    const times = [toStop(100, false), toStop(100, true), toStop(140, false), toStop(140, true)];
+    for (const t of times) expect(t).toBeCloseTo(times[0]!, 6);
+    expect(times[0]).toBeGreaterThan(150);
+    expect(times[0]).toBeLessThan(300);
+  });
+
+  it('tapping is about proportional: at 50 % duty the grip used hardly depends on the tapping rate', () => {
+    const use = [12, 8, 5, 4].map((n) => tapping(140, n, n, 0).use);
+    // (the old ramp: 0.19 to 0.34)
+    expect(Math.max(...use) - Math.min(...use)).toBeLessThan(0.13);
+  });
+
+  it('tapping at 5 Hz on an arc sways the heading by under 2.5 degrees (the old ramp: 4.7)', () => {
+    for (const arc of [0.5, 0.65]) expect(tapping(140, 6, 6, arc).sway, `arc ${arc}`).toBeLessThan(2.5);
+  });
+
+  it('a released key centres the wheel within about 0.2 s, to exactly 0 (where the straight assist can act)', () => {
+    const car = carAt(S_BOTTOM + 100, 0, 150);
+    const ps = new PlayerSteering();
+    expect(run(ps, car, 1, 30)).toBeGreaterThan(0);
+    const released = (steps: number) => run(ps, car, 0, steps);
+    expect(released(1)).toBeGreaterThan(0);
+    released(12);
+    expect(ps.wheel).toBe(0);
+    expect(ps.update(car, 0, STEP).steer).toBe(0);
+  });
+
+  it('turning the other way crosses the centre fast but not in one step', () => {
+    const car = carAt(S_BOTTOM + 100, 0, 150);
+    const ps = new PlayerSteering();
+    run(ps, car, 1, 30);
+    expect(ps.wheel).toBe(1);
+    ps.update(car, -1, STEP);
+    expect(ps.wheel).toBeGreaterThan(0);
+    expect(ps.wheel).toBeLessThan(0.5);
+    run(ps, car, -1, 2);
+    expect(ps.wheel).toBeLessThan(0);
+  });
+
+  it('a countersteer at 170 mph reaches the cap within 2 steps (the old ramp: 1)', () => {
+    expect(catchSteps(170)).toBeLessThanOrEqual(2);
+  });
+
+  it('nearly stopped (and in reverse) the wheel turns to full lock in under 0.2 s', () => {
+    const car = carAt(S_BOTTOM + 100, 0, 5);
+    const ps = new PlayerSteering();
+    expect(run(ps, car, 1, 12)).toBe(1);
+    car.reverse = true;
+    expect(run(ps, car, -1, 12)).toBe(-1);
+  });
+
+  it('a spin centres the wheel; a lost focus centres it but keeps the corner assist blended in', () => {
+    const car = carAt(S_TURN1 + 100, 0, 150);
+    const ps = new PlayerSteering();
+    run(ps, car, -1, 30);
+    car.spinTime = 0.5;
+    ps.update(car, -1, STEP);
+    expect(ps.wheel).toBe(0);
+    car.spinTime = 0;
+    const assistOnly = run(new PlayerSteering(), car, 0, 30);
+    run(ps, car, -1, 30);
+    ps.release();
+    expect(ps.wheel).toBe(0);
+    expect(ps.update(car, 0, STEP).steer).toBeCloseTo(assistOnly, 9);
+  });
+
+  it('braking clips the steer to the braked cap without rescaling the wheel', () => {
+    const car = carAt(S_BOTTOM + 100, 0, 170);
+    const ps = new PlayerSteering();
+    // half way to the stop: under the braked cap, the brake changes nothing
+    const half = run(ps, car, 1, 5);
+    expect(half).toBeLessThan(keyCap(car, true));
+    const ps2 = new PlayerSteering();
+    let braked = 0;
+    for (let i = 0; i < 5; i++) braked = ps2.update(car, 1, STEP, i === 4).steer;
+    expect(braked).toBeCloseTo(half, 9);
+  });
+
+  it('tapping into a corner far too fast opens the steering as holding does', () => {
+    for (const f of [1.15, 1.25]) {
+      const held = tapOverdrive(f, 60, 0);
+      expect(held, `x${f}`).toBe(1);
+      for (const [on, off] of [
+        [4, 4],
+        [6, 6],
+        [3, 3],
+      ] as const)
+        expect(Math.abs(tapOverdrive(f, on, off) - held), `x${f} ${on}/${off}`).toBeLessThanOrEqual(0.15);
+    }
+  });
+});
+
+describe('straight assist latch (STEERING_PLAN B4)', () => {
+  /**
+   * A left bend onto a long straight at 120 mph. The key is held into the bend; on the straight it is still
+   * held for 6 steps (carried) or let go there and tapped once 15 steps later (fresh). 40 steps after the
+   * straight starts the heading is set 1 deg off the road: the error 1 s later (deg).
+   */
+  function errorAfter(fresh: boolean): number {
+    const mph = 120;
+    const v = mph * CONFIG.PX_PER_MPH;
+    const t = new CurveTrack([
+      { len: 200, k: 0 },
+      { len: 600, k: -(0.8 * gripAt(v)) / (v * v) },
+      { len: 4000, k: 0 },
+    ]);
+    const car = freshCar();
+    placeCar(car, t, 700, 0, mph);
+    const ps = new PlayerSteering(steerTrack(t));
+    const road = (s: number) => t.pointAt(s, 0).heading;
+    let s = 700;
+    let straightAt = -1;
+    for (let i = 0; i < 200; i++) {
+      const st = t.project(car.x, car.y, s);
+      s = car.s = st.s;
+      car.d = st.d;
+      if (straightAt < 0 && s > 800) straightAt = i;
+      const k = i - straightAt;
+      let key = straightAt < 0 ? -1 : 0;
+      if (straightAt >= 0 && !fresh && k < 6) key = -1;
+      if (straightAt >= 0 && fresh && k >= 15 && k < 20) key = -1;
+      if (straightAt >= 0 && k === 40) car.heading = car.moveAngle = road(s) + Math.PI / 180;
+      const out = ps.update(car, key, 1 / 60);
+      stepCar(
+        car,
+        { steer: out.steer, straightTo: out.straightTo, gas: car.speed < mph, brake: false, toggleReverse: false },
+        1 / 60,
+        OVAL_NO_WALLS,
+      );
+      if (straightAt >= 0 && k === 100) return (wrapAngle(car.heading - road(t.project(car.x, car.y, s).s)) * 180) / Math.PI;
+    }
+    return Number.NaN;
+  }
+
+  it('a key held out of the bend is not a fresh press: once let go, the car straightens', () => {
+    expect(Math.abs(errorAfter(false))).toBeLessThan(0.1);
+  });
+
+  it('a fresh tap on the straight turns the assist off until the next bend: a 1 degree heading stays', () => {
+    expect(errorAfter(true)).toBeGreaterThan(0.9);
+  });
+
+  it('a new race turns it back on', () => {
+    const car = carAt(S_BOTTOM + 100, 0, 150);
+    const ps = new PlayerSteering();
+    for (let i = 0; i < 30; i++) ps.update(car, i < 3 ? 1 : 0, 1 / 60);
+    expect(ps.update(car, 0, 1 / 60).straightTo).toBeUndefined();
+    ps.resetAssist();
+    expect(ps.update(car, 0, 1 / 60).straightTo).toBeDefined();
+  });
+});
+
+describe('corner assist at the end of a bend (STEERING_PLAN B6)', () => {
+  it('fades out over CORNER_ASSIST_IN_S instead of dropping in one step, and a slide still cuts it at once', () => {
+    const exitTo = (slip: number) => {
+      const car = carAt(S_TURN1 + 100, 0, 150);
+      const ps = new PlayerSteering();
+      for (let i = 0; i < 30; i++) ps.update(car, 0, 1 / 60);
+      const inBend = ps.update(car, 0, 1 / 60).steer;
+      const p = pointAt(S_BOTTOM + 100, 0);
+      Object.assign(car, { x: p.x, y: p.y, heading: p.heading + slip, moveAngle: p.heading, s: S_BOTTOM + 100 });
+      return { inBend, out: ps.update(car, 0, 1 / 60).steer, ps, car };
+    };
+    const { inBend, out, ps, car } = exitTo(0);
+    expect(inBend).toBeLessThan(0);
+    expect(out / inBend).toBeCloseTo(1 - 1 / 60 / CONFIG.CORNER_ASSIST_IN_S, 6);
+    for (let i = 0; i < 10; i++) ps.update(car, 0, 1 / 60);
+    expect(ps.update(car, 0, 1 / 60).steer).toBe(0);
+    expect(exitTo(0.2).out).toBe(0);
   });
 });
