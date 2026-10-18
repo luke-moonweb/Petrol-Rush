@@ -12,7 +12,7 @@ import { Race } from '../../race/race';
 import { type Warn, WarnDisplay, warnings } from '../../race/warnings';
 import type { TouchLayout } from '../../touch';
 import { wrapAngle } from '../../track/common';
-import { getTrack, OVAL_ID } from '../../track/tracks';
+import { getTrack } from '../../track/tracks';
 import type { Hit } from '../../ui/hit';
 import { drawHudPanel, drawHudTop, drawSkidLamp } from '../../ui/hud';
 import { drawPause, drawRaceMenu, drawRaceSettings, drawResults } from '../../ui/overlays';
@@ -107,16 +107,11 @@ export class RaceState implements State {
   }
 
   touchCamera(): boolean {
-    return this.cockpitTrack();
-  }
-
-  // The cockpit scene is built from the oval's geometry, so other circuits stay top-down.
-  private cockpitTrack(): boolean {
-    return this.race.track.id === OVAL_ID;
+    return true;
   }
 
   private get cockpit(): boolean {
-    return this.game.prefs.camera === 'cockpit' && this.cockpitTrack();
+    return this.game.prefs.camera === 'cockpit';
   }
 
   tap(hit: Hit | null, x: number): void {
@@ -171,7 +166,7 @@ export class RaceState implements State {
 
   update(dt: number): void {
     const input = this.game.input;
-    if (input.pressed('camera') && this.cockpitTrack()) {
+    if (input.pressed('camera')) {
       const prefs = this.game.prefs;
       prefs.camera = prefs.camera === 'top' ? 'cockpit' : 'top';
       this.game.audio.ui('move');
@@ -342,7 +337,7 @@ export class RaceState implements State {
       }
       if (this.lights.t >= this.lights.outAt + 1.5) this.lights = null;
       if (!this.race.started) {
-        if (this.cockpitTrack()) prewarmScene(this.race.track);
+        prewarmScene(this.race.track);
         this.game.audio.setEngine(drive.gas ? 70 : 10, true, drive.gas);
         return;
       }
@@ -409,7 +404,7 @@ export class RaceState implements State {
       });
     } else {
       this.renderTopDown(g, race, ix, iy, ih);
-      if (this.cockpitTrack()) prewarmCockpitView(g, view, race.player.colorIdx, this.game.touch);
+      prewarmCockpitView(g, view, race.player.colorIdx, this.game.touch);
     }
 
     drawHudTop(g, race, this.notices.notice);

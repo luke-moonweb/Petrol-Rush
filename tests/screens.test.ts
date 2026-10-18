@@ -125,7 +125,7 @@ describe('screens, headless', () => {
     expect(shots).toMatchSnapshot();
   }, 60_000);
 
-  it('a race on a Grand Prix circuit draws top-down and offers no cockpit', () => {
+  it('a race on a Grand Prix circuit, top-down and in the cockpit; fingerprints of both', () => {
     const game = newGame();
     press(game, 'enter');
     press(game, 'down');
@@ -134,12 +134,16 @@ describe('screens, headless', () => {
     press(game, 'down', 5);
     press(game, 'enter'); // START RACE
     const race = screen(game).race!;
-    expect(race.track.id).not.toBe('oval');
+    expect(race.track.id).toBe('harbour');
     race.autoPlayer = true;
     run(game, 20);
     expect(race.player.speed).toBeGreaterThan(80);
+    const topDown = frame(game);
     press(game, 'camera');
-    expect(game.prefs.camera).toBe('top');
-    expect(frame(game)).toMatchSnapshot();
+    expect(game.prefs.camera).toBe('cockpit');
+    run(game, 1);
+    const cockpit = frame(game);
+    expect(cockpit.calls).toBeGreaterThan(200);
+    expect({ topDown, cockpit }).toMatchSnapshot();
   }, 60_000);
 });

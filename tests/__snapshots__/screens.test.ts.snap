@@ -1,9 +1,15 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`screens, headless > a race on a Grand Prix circuit draws top-down and offers no cockpit 1`] = `
+exports[`screens, headless > a race on a Grand Prix circuit, top-down and in the cockpit; fingerprints of both 1`] = `
 {
-  "calls": 90810,
-  "hash": "92c5a5ed",
+  "cockpit": {
+    "calls": 24997,
+    "hash": "0b9d37e7",
+  },
+  "topDown": {
+    "calls": 90811,
+    "hash": "c544d231",
+  },
 }
 `;
 

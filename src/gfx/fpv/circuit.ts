@@ -1,3 +1,4 @@
+import { HALF_W } from '../../track/common';
 import type { SegmentTrack } from '../../track/segment';
 import { NOSE, PIT_D, SEP_MID } from '../../track/straightPit';
 import { circuitGround, circuitPropSpots, circuitTheme, inSideOf, pitPaint, pitRange, SHOULDER_W, WALL_W } from '../track/circuit/canvas';
@@ -132,8 +133,19 @@ function pitEnds(P: Parts, track: SegmentTrack, theme: CircuitTheme): void {
   const x = (u: number) => geo.x0 + u;
   const y = (d: number) => geo.y0 + d;
   const back = night(theme.shoulder);
-  kerbWall(P, x(geo.entry0), y(PIT_D.SEP), x(geo.wall0), y(PIT_D.BOX_TOP), PAD_H, back);
-  kerbWall(P, x(geo.wall1), y(PIT_D.BOX_TOP), x(geo.exit1), y(PIT_D.SEP), PAD_H, back);
+  // The roads' outer edge runs diagonally from the straight's edge out to the boxes; where a corner's
+  // kerb still widens the straight, the kerb is drivable and the wall starts beyond it.
+  const taperD = (u: number) =>
+    PIT_D.SEP +
+    (PIT_D.BOX_TOP - PIT_D.SEP) *
+      Math.min(1, u < geo.wall0 ? (u - geo.entry0) / (geo.wall0 - geo.entry0) : (geo.exit1 - u) / (geo.exit1 - geo.wall1));
+  const clear = (u: number) => -taperD(u) >= HALF_W + track.kerbs(track.startS + u)[0];
+  let u0 = geo.entry0;
+  while (u0 < geo.wall0 && !clear(u0)) u0 += 2;
+  let u1 = geo.exit1;
+  while (u1 > geo.wall1 && !clear(u1)) u1 -= 2;
+  kerbWall(P, x(u0), y(taperD(u0)), x(geo.wall0), y(PIT_D.BOX_TOP), PAD_H, back);
+  kerbWall(P, x(geo.wall1), y(PIT_D.BOX_TOP), x(u1), y(taperD(u1)), PAD_H, back);
   const side = night(COL.sep, 1.8);
   const top = night(COL.sepTop);
   for (const [tip, dir] of [

@@ -2,13 +2,15 @@ import './sim/browser';
 import { describe, expect, it } from 'vitest';
 import { CONFIG, DEFAULT_OPTIONS } from '../src/config';
 import { type CabinInput, cabinFor, cabinReadout, JOLT_GAP_S, joltOffset, LED_COUNT, ledMph, stepCabin } from '../src/gfx/fpv/cabin';
-import { Camera, clipProject, outX, outY } from '../src/gfx/fpv/engine';
+import { Camera, clipProject, outX, outY, visible } from '../src/gfx/fpv/engine';
 import { upright } from '../src/gfx/fpv/geom';
 import { OVAL_SPEC } from '../src/gfx/fpv/oval';
-import { buildScene } from '../src/gfx/fpv/scene';
+import { buildScene, sceneSpec } from '../src/gfx/fpv/scene';
 import { drawTexQuad, texFacing, texQuad } from '../src/gfx/fpv/texture';
 import { Race } from '../src/race/race';
 import { NO_WARN } from '../src/race/warnings';
+import { HALF_W } from '../src/track/common';
+import { allTracks } from '../src/track/tracks';
 import { PR } from '../src/ui/theme';
 
 function camera(): Camera {
@@ -95,6 +97,63 @@ describe('first-person renderer', () => {
     c.set(10, 60, 3, -Math.PI / 2);
     drawTexQuad(g, c, q, 50);
     expect(drawn).toBe(2);
+  });
+});
+
+// Every track gets the cockpit from its TrackDef alone, so these checks run on every track there is.
+describe.each(allTracks().map((t) => [t.id, t] as const))('the cockpit scene of %s', (_id, track) => {
+  const spec = sceneSpec(track);
+  const scene = buildScene(spec);
+
+  it('builds, with finite coordinates everywhere', () => {
+    expect(scene.ground.length).toBeGreaterThan(0);
+    expect(scene.solids.length).toBeGreaterThan(500);
+    const polys = [...scene.ground, ...scene.decals, ...scene.island, ...scene.solids];
+    for (const p of polys) for (const a of [p.xs, p.ys, p.zs]) for (const v of a) expect(Number.isFinite(v)).toBe(true);
+    const quads = [...scene.signs, ...scene.groundSigns, ...scene.solids.flatMap((p) => p.decals ?? [])];
+    for (const q of quads) for (const v of q.pts.flat()) expect(Number.isFinite(v)).toBe(true);
+    for (const o of [...scene.glows, ...scene.pools, ...scene.billboards]) expect(Number.isFinite(o.x + o.y + o.z)).toBe(true);
+  });
+
+  it('hangs its upright signs on the walls behind them (only the grandstand banner hangs free)', () => {
+    const hung = scene.solids.flatMap((p) => p.decals ?? []);
+    expect(hung.length).toBeGreaterThan(40);
+    for (const p of scene.solids) {
+      for (const q of p.decals ?? []) {
+        expect(Math.abs(p.plane![0] * q.normal[0] + p.plane![1] * q.normal[1])).toBeGreaterThan(0.99);
+        expect(q.radius).toBeLessThanOrEqual(p.radius + 0.5);
+      }
+    }
+    expect(scene.signs.length).toBeLessThanOrEqual(1);
+  });
+
+  it('puts nothing solid on the tarmac', () => {
+    const onTrack: string[] = [];
+    for (const p of scene.solids) {
+      for (let i = 0; i < p.xs.length; i++) {
+        const { s, d } = track.project(p.xs[i]!, p.ys[i]!);
+        const edge = HALF_W + spec.kerbs(s)[d < 0 ? 0 : 1];
+        if (Math.abs(d) < edge - 2) onTrack.push(`(${p.xs[i]!.toFixed(0)}, ${p.ys[i]!.toFixed(0)}) s ${s.toFixed(0)} d ${d.toFixed(1)}`);
+      }
+    }
+    expect(onTrack.slice(0, 5)).toEqual([]);
+  });
+
+  it('shows the finish line and the walls from pole position', () => {
+    const q = track.gridSlot(0);
+    const p = track.pointAt(q.s, q.d);
+    const c = new Camera();
+    c.set(p.x, p.y, 9.2, p.heading);
+    c.focal = 300;
+    c.ox = 320;
+    c.oy = 200;
+    c.halfW = 320;
+    const finish = track.pointAt(0, 0);
+    const line = scene.decals.filter((d) => Math.hypot(d.cx - finish.x, d.cy - finish.y) < HALF_W);
+    expect(line.length).toBeGreaterThan(20);
+    expect(line.filter((d) => visible(d, c) >= 0 && c.depth(d.cx, d.cy) > 0).length).toBeGreaterThan(10);
+    const walls = scene.solids.filter((w) => w.plane && visible(w, c) >= 0 && c.depth(w.cx, w.cy) > 0 && c.dist(w.cx, w.cy) < 400);
+    expect(walls.length).toBeGreaterThan(10);
   });
 });
 
