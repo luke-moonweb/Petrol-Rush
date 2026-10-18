@@ -104,6 +104,28 @@ export function box(
   });
 }
 
+const KERB_A = night('#12B5A6', 1.25);
+const KERB_B = night('#FFF8E8', 0.8);
+const KERB_LIP = night('#12B5A6', 1.7);
+
+/**
+ * One piece of a low kerb wall from (x0, y0) to (x1, y1): teal and cream stripes (`k` picks which), so the
+ * inside edge reads at night and differs from the red and cream outer wall. `back` is seen from behind.
+ */
+export function kerbPiece(out: Poly[], x0: number, y0: number, x1: number, y1: number, h: number, k: number, back: RGB): void {
+  const low = makePoly(wall(x0, y0, x1, y1, 0, h - 1.2), k % 2 ? KERB_B : KERB_A);
+  const lip = makePoly(wall(x0, y0, x1, y1, h - 1.2, h), KERB_LIP);
+  low.back = back;
+  lip.back = back;
+  out.push(low, lip);
+}
+
+/** A low kerb wall from a to b in striped pieces. */
+export function kerbWall(out: Poly[], ax: number, ay: number, bx: number, by: number, h: number, back: RGB): void {
+  let k = 0;
+  pieces(ax, ay, bx, by, (x0, y0, x1, y1) => kerbPiece(out, x0, y0, x1, y1, h, k++, back));
+}
+
 export function insideHull(h: readonly (readonly [number, number])[], x: number, y: number): boolean {
   let inside = false;
   for (let i = 0, j = h.length - 1; i < h.length; j = i++) {
@@ -133,8 +155,12 @@ export function attachSigns(solids: Poly[], signs: TexQuad[]): TexQuad[] {
     for (const p of solids) {
       if (!p.plane) continue;
       const [nx, ny, k] = p.plane;
-      if (Math.abs(nx * q.normal[0] + ny * q.normal[1]) < 0.99) continue;
-      if (Math.abs(nx * q.cx + ny * q.cy - k) > 1.2) continue;
+      const facing = nx * q.normal[0] + ny * q.normal[1];
+      if (Math.abs(facing) < 0.99) continue;
+      const off = nx * q.cx + ny * q.cy - k;
+      if (Math.abs(off) > 1.2) continue;
+      // A box side faces out: a sign facing the other way, or behind it, belongs to a box standing against it.
+      if (p.closed && (facing < 0 || off < 0)) continue;
       const zLo = Math.min(p.zs[0]!, p.zs[2]!);
       const zHi = Math.max(p.zs[0]!, p.zs[2]!);
       if (zHi <= q.pts[2][2] + 0.01 || zLo >= q.pts[0][2] - 0.01) continue;

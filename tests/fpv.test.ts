@@ -122,6 +122,10 @@ describe.each(allTracks().map((t) => [t.id, t] as const))('the cockpit scene of 
       for (const q of p.decals ?? []) {
         expect(Math.abs(p.plane![0] * q.normal[0] + p.plane![1] * q.normal[1])).toBeGreaterThan(0.99);
         expect(q.radius).toBeLessThanOrEqual(p.radius + 0.5);
+        // In front of its wall and facing away from it, so it is seen from where it is meant to be read.
+        const [nx, ny, k] = p.plane!;
+        const side = nx * q.cx + ny * q.cy - k;
+        if (Math.abs(side) > 0.05) expect(Math.sign(nx * q.normal[0] + ny * q.normal[1])).toBe(Math.sign(side));
       }
     }
     expect(scene.signs.length).toBeLessThanOrEqual(1);

@@ -1,4 +1,4 @@
-import { PIT_D } from '../../track/straightPit';
+import { PIT_D, SEP_MID } from '../../track/straightPit';
 import type { PitPaint } from '../track/oval/pit';
 import { COL, FONT_BLACK } from '../track/style';
 import { hexRgb, makePoly } from './engine';
@@ -38,11 +38,52 @@ function pitArrow(color: string): () => HTMLCanvasElement {
   });
 }
 
+/** Yellow and black warning stripes. */
+export const hazard = lazyCanvas(64, 64, (g) => {
+  g.fillStyle = '#FFC21A';
+  g.fillRect(0, 0, 64, 64);
+  g.fillStyle = '#17142B';
+  for (let k = -64; k < 64; k += 32) {
+    g.beginPath();
+    g.moveTo(k, 64);
+    g.lineTo(k + 16, 64);
+    g.lineTo(k + 80, 0);
+    g.lineTo(k + 64, 0);
+    g.closePath();
+    g.fill();
+  }
+});
+
+const POST_L = 8;
+const POST_H = 12;
+
+/**
+ * A striped post with a warning light where the pit wall reaches full width (`x`, the wall running on in
+ * direction `dir`), so the end that splits the pit lane from the track is seen from far away.
+ */
+function wallEnd(P: Parts, pit: PitScene, x: number, dir: 1 | -1): void {
+  const x0 = dir > 0 ? x : x - POST_L;
+  const x1 = x0 + POST_L;
+  const yN = pit.y0 + PIT_D.WALL_TOP - 0.6;
+  const yS = pit.y0 + PIT_D.SEP + 0.6;
+  box(P.solids, x0, yN, x1, yS, 0, POST_H, night('#FFC21A', 1.2), night('#17142B'));
+  const o = 0.4;
+  const z0 = 0.5;
+  const z1 = POST_H - 0.5;
+  const end = dir > 0 ? upright(x0 - o, yN, x0 - o, yS, z0, z1) : upright(x1 + o, yS, x1 + o, yN, z0, z1);
+  for (const pts of [end, upright(x1, yN - o, x0, yN - o, z0, z1), upright(x0, yS + o, x1, yS + o, z0, z1)]) {
+    P.signs.push(texQuad(pts, hazard, { tile: true }));
+  }
+  P.glows.push({ x: (x0 + x1) / 2, y: pit.y0 + SEP_MID, z: POST_H + 1.5, r: 6, color: '255,194,26' });
+}
+
 /** The top of the label kerb and the pit wall. */
 function pitBase(P: Parts, pit: PitScene): void {
   const y = (d: number) => pit.y0 + d;
   P.island.push(ground(rect(pit.x0 + 10, y(PIT_D.LABEL_TOP), pit.x1 - 10, y(PIT_D.BOX_TOP), pit.curbH + 0.04), night(COL.curbFace, 1.4)));
   box(P.solids, pit.wallX0, y(PIT_D.WALL_TOP), pit.wallX1, y(PIT_D.SEP), 0, 7, night(COL.sep, 1.8), night(COL.sepTop));
+  wallEnd(P, pit, pit.wallX0, 1);
+  wallEnd(P, pit, pit.wallX1, -1);
 }
 
 function pitBoxes(P: Parts, pit: PitScene): void {

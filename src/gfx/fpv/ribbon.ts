@@ -3,7 +3,7 @@ import { HALF_W, type Track } from '../../track/common';
 import { COL } from '../track/style';
 import { hexRgb, makePoly, type RGB } from './engine';
 import { groundQuad, type P3, rect, wall } from './geom';
-import { box, label, night, type Parts } from './kit';
+import { box, kerbPiece, label, night, type Parts } from './kit';
 import type { SceneSpec } from './spec';
 import { texQuad } from './texture';
 
@@ -103,8 +103,6 @@ function barriers(P: Parts, spec: SceneSpec): void {
   const { track } = spec;
   const red = night(COL.wallDark);
   const cream = night(COL.wallLight, 0.9);
-  const curb = night(COL.curbFace, 1.6);
-  const curbTop = night(COL.curbTop);
   const back: RGB = night(spec.look.shoulder);
   for (const side of [1, -1] as const) {
     for (let s = 0, k = 0; s < track.len; s += WALL_STEP, k++) {
@@ -116,11 +114,7 @@ function barriers(P: Parts, spec: SceneSpec): void {
         P.solids.push(makePoly(wall(a.x, a.y, b.x, b.y, 0, WALL_H), k % 2 ? cream : red));
         continue;
       }
-      const low = makePoly(wall(a.x, a.y, b.x, b.y, 0, CURB_H - 1), curb);
-      const lip = makePoly(wall(a.x, a.y, b.x, b.y, CURB_H - 1, CURB_H), curbTop);
-      low.back = back;
-      lip.back = back;
-      P.solids.push(low, lip);
+      kerbPiece(P.solids, a.x, a.y, b.x, b.y, CURB_H, k, back);
     }
   }
 }

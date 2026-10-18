@@ -6,12 +6,14 @@ import type { CircuitTheme } from '../track/circuit/theme';
 import { PADDOCK_ORIGIN } from '../track/oval/paddock';
 import { COL } from '../track/style';
 import { makePoly, type RGB, rgbStyle } from './engine';
-import { type P3, rect, wall } from './geom';
-import { ground, night, type Parts, pieces } from './kit';
+import { type P3, rect, upright, wall } from './geom';
+import { ground, kerbWall, night, type Parts } from './kit';
+import { hazard } from './pitScene';
 import { props } from './props';
 import { band, edgeD } from './ribbon';
 import { NIGHT_CITY } from './sky';
 import type { SceneSpec } from './spec';
+import { texQuad } from './texture';
 
 // The scene of any Grand Prix circuit (SegmentTrack), read the way the top-down canvas
 // (circuit/canvas.ts) draws it: walls outside, a kerb wall on the infield side, the pit lane with its
@@ -95,19 +97,6 @@ function pitGround(P: Parts, track: SegmentTrack): void {
   }
 }
 
-/** A low kerb wall from a to b: kerb face and lip, `back` seen from behind. */
-function kerbWall(P: Parts, ax: number, ay: number, bx: number, by: number, h: number, back: RGB): void {
-  const face = night(COL.curbFace, 1.6);
-  const top = night(COL.curbTop);
-  pieces(ax, ay, bx, by, (x0, y0, x1, y1) => {
-    const low = makePoly(wall(x0, y0, x1, y1, 0, h - 1.4), face);
-    const lip = makePoly(wall(x0, y0, x1, y1, h - 1.4, h), top);
-    low.back = back;
-    lip.back = back;
-    P.solids.push(low, lip);
-  });
-}
-
 /**
  * The raised platform behind the pit lane that the paddock stands on. Its front is the kerb behind the
  * boxes, where the PIT ROAD signs hang.
@@ -121,10 +110,18 @@ function platform(P: Parts, track: SegmentTrack, theme: CircuitTheme): void {
   const y1 = geo.y0 + PIT_D.BOX_TOP;
   const top = night(inSideOf(track) < 0 ? theme.infield : theme.outside, 1.15);
   P.island.push(ground(rect(x0, y0, x1, y1, PAD_H), top));
-  kerbWall(P, x0, y1, x1, y1, PAD_H, top);
-  kerbWall(P, x1, y1, x1, y0, PAD_H, top);
-  kerbWall(P, x1, y0, x0, y0, PAD_H, top);
-  kerbWall(P, x0, y0, x0, y1, PAD_H, top);
+  kerbWall(P.solids, x0, y1, x1, y1, PAD_H, top);
+  kerbWall(P.solids, x1, y1, x1, y0, PAD_H, top);
+  kerbWall(P.solids, x1, y0, x0, y0, PAD_H, top);
+  kerbWall(P.solids, x0, y0, x0, y1, PAD_H, top);
+}
+
+/** Warning stripes on a side of a pit wall nose, facing north (`out` -1) or south (1). */
+function stripes(P: Parts, ax: number, ay: number, bx: number, by: number, out: -1 | 1): void {
+  // upright() faces the right of its direction, (-dy, dx): run it so that dx has the sign of `out`.
+  const [x0, y0, x1, y1] = (bx - ax) * out > 0 ? [ax, ay, bx, by] : [bx, by, ax, ay];
+  const o = 0.4 * out;
+  P.signs.push(texQuad(upright(x0, y0 + o, x1, y1 + o, 0.5, 6.5), hazard, { tile: true }));
 }
 
 /** The kerb walls along the entry and exit roads, and the pointed ends of the pit wall. */
@@ -144,8 +141,8 @@ function pitEnds(P: Parts, track: SegmentTrack, theme: CircuitTheme): void {
   while (u0 < geo.wall0 && !clear(u0)) u0 += 2;
   let u1 = geo.exit1;
   while (u1 > geo.wall1 && !clear(u1)) u1 -= 2;
-  kerbWall(P, x(u0), y(taperD(u0)), x(geo.wall0), y(PIT_D.BOX_TOP), PAD_H, back);
-  kerbWall(P, x(geo.wall1), y(PIT_D.BOX_TOP), x(u1), y(taperD(u1)), PAD_H, back);
+  kerbWall(P.solids, x(u0), y(taperD(u0)), x(geo.wall0), y(PIT_D.BOX_TOP), PAD_H, back);
+  kerbWall(P.solids, x(geo.wall1), y(PIT_D.BOX_TOP), x(u1), y(taperD(u1)), PAD_H, back);
   const side = night(COL.sep, 1.8);
   const top = night(COL.sepTop);
   for (const [tip, dir] of [
@@ -159,6 +156,8 @@ function pitEnds(P: Parts, track: SegmentTrack, theme: CircuitTheme): void {
     const south = y(PIT_D.SEP);
     P.solids.push(makePoly(wall(bx, by, cx, north, 0, 7), side));
     P.solids.push(makePoly(wall(cx, south, bx, by, 0, 7), side));
+    stripes(P, bx, by, cx, north, -1);
+    stripes(P, bx, by, cx, south, 1);
     P.solids.push(
       makePoly(
         [

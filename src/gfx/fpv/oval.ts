@@ -6,7 +6,7 @@ import { COL, FONT_BLACK } from '../track/style';
 import { trackCanvas } from '../world';
 import { hexRgb, makePoly } from './engine';
 import { type P3, rect, upright, wall } from './geom';
-import { ground, insideHull, label, night, type Parts, pieces } from './kit';
+import { ground, insideHull, kerbPiece, label, night, type Parts, pieces } from './kit';
 import type { PitScene } from './pitScene';
 import { NIGHT_CITY } from './sky';
 import type { SceneSpec } from './spec';
@@ -109,21 +109,16 @@ function ovalIsland(P: Parts): void {
       grass,
     ),
   );
-  const curb = night(COL.curbFace, 1.6);
-  const curbTop = night(COL.curbTop);
+  let k = 0;
   for (let i = 0; i < hull.length; i++) {
     const [ax, ay] = hull[i]!;
     const [bx, by] = hull[(i + 1) % hull.length]!;
     const mx = (ax + bx) / 2;
     const my = (ay + by) / 2;
     const out = !insideHull(hull, mx - (by - ay) * 0.01, my + (bx - ax) * 0.01);
-    pieces(out ? ax : bx, out ? ay : by, out ? bx : ax, out ? by : ay, (x0, y0, x1, y1) => {
-      const low = makePoly(wall(x0, y0, x1, y1, 0, ISLAND_H - 1.4), curb);
-      const lip = makePoly(wall(x0, y0, x1, y1, ISLAND_H - 1.4, ISLAND_H), curbTop);
-      low.back = grass;
-      lip.back = grass;
-      P.solids.push(low, lip);
-    });
+    pieces(out ? ax : bx, out ? ay : by, out ? bx : ax, out ? by : ay, (x0, y0, x1, y1) =>
+      kerbPiece(P.solids, x0, y0, x1, y1, ISLAND_H, k++, grass),
+    );
   }
 }
 
