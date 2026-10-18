@@ -61,6 +61,8 @@ export function gripLeft(car: Car, brake: boolean): number {
 
 export class PlayerSteering {
   private assistLevel = 0;
+  /** The lane curvature of the last bend (the assist fades out from it). */
+  private bendK = 0;
   /** The virtual wheel, -1..1 (+ = right): ±1 asks for the key cap, 0 for the corner assist alone. */
   private w = 0;
   /** Grip model: how long the key has been held against the cap (s). */
@@ -87,6 +89,7 @@ export class PlayerSteering {
   resetAssist(): void {
     this.old?.resetAssist();
     this.assistLevel = 0;
+    this.bendK = 0;
     this.w = 0;
     this.pushTime = 0;
     this.pushDir = 0;
@@ -138,11 +141,15 @@ export class PlayerSteering {
     return { steer: this.capped(car, key, a, dt, brake, kLane, catching), straightTo };
   }
 
-  /** The corner assist, blended in over CORNER_ASSIST_IN_S. */
+  // The corner assist, blended in over CORNER_ASSIST_IN_S, and out over the same time where the bend ends
+  // (as for the bend's last curvature: still cut at once by a slide, a spin or reverse, never fighting a
+  // countersteer). Without the fade-out the car's turn dropped in one step, with no key.
   private assist(car: Car, kLane: number, dt: number): number {
     const assist = curvatureAssist(car, kLane) * assistScale(this.opts);
     const step = dt / CONFIG.CORNER_ASSIST_IN_S;
     this.assistLevel = assist !== 0 ? Math.min(1, this.assistLevel + step) : Math.max(0, this.assistLevel - step);
+    if (kLane !== 0) this.bendK = kLane;
+    else if (this.assistLevel > 0) return curvatureAssist(car, this.bendK) * assistScale(this.opts) * this.assistLevel;
     return assist * this.assistLevel;
   }
 

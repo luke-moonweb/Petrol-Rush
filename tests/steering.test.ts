@@ -371,3 +371,23 @@ describe('straight assist latch (STEERING_PLAN B4)', () => {
     expect(ps.update(car, 0, 1 / 60).straightTo).toBeDefined();
   });
 });
+
+describe('corner assist at the end of a bend (STEERING_PLAN B6)', () => {
+  it('fades out over CORNER_ASSIST_IN_S instead of dropping in one step, and a slide still cuts it at once', () => {
+    const exitTo = (slip: number) => {
+      const car = carAt(S_TURN1 + 100, 0, 150);
+      const ps = new PlayerSteering();
+      for (let i = 0; i < 30; i++) ps.update(car, 0, 1 / 60);
+      const inBend = ps.update(car, 0, 1 / 60).steer;
+      const p = pointAt(S_BOTTOM + 100, 0);
+      Object.assign(car, { x: p.x, y: p.y, heading: p.heading + slip, moveAngle: p.heading, s: S_BOTTOM + 100 });
+      return { inBend, out: ps.update(car, 0, 1 / 60).steer, ps, car };
+    };
+    const { inBend, out, ps, car } = exitTo(0);
+    expect(inBend).toBeLessThan(0);
+    expect(out / inBend).toBeCloseTo(1 - 1 / 60 / CONFIG.CORNER_ASSIST_IN_S, 6);
+    for (let i = 0; i < 10; i++) ps.update(car, 0, 1 / 60);
+    expect(ps.update(car, 0, 1 / 60).steer).toBe(0);
+    expect(exitTo(0.2).out).toBe(0);
+  });
+});
