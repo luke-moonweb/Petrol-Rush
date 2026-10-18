@@ -84,3 +84,21 @@ describe('corner lab: the driving model', () => {
     expect(centre.best.t - wide.best.t).toBeGreaterThanOrEqual(0.2);
   });
 });
+
+// The AI on the racing line keeps up with a key player who uses the whole width: on the game's corner
+// radii its fastest and slowest drivers stay within 0.2 s of the player's best entry, without a wall or spin.
+describe('corner lab: the AI', () => {
+  for (const deg of [90, 135]) {
+    it(`${deg} degree corners: within 0.2 s of the key player, clean`, () => {
+      for (const r of [120, 160, 200]) {
+        const human = bestEntry({ r, deg, driver: 'human' });
+        for (const skill of [0, 1]) {
+          const ai = runCorner({ r, deg, driver: 'ai', mode: 'flat', skill });
+          const at = `R ${r} skill ${skill}`;
+          expect(ai.spun || ai.wallHits > 0, at).toBe(false);
+          expect(Math.abs(ai.t - human.best.t), at).toBeLessThanOrEqual(0.2);
+        }
+      }
+    });
+  }
+});

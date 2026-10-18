@@ -3,15 +3,19 @@
 // the track width, entering at a chosen speed. Walls are those of the game tracks. The command line
 // is tests/lab/corner.lab.ts (`npm run lab`); tests/corners.test.ts pins the targets.
 import { CONFIG } from '../../src/config';
+import { aiInput } from '../../src/race/ai';
 import type { Car } from '../../src/race/car';
 import { type DriveInput, limitMph, maxCurvature, stepCar } from '../../src/race/physics';
 import { PlayerSteering } from '../../src/race/steering';
-import { wrapAngle } from '../../src/track/common';
+import { LANES, type PitLane, type Track, type WallNormal, wrapAngle } from '../../src/track/common';
 import { HUMAN_MARGIN, LAB_HW, type LabCorner, LINE_MARGIN, labCorner } from './curves';
 import { corridor, DT, freshCar, HUMAN, HumanKeys, placeCar, steerTrack, withWalls } from './drivers';
 
-/** line: analog, tracks the line exactly (insists at full lock when over the limit). human: keys through the game's PlayerSteering. */
-export type LabDriver = 'line' | 'human';
+/**
+ * line: analog, tracks the line exactly (insists at full lock when over the limit). human: keys through the game's PlayerSteering.
+ * ai: the game's aiInput, alone on the corner (it plans its own speed and line: mode, v and use only set the start).
+ */
+export type LabDriver = 'line' | 'human' | 'ai';
 /** flat: full throttle. brake: brake late to vc for the turn-in, hold it to the apex, then full throttle. hold: start just before the turn-in at v and hold it to the apex. */
 export type LabMode = 'flat' | 'brake' | 'hold';
 
@@ -31,6 +35,10 @@ export interface CornerSpec {
   v?: number;
   /** brake: the speed to brake to for the turn-in. */
   vc?: number;
+  /** ai: the driver's skill, 0 (the slowest draw of turnMph and reaction) to 1 (the fastest, default). */
+  skill?: number;
+  /** ai: its lane (default: the outside lane of the corner). */
+  lane?: number;
 }
 
 export interface CornerRun {
@@ -65,6 +73,8 @@ interface Ctx {
   slipSince: number;
   human: HumanKeys;
   player: PlayerSteering;
+  /** ai: the road as a game track (no pits), built on the first step. */
+  track?: Track;
 }
 
 const clamp1 = (x: number) => Math.max(-1, Math.min(1, x));
@@ -113,7 +123,51 @@ function pedals(x: Ctx): { gas: boolean; brake: boolean } {
   return { gas: car.speed < vc, brake: false };
 }
 
-function drive(x: Ctx): DriveInput {
+const NO_PIT: PitLane = {
+  inLane: () => false,
+  inBox: () => false,
+  walled: () => false,
+  decideAt: () => false,
+  autoIn: () => false,
+  autoOut: () => false,
+  reachLaps: 0,
+  joiningD: (o) => o.d,
+  diving: () => false,
+  plan: (_car, _view, target, laneD) => ({ target, laneD, lane: null }),
+  follow: () => {},
+  aim: () => ({ x: 0, y: 0 }),
+};
+
+/** The lab road as a game track for aiInput: open (s does not wrap), no pits. */
+function labTrack(x: Ctx, constrain: (c: Car) => WallNormal | null): Track {
+  const road = x.c.road;
+  return {
+    id: 'lab',
+    name: 'LAB',
+    len: road.len,
+    sectorLen: road.len / 8,
+    worldW: 0,
+    worldH: 0,
+    pit: NO_PIT,
+    wrapS: (s) => s,
+    deltaS: (a, b) => b - a,
+    pointAt: (s, d) => road.pointAt(s, d),
+    project: (px, py) => road.project(px, py, x.roadS),
+    headingAt: (px, py) => road.pointAt(road.project(px, py, x.roadS).s, 0).heading,
+    constrain: (p) => constrain(p as Car),
+    gridSlot: () => ({ s: 0, d: 0 }),
+    curvatureAt: (s) => road.curvatureAt(s),
+    curves: () => road.table,
+  };
+}
+
+function aiDrive(x: Ctx, constrain: (c: Car) => WallNormal | null): DriveInput {
+  x.track ??= labTrack(x, constrain);
+  return aiInput(x.car, { track: x.track, cars: [x.car], started: true, laps: 99, time: 99 + x.time }, DT);
+}
+
+function drive(x: Ctx, constrain: (c: Car) => WallNormal | null): DriveInput {
+  if (x.spec.driver === 'ai') return aiDrive(x, constrain);
   const p = pedals(x);
   if (x.spec.driver === 'human') {
     const ps = x.player.update(x.car, humanKey(x), DT, p.brake);
@@ -133,6 +187,15 @@ function setup(spec: CornerSpec): Ctx {
   const v0 = spec.v ?? CONFIG.MAX_MPH;
   const s0 = spec.mode === 'hold' ? Math.max(0, c.lineArc0 - HOLD_BEFORE) : 0;
   placeCar(car, c.road, s0, -c.sign * c.hw, v0);
+  if (spec.driver === 'ai') {
+    const k = spec.skill ?? 1;
+    car.isPlayer = false;
+    car.ai.turnMph = CONFIG.AI_TURN_MPH[0] + (CONFIG.AI_TURN_MPH[1] - CONFIG.AI_TURN_MPH[0]) * k;
+    car.ai.reaction = CONFIG.AI_REACTION_S[1] + (CONFIG.AI_REACTION_S[0] - CONFIG.AI_REACTION_S[1]) * k;
+    car.ai.topMph = CONFIG.MAX_MPH;
+    car.ai.lane = spec.lane ?? -c.sign * LANES[LANES.length - 1]!;
+    car.d = -c.sign * c.hw;
+  }
   return {
     spec,
     c,
@@ -165,7 +228,8 @@ export interface TraceRow {
 export function runCorner(spec: CornerSpec, trace?: (row: TraceRow) => void): CornerRun {
   const x = setup(spec);
   const { car, c } = x;
-  const walls = withWalls(corridor(c.road, LAB_HW, -LAB_HW, () => x.roadS));
+  const constrain = corridor(c.road, LAB_HW, -LAB_HW, () => x.roadS);
+  const walls = withWalls(constrain);
   const res: CornerRun = { t: Infinity, vMin: Infinity, vExit: 0, wide: 0, wallHits: 0, spun: false, loose: false, maxSlipDeg: 0 };
   const finish = c.arc1 + FINISH_AFTER;
   let wallAgo = 99;
@@ -183,7 +247,7 @@ export function runCorner(spec: CornerSpec, trace?: (row: TraceRow) => void): Co
       res.vMin = Math.min(res.vMin, car.speed);
       res.wide = Math.max(res.wide, -c.sign * ln.d);
     }
-    const input = drive(x);
+    const input = drive(x, constrain);
     stepCar(car, input, DT, walls);
     const slipDeg = (wrapAngle(car.heading - car.moveAngle) * 180) / Math.PI;
     trace?.({ t: x.time, s: st.s, d: st.d, dLine: ln.d, mph: car.speed, input, slipDeg, wall: car.wallImpact, loose: car.rearLoose });

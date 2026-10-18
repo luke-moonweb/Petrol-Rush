@@ -17,7 +17,9 @@ import {
 //   npm run lab                                         the corner map (R x angle, drivers line and human)
 //   LAB="r=140 deg=90" npm run lab                      best entry for one corner (lists: r=120,140; ranges: deg=45:180:45)
 //   LAB="r=140 deg=90 v=150:180:5 driver=human" npm run lab     one run per start speed (mode hold by default)
-//   keys: r deg dir=left|right use=0..1 driver=line|human insist=1 react=s mode=flat|brake|hold v vc
+//   keys: r deg dir=left|right use=0..1 driver=line|human|ai insist=1 react=s mode=flat|brake|hold v vc
+//   driver=ai: the game AI alone on the corner, one run per skill (skill=1,0: fastest / slowest draw; lane=d),
+//     next to the human key player's best entry: LAB="deg=90,135 driver=ai" npm run lab
 //   trace=1 with one corner and one v / vc: the run step by step (every 0.1 s and every wall contact)
 //   LAB_SET="GRIP.TOP=80 GRIP.KNEE_MPH=135" npm run lab  override CONFIG numbers for this run (tuning without edits)
 
@@ -57,6 +59,18 @@ function nums(s: string | undefined, def: number[]): number[] {
   return s.split(',').map(Number);
 }
 
+/** The AI's time on one corner (from MAX_MPH on the outside) against the human key player's best entry. */
+function aiCompare(spec: CornerSpec, skills: number[], lane: string | undefined): string[] {
+  const human = bestEntry({ ...spec, driver: 'human' });
+  const f = (x: number, w: number, p = 0) => (x === Infinity ? 'inf' : x.toFixed(p)).padStart(w);
+  return skills.map((skill) => {
+    const r = runCorner({ ...spec, driver: 'ai', mode: 'flat', skill, lane: lane !== undefined ? Number(lane) : undefined });
+    const d = r.t - human.best.t;
+    const what = r.spun ? 'SPIN' : r.wallHits > 0 ? `wall${r.wallHits}` : r.loose ? 'loose' : 'ok';
+    return `${f(spec.r, 5)} ${f(spec.deg, 3)} ${f(skill, 5, 2)} ${(lane ?? 'out').padStart(5)} | ${f(r.t, 5, 2)} ${f(r.vMin, 5)} ${what.padStart(5)} | ${f(human.best.t, 7, 2)} ${f(human.vBest, 5, 1)} | ${d >= 0 ? '+' : ''}${d.toFixed(2)}`;
+  });
+}
+
 it('corner lab', () => {
   applySet(process.env.LAB_SET ?? '');
   const o = parse(process.env.LAB ?? '');
@@ -74,9 +88,11 @@ it('corner lab', () => {
     runCorner(spec, (row) => rows.push(row));
     out.push(formatTrace(rows));
   };
+  const aiRows: string[] = [];
   for (const r of nums(o.r, [60, 100, 140, 200])) {
     for (const deg of nums(o.deg, [45, 90, 135, 180])) {
-      for (const driver of drivers) {
+      if (drivers.includes('ai')) aiRows.push(...aiCompare({ ...base, r, deg }, nums(o.skill, [1, 0]), o.lane));
+      for (const driver of drivers.filter((d) => d !== 'ai')) {
         const spec: CornerSpec = { ...base, r, deg, driver };
         if (o.v !== undefined && o.mode !== 'brake') {
           const speeds = nums(o.v, []);
@@ -93,6 +109,7 @@ it('corner lab', () => {
     }
   }
   if (bests.length > 0) out.push(formatBest(bests));
+  if (aiRows.length > 0) out.push(['    R deg skill  lane |  t ai  vMin  what | t human vBest |  ai - human', ...aiRows].join('\n'));
   const set = process.env.LAB_SET ? `  LAB_SET ${process.env.LAB_SET}` : '';
   process.stdout.write(`corner lab (GRIP ${CONFIG.GRIP.GRIP}, MAX_MPH ${CONFIG.MAX_MPH})${set}\n${out.join('\n')}\n`);
 }, 300_000);

@@ -178,6 +178,7 @@ export class Race {
         fuelPerLap: nominalLapFuel(this.track) * (1 + CONFIG.FUEL.EST_MARGIN),
         lapFuel: -1,
         refuelledThisLap: false,
+        onLine: false,
       },
     };
     const st = this.track.project(car.x, car.y);

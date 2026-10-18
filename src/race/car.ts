@@ -35,6 +35,8 @@ export interface AiState {
   /** Fuel at the last start/finish crossing; -1 before the first. */
   lapFuel: number;
   refuelledThisLap: boolean;
+  /** On the racing line (no car alongside), not on a lane. */
+  onLine: boolean;
 }
 
 export interface Car {
