@@ -50,7 +50,8 @@ are no image, audio or font files in the project.
 - 🎥 **Cockpit view** – press C (or CAM on touch screens) to drive from the driver's seat on any
   circuit: flat-shaded pseudo-3D night track with each circuit's own scenery (containers, cacti, city
   blocks, pines, grandstands), rivals with working tail and brake lights, a live rear-view mirror and
-  a steering wheel that follows your inputs.
+  a steering wheel that follows your inputs. The switch into the cockpit flickers through for a moment
+  like a worn VHS tape losing its tracking: torn lines, snow, smeared colour and a rolling picture.
 - 📺 **Live-on-air title screen** – a silent 20-car demo race plays behind the menu, filmed like a
   TV broadcast.
 - ⌨️ **Fully rebindable keys** (primary + alternate per action), saved in the browser.
@@ -231,7 +232,7 @@ src/
                    race logic & classification, Grand Prix championship (points, standings, save)
   ui/              HUD, race overlays, text, palette
     menus/         title, controls, settings and credits screens
-  gfx/             3D-to-sprite renderer, liveries, particles, world drawing
+  gfx/             3D-to-sprite renderer, liveries, particles, world drawing, the VHS glitch of the cockpit switch
     fpv/           cockpit view: tiny Canvas 2D polygon renderer, 3D night scene of any track, mirror, dashboard
     track/         pre-rendered tracks: oval/ (tarmac, pit road, paddock, infield), circuit/ (themes)
   audio/           Web Audio effects and four engine voices
