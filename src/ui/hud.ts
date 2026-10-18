@@ -2,6 +2,7 @@ import { CONFIG } from '../config';
 import { CAR_SCHEMES, driverName } from '../gfx/vehicles';
 import { type Box, layout } from '../layout';
 import { lapsCompleted, progress } from '../race/car';
+import { lapsOfFuel, lapsToFinish } from '../race/fuel';
 import type { Race } from '../race/race';
 import type { Warn } from '../race/warnings';
 import { FONT_UI } from './text';
@@ -162,12 +163,14 @@ export function drawHudPanel(g: CanvasRenderingContext2D, race: Race, gauges = t
   g.fillRect(b.x, b.y, b.w, b.h);
   g.fillStyle = HUD_EDGE;
   const p = race.player;
+  const fuel = p.finished ? null : fuelOutlook(race);
   if (layout.mode === 'wide') {
     g.fillRect(b.x + b.w - 1, b.y, 1, b.h);
     drawTower(g, race, { x: b.x, y: b.y, w: b.w, h: b.h }, 1);
     if (!gauges) return;
-    drawSpeedo(g, p.speed, b.x + 62, b.y + 372, 54, redFrom);
-    drawFuelGauge(g, p.fuel, race.time, b.x + 62, b.y + 432, 34);
+    drawSpeedo(g, p.speed, b.x + 62, b.y + 366, 54, redFrom);
+    drawFuelGauge(g, p.fuel, race.time, b.x + 62, b.y + 424, 34);
+    drawFuelLaps(g, fuel, b.x + 62, b.y + 446);
     return;
   }
   g.fillRect(b.x, b.y, b.w, 1);
@@ -179,6 +182,7 @@ export function drawHudPanel(g: CanvasRenderingContext2D, race: Race, gauges = t
   g.fillRect(b.x + gaugeW, b.y, 1, b.h);
   drawSpeedo(g, p.speed, b.x + gaugeW / 2, b.y + 72, 54, redFrom);
   drawFuelGauge(g, p.fuel, race.time, b.x + gaugeW / 2, b.y + 146, 34);
+  drawFuelLaps(g, fuel, b.x + gaugeW / 2, b.y + 168);
   drawTower(g, race, { x: b.x + gaugeW, y: b.y, w: b.w - gaugeW, h: b.h }, 2);
 }
 
@@ -404,6 +408,62 @@ export function drawFuelGauge(g: CanvasRenderingContext2D, fuel: number, time: n
   g.shadowBlur = 0;
   g.fillStyle = PR.muted;
   g.fillText('FUEL', cx + 4, cy + 7);
+  g.restore();
+}
+
+/**
+ * The player's fuel against the finish, by the numbers the AI drivers race with (src/race/fuel.ts):
+ * `laps` the tank lasts at the car's own recent rate, `toGo` to the finish (only the current lap once
+ * the leader is home). 'tight' is inside the margin an AI driver starts saving within, 'short' will not
+ * reach the finish at this rate; `canSave` is short by no more than lifting as the AI does makes up.
+ */
+export interface FuelOutlook {
+  laps: number;
+  toGo: number;
+  call: 'ok' | 'tight' | 'short';
+  canSave: boolean;
+}
+
+export function fuelCall(laps: number, toGo: number): FuelOutlook {
+  const eco = CONFIG.AI_ECO;
+  const call = laps < toGo ? 'short' : laps < toGo + eco.MARGIN_LAPS ? 'tight' : 'ok';
+  return { laps, toGo, call, canSave: laps * (1 + eco.GAIN) >= toGo };
+}
+
+export function fuelOutlook(race: Race): FuelOutlook {
+  const p = race.player;
+  const finishLap = race.leaderFinished ? lapsCompleted(p) + 1 : race.laps;
+  return fuelCall(lapsOfFuel(p), lapsToFinish(p, race.track, finishLap));
+}
+
+const FUEL_CALL_COLOR = { ok: PR.tealLight, tight: PR.amber, short: PR.red } as const;
+
+/** The readout under (in the cockpit, over) the fuel gauge: "FUEL 1.4 LAPS", coloured by the call; none once finished. */
+export function drawFuelLaps(g: CanvasRenderingContext2D, out: FuelOutlook | null, cx: number, y: number): void {
+  if (!out) return;
+  const num = Number.isFinite(out.laps) ? out.laps.toFixed(1) : '—';
+  const small = `bold 9px ${FONT_UI}`;
+  const big = `10px ${FONT_BLACK}`;
+  g.save();
+  g.textAlign = 'left';
+  g.textBaseline = 'alphabetic';
+  g.font = small;
+  const wFuel = g.measureText('FUEL ').width;
+  const wLaps = g.measureText(' LAPS').width;
+  g.font = big;
+  const wNum = g.measureText(num).width;
+  let x = cx - (wFuel + wNum + wLaps) / 2;
+  g.font = small;
+  g.fillStyle = PR.muted;
+  g.fillText('FUEL', x, y);
+  x += wFuel;
+  g.font = big;
+  g.fillStyle = FUEL_CALL_COLOR[out.call];
+  g.fillText(num, x, y);
+  x += wNum;
+  g.font = small;
+  g.fillStyle = PR.muted;
+  g.fillText(' LAPS', x, y);
   g.restore();
 }
 
