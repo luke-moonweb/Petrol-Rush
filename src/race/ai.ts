@@ -14,6 +14,8 @@ export interface AiView {
   laps: number;
   time: number;
   oil?: readonly OilSlick[];
+  /** The player's car is under the pit autopilot (it merges by hand after the hand-back). */
+  pitAuto?: boolean;
 }
 
 function laneFree(track: Track, car: Car, lane: number, cars: Car[]): boolean {
@@ -25,9 +27,20 @@ function laneFree(track: Track, car: Car, lane: number, cars: Car[]): boolean {
     if (o === car) continue;
     const ds = track.deltaS(car.s, o.s);
     if (ds > back && ds < front && o.d > lo && o.d < hi) return false;
+    // (a car going to or from the pits also takes up the line it is moving to, and as it is slow
+    // there, from as far ahead as it takes to slow down to its speed)
+    const jd = track.pit.joiningD(o);
+    if (jd !== o.d && jd > lo && jd < hi && ds > back && ds < Math.max(front, stopRoom(car.speed, o.speed))) return false;
     if (Math.abs(ds) < 60 && o.ai.lane === lane && !o.isPlayer && Math.abs(o.d - lane) < 25) return false;
   }
   return true;
+}
+
+/** Distance (px) to slow from `v` to `v0` mph at the follow-logic braking rate, plus a car length. */
+function stopRoom(v: number, v0: number): number {
+  const pxm = CONFIG.PX_PER_MPH;
+  const dv2 = Math.max(0, v * v - Math.max(0, v0) ** 2);
+  return (dv2 * pxm) / (2 * CONFIG.BRAKE_MPH_S * 0.7) + 46;
 }
 
 export function aiInput(car: Car, view: AiView, dt: number): DriveInput {
@@ -187,8 +200,9 @@ function followTraffic(car: Car, view: AiView, plan: Plan): void {
     // (a much slower car counts from further across, as the pursuit line drifts into corners)
     const wide = Math.min(FOLLOW_WIDE_PX, Math.max(0, car.speed - o.speed - 20) / 5);
     const near = (d: number) => Math.abs(d - car.d) < 17 + wide || (ds > 40 && Math.abs(d - plan.laneD) < 16 + wide);
-    // (counted on its new line only once clearly ahead: one level with us gives way to us instead)
-    if (near(o.d) || (jd !== o.d && ds > JOIN_AHEAD_PX && near(jd))) {
+    // (counted on its new line only once clearly ahead: one level with us gives way to us instead,
+    // except a car committed to merging from the pits, which no longer gives way)
+    if (near(o.d) || (jd !== o.d && (ds > JOIN_AHEAD_PX || o.ai.merging) && near(jd))) {
       if (ds < gap) {
         gap = ds;
         ahead = o;
@@ -366,12 +380,6 @@ function sideClear(track: Track, car: Car, lane: number, cars: Car[]): boolean {
     const ds = track.deltaS(car.s, o.s);
     return !(ds > -40 && ds < 50 && o.d > lo && o.d < hi);
   });
-}
-
-/** The cars that keep sideClear(track, car, lane) false. */
-export function sideBlockers(track: Track, car: Car, lane: number, cars: Car[]): Car[] {
-  if (Math.abs(lane - car.d) < 8) return [];
-  return cars.filter((o) => o !== car && !sideClear(track, car, lane, [car, o]));
 }
 
 function bestLane(track: Track, car: Car, cars: Car[]): number {

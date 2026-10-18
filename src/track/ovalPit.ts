@@ -1,5 +1,5 @@
 import { CONFIG } from '../config';
-import { type AiView, sideBlockers } from '../race/ai';
+import type { AiView } from '../race/ai';
 import type { Car } from '../race/car';
 import { fillTarget, lapsOfFuel } from '../race/fuel';
 import { PLAN } from '../race/planner';
@@ -39,6 +39,16 @@ const PIT_APPROACH_D = -HALF_W + 9;
 // Grip model: a car more than PIT_GIVE_UP_D px out from that line PIT_GIVE_UP_PX before turn 2 gives the stop up.
 const PIT_GIVE_UP_PX = 40;
 const PIT_GIVE_UP_D = 15;
+// Grip model: a car that must stop holds its line for traffic until this far before turn 2 (px).
+const PIT_FORCE_PX = 120;
+/** ...and drops back this much slower than a car alongside on the inside (mph). */
+const PIT_DROP_MPH = 12;
+/** A car up to this far behind (px) is alongside: dropping back lets it by... */
+const PIT_SIDE_PX = 40;
+/** ...though not below this speed (mph). */
+const PIT_HELD_MPH = 100;
+/** A car coming up from behind counts as alongside if it would close the gap within this time (s). */
+const PIT_LOOK_BACK_S = 0.8;
 const CAR_CLEAR = 24;
 const PIT_DIVE_AT = 0.6;
 // Grip model: the pit decision window ends this far before turn 2 (px), and starts PIT_DECIDE_FROM before it.
@@ -53,6 +63,19 @@ const MERGE_MAX_WAIT_S = 2.5;
 /** ...and after this long it goes regardless (racing cars allow for it once it moves). */
 const MERGE_FORCE_S = 4;
 const MERGE_STOP_PX = 12;
+
+/** The cars in the way of a move over to `lane`: alongside, or coming up fast from behind. */
+function approachBlockers(car: Car, lane: number, cars: Car[]): Car[] {
+  if (Math.abs(lane - car.d) < 8) return [];
+  const lo = Math.min(car.d, lane) - 12;
+  const hi = Math.max(car.d, lane) + 12;
+  return cars.filter((o) => {
+    if (o === car || o.d <= lo || o.d >= hi) return false;
+    const ds = deltaS(car.s, o.s);
+    const back = PIT_SIDE_PX + Math.max(0, o.speed - car.speed) * CONFIG.PX_PER_MPH * PIT_LOOK_BACK_S;
+    return ds > -back && ds < 50;
+  });
+}
 
 function pitPathR(phi: number): number {
   const r = islandHullR(phi) + CAR_CLEAR;
@@ -89,7 +112,8 @@ export const OVAL_PIT: PitLane = {
   joiningD(o: Car): number {
     // (only a merging car on the move: racing cars never stop on the track for a car still on the pit road)
     if (o.ai.pitPhase === 'exiting' && o.ai.merging && o.speed > MERGE_SEEN_MPH) return Math.max(o.d, EXIT_D);
-    if (o.ai.pitPhase === 'entering' && o.y < CY + 40 && o.s >= S_TURN2 - PIT_DECIDE_FROM) return Math.min(o.d, PIT_APPROACH_D);
+    if (o.ai.pitPhase === 'entering' && !o.ai.pitHeld && o.y < CY + 40 && o.s >= S_TURN2 - PIT_DECIDE_FROM)
+      return Math.min(o.d, PIT_APPROACH_D);
     return o.d;
   },
 
@@ -109,6 +133,7 @@ export const OVAL_PIT: PitLane = {
     const ai = car.ai;
     const pxm = CONFIG.PX_PER_MPH;
     let pitY: number | null = null;
+    ai.pitHeld = false;
     if (ai.pitPhase === 'none' && car.pitSide && car.wasInPit && car.y > CY && car.x < WALL_X1) ai.pitPhase = 'exiting';
 
     switch (ai.pitPhase) {
@@ -134,13 +159,23 @@ export const OVAL_PIT: PitLane = {
             // and never twice running.
             const fuelLaps = lapsOfFuel(car);
             const canSkip = !ai.skipped && fuelLaps > 1 + this.reachLaps + PIT_FUEL_MARGIN_LAPS;
-            // Someone alongside on the inside: drop in behind a car that is level or ahead (one coming
-            // from behind is let by), holding the line meanwhile if the stop could still be skipped;
-            // otherwise move over anyway (racing cars allow for a car heading for the pit entry).
-            const block = sideBlockers(view.track, car, laneD, view.cars);
+            // Someone alongside on the inside, or closing in fast from behind: hold the line (racing cars
+            // then count it there) and drop in behind a car that is level or ahead, and back from one
+            // alongside just behind so that it goes by (but not down to a crawl on the straight); one
+            // further back but closing in fast is only waited for. Only a car that must stop and is
+            // nearly at turn 2 moves over anyway (racing cars allow for a car heading for the pit entry
+            // once it is clearly ahead of them).
+            const block = approachBlockers(car, laneD, view.cars);
             if (block.length > 0) {
-              if (canSkip) laneD = car.d;
-              for (const o of block) if (deltaS(car.s, o.s) > -10) target = Math.min(target, Math.max(0, o.speed - 8));
+              if (canSkip || car.s < S_TURN2 - PIT_FORCE_PX) {
+                laneD = car.d;
+                ai.pitHeld = true;
+              }
+              for (const o of block) {
+                const ds = deltaS(car.s, o.s);
+                if (ds > -10) target = Math.min(target, Math.max(0, o.speed - PIT_DROP_MPH));
+                else if (ds > -PIT_SIDE_PX) target = Math.min(target, Math.max(PIT_HELD_MPH, Math.min(o.speed, car.speed) - PIT_DROP_MPH));
+              }
             }
             // Still held out wide as turn 2 arrives: skip the pits this lap rather than dive across the corner.
             if (car.s > S_TURN2 - PIT_GIVE_UP_PX && car.s < S_TURN2 && car.d > PIT_APPROACH_D + PIT_GIVE_UP_D && canSkip) {
@@ -184,9 +219,10 @@ export const OVAL_PIT: PitLane = {
           // of merging into turn 1 alongside (or just ahead of) a car that cannot slow down in time.
           // After MERGE_MAX_WAIT_S stopped it goes as soon as nobody is alongside, after MERGE_FORCE_S
           // in any case; once it goes it is committed (racing cars allow for it and it no longer gives
-          // way). Not for the player under the pit autopilot, who merges by hand after the hand-back.
+          // way). Not for the player under the pit autopilot, who merges by hand after the hand-back
+          // (a player's car the AI drives all race long gives way like any other).
           if (car.x > WALL_X1 - MERGE_YIELD_PX) {
-            if (!ai.merging && !car.isPlayer) {
+            if (!ai.merging && !(car.isPlayer && view.pitAuto)) {
               const clear =
                 ai.mergeWait >= MERGE_FORCE_S ||
                 (ai.mergeWait >= MERGE_MAX_WAIT_S
