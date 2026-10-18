@@ -1,6 +1,17 @@
 import type { Rng } from '../../../sim/rng';
 import { shade } from '../../sprites';
 
+/** The scenery props of the cockpit view (src/gfx/fpv/props.ts). */
+export type Prop3d = 'containers' | 'cactus' | 'buildings' | 'pines' | 'stands';
+
+/** The cockpit view's look of a circuit; every field is optional, with a default that fits any track. */
+export interface FpvTheme {
+  /** Props standing where the top-down view draws `prop` (default: pines). */
+  props?: Prop3d;
+  /** The distant skyline: tower height (1 = the oval's city), colour and the share of lit windows. */
+  skyline?: { h: number; color: string; lit: number };
+}
+
 /** Scenery of one circuit. Tarmac, walls and kerbs look the same everywhere, so cars always stand out. */
 export interface CircuitTheme {
   outside: string;
@@ -19,6 +30,7 @@ export interface CircuitTheme {
   far?: string;
   nearW: number;
   farDetail?(g: CanvasRenderingContext2D, w: number, h: number, rng: Rng): void;
+  fpv?: FpvTheme;
 }
 
 function waves(g: CanvasRenderingContext2D, w: number, h: number, rng: Rng): void {
@@ -43,7 +55,7 @@ function dunes(g: CanvasRenderingContext2D, w: number, h: number, rng: Rng): voi
   }
 }
 
-const CONTAINERS = ['#B8442E', '#2E6AB8', '#D9A21E', '#3C8C5A', '#8A8A96', '#C8582E'];
+export const CONTAINERS = ['#B8442E', '#2E6AB8', '#D9A21E', '#3C8C5A', '#8A8A96', '#C8582E'];
 
 function container(g: CanvasRenderingContext2D, x: number, y: number, rng: Rng): void {
   const rows = 1 + ((rng() * 3) | 0);
@@ -173,6 +185,7 @@ export const THEMES: Record<string, CircuitTheme> = {
     far: '#0B1E36',
     nearW: 230,
     farDetail: waves,
+    fpv: { props: 'containers', skyline: { h: 1.2, color: '#0E1220', lit: 0.5 } },
   },
   desert: {
     outside: '#3A2A1C',
@@ -186,6 +199,7 @@ export const THEMES: Record<string, CircuitTheme> = {
     far: '#33241A',
     nearW: 260,
     farDetail: dunes,
+    fpv: { props: 'cactus', skyline: { h: 0.45, color: '#1A1210', lit: 0.05 } },
   },
   city: {
     outside: '#191823',
@@ -198,6 +212,7 @@ export const THEMES: Record<string, CircuitTheme> = {
     prop: building,
     glow: buildingGlow,
     nearW: 0,
+    fpv: { props: 'buildings', skyline: { h: 2.2, color: '#0E0C1C', lit: 0.65 } },
   },
   forest: {
     outside: '#10281A',
@@ -209,6 +224,7 @@ export const THEMES: Record<string, CircuitTheme> = {
     propR: 18,
     prop: tree,
     nearW: 0,
+    fpv: { props: 'pines', skyline: { h: 0.6, color: '#08140E', lit: 0 } },
   },
   finale: {
     outside: '#163E26',
@@ -220,5 +236,6 @@ export const THEMES: Record<string, CircuitTheme> = {
     propR: 30,
     prop: stand,
     nearW: 0,
+    fpv: { props: 'stands', skyline: { h: 0.9, color: '#0C1410', lit: 0.3 } },
   },
 };

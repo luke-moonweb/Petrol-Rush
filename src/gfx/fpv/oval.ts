@@ -8,6 +8,7 @@ import { hexRgb, makePoly } from './engine';
 import { type P3, rect, upright, wall } from './geom';
 import { ground, insideHull, label, night, type Parts, pieces } from './kit';
 import type { PitScene } from './pitScene';
+import { NIGHT_CITY } from './sky';
 import type { SceneSpec } from './spec';
 import { lazyCanvas, texQuad } from './texture';
 
@@ -205,7 +206,7 @@ export const OVAL_SPEC: SceneSpec = {
   barrier: (side) => (side > 0 ? 'wall' : 'none'),
   pit: OVAL_PIT,
   paddock: { dx: 0, dy: 0, z: ISLAND_H },
-  look: { horizon: '#0B0A16', shoulder: COL.grass, lamp: '255,214,140', mastStep: 75 },
+  look: { horizon: '#0B0A16', shoulder: COL.grass, lamp: '255,214,140', mastStep: 75, skyline: NIGHT_CITY },
   ground: ovalGround,
   base: ovalIsland,
   extras(P) {

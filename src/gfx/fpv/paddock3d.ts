@@ -35,7 +35,7 @@ export interface PaddockAt {
 const TIERS = 4;
 const STAND_DEPTH = (STAND_FRONT - STAND_TOP) / TIERS;
 
-const crowd = lazyCanvas(96, 32, (g) => {
+export const crowd = lazyCanvas(96, 32, (g) => {
   const rng = createRng(4711);
   g.fillStyle = '#1C1830';
   g.fillRect(0, 0, 96, 32);

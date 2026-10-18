@@ -2,11 +2,18 @@ import { createRng } from '../../sim/rng';
 import { wrapAngle } from '../../track/common';
 import type { Camera } from './engine';
 
-// The night sky of the cockpit view: a gradient, stars and a distant city skyline.
+// The night sky of the cockpit view: a gradient, stars and a distant skyline in the track's style.
 
 const SKY_TOP = '#05040C';
 export const SKY_HORIZON = '#221C3C';
-export const GROUND = '#0B0A16';
+
+/** A track's sky: the ground colour below the horizon and its skyline (see FpvTheme). */
+export interface Sky {
+  ground: string;
+  skyline: { h: number; color: string; lit: number };
+}
+
+export const NIGHT_CITY = { h: 1, color: '#100E1E', lit: 0.45 };
 
 interface Star {
   a: number;
@@ -37,7 +44,7 @@ function screenX(c: Camera, rel: number): number {
   return c.ox + c.flip * c.focal * Math.tan(rel);
 }
 
-export function drawSky(g: CanvasRenderingContext2D, c: Camera, w: number, yaw: number): void {
+export function drawSky(g: CanvasRenderingContext2D, c: Camera, w: number, yaw: number, look: Sky): void {
   if (stars.length === 0) initSky();
   const sky = g.createLinearGradient(0, 0, 0, c.oy);
   sky.addColorStop(0, SKY_TOP);
@@ -51,20 +58,21 @@ export function drawSky(g: CanvasRenderingContext2D, c: Camera, w: number, yaw: 
     if (Math.abs(rel) > lim) continue;
     g.fillRect(screenX(c, rel), c.oy - c.focal * Math.tan(st.e), st.size, st.size);
   }
+  const { h, color, lit } = look.skyline;
   for (const t of skyline) {
     const r0 = wrapAngle(t.a0 - yaw);
     const r1 = r0 + (t.a1 - t.a0);
     if (r1 < -lim || r0 > lim) continue;
     const xa = screenX(c, Math.max(-lim, r0));
     const xb = screenX(c, Math.min(lim, r1));
-    const y = c.oy - c.focal * Math.tan(t.e);
-    g.fillStyle = '#100E1E';
+    const y = c.oy - c.focal * Math.tan(t.e * h);
+    g.fillStyle = color;
     g.fillRect(Math.min(xa, xb), y, Math.abs(xb - xa), c.oy - y + 1);
-    if (t.lit > 0.55) {
+    if (t.lit > 1 - lit) {
       g.fillStyle = 'rgba(255,200,110,0.35)';
       g.fillRect(Math.min(xa, xb) + 2, y + 3, 2, 2);
     }
   }
-  g.fillStyle = GROUND;
+  g.fillStyle = look.ground;
   g.fillRect(0, c.oy, w, 10_000);
 }

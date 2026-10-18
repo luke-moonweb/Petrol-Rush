@@ -1,15 +1,23 @@
 import type { Track } from '../../track/common';
+import { SegmentTrack } from '../../track/segment';
+import { PIT_D } from '../../track/straightPit';
+import { circuitSpec } from './circuit';
 import { attachSigns, emptyParts, type Parts } from './kit';
 import { OVAL_SPEC } from './oval';
 import { paddockBuildings, paddockPads, paddockSigns } from './paddock3d';
 import { pitScene } from './pitScene';
 import { ribbon } from './ribbon';
+import type { Sky } from './sky';
 import type { SceneSpec } from './spec';
 
 export type { Glow, Pool } from './kit';
 
 /** The static 3D world of one track; `signs` holds only the signs that hang on no wall. */
-export type Scene = Parts;
+export interface Scene extends Parts {
+  sky: Sky;
+  /** The pit lane's driving line, for the minimap. */
+  pitLine: { x0: number; x1: number; y: number };
+}
 
 /** Builds the static scene of a track from its spec. Within each list, the order is the draw order. */
 export function buildScene(spec: SceneSpec): Scene {
@@ -23,11 +31,19 @@ export function buildScene(spec: SceneSpec): Scene {
   paddockSigns(P, spec.paddock);
   spec.extras(P);
   P.signs = attachSigns(P.solids, P.signs);
-  return P;
+  const { pit, look } = spec;
+  return {
+    ...P,
+    sky: { ground: look.horizon, skyline: look.skyline },
+    pitLine: { x0: pit.x0, x1: pit.x1, y: pit.y0 + PIT_D.DRIVE },
+  };
 }
 
-export function sceneSpec(_track: Track): SceneSpec {
-  return OVAL_SPEC;
+/** The adapter for the track's type. */
+export function sceneSpec(track: Track): SceneSpec {
+  if (track instanceof SegmentTrack) return circuitSpec(track);
+  if (track === OVAL_SPEC.track) return OVAL_SPEC;
+  throw new Error(`no cockpit scene for track ${track.id}`);
 }
 
 // The oval stays cached (it is the default track), plus the latest other track, as trackCanvas does.
