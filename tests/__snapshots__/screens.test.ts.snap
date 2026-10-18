@@ -3,12 +3,12 @@
 exports[`screens, headless > a race on a Grand Prix circuit, top-down and in the cockpit; fingerprints of both 1`] = `
 {
   "cockpit": {
-    "calls": 21875,
-    "hash": "3dc9bebe",
+    "calls": 20550,
+    "hash": "6ac94c14",
   },
   "topDown": {
-    "calls": 90811,
-    "hash": "c544d231",
+    "calls": 90849,
+    "hash": "45ffdfdd",
   },
 }
 `;
@@ -32,8 +32,8 @@ exports[`screens, headless > title → race menu → settings → a race with th
     "hash": "437d9bd3",
   },
   "results": {
-    "calls": 17508,
-    "hash": "adc25d5d",
+    "calls": 14020,
+    "hash": "c5d66a16",
   },
   "settings": {
     "calls": 2592,

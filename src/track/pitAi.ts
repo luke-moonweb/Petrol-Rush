@@ -95,6 +95,9 @@ export function exitRoadAhead(car: Car, cars: Car[]): { car: Car; gap: number } 
   return best;
 }
 
+/** A car entering the pits this far past its box gives up on it. */
+const PAST_BOX_PX = 20;
+
 /** Drives to the box: slows down with the distance left and stops in it. */
 export function driveToBox(road: PitRoad, car: Car, cars: Car[], target: number): { target: number; lane: number } {
   const pxm = CONFIG.PX_PER_MPH;
@@ -104,6 +107,9 @@ export function driveToBox(road: PitRoad, car: Car, cars: Car[], target: number)
   target = Math.min(target, Math.sqrt(Math.max(0, CONFIG.BRAKE_MPH_S * dist) / pxm) * 1.2);
   if (dist < 8 && Math.abs(car.speed) < CONFIG.PIT_STOP_MPH && road.inBox(car.x, car.y)) {
     car.ai.pitPhase = car.finished ? 'parked' : 'fueling';
+  } else if (dist < -PAST_BOX_PX) {
+    // Pushed past every free box (round a queue): drive out and try again next lap, as it cannot back up.
+    car.ai.pitPhase = 'exiting';
   }
   return { target, lane };
 }

@@ -196,21 +196,19 @@ describe('grip model: solo pace (A10)', () => {
     return { lap: (at[2]! - at[0]!) / 2, crashes: c.crashes };
   }
 
-  it('a lone AI car laps within 4 % of the old classic pace over the four lanes; the inside is the slow line', () => {
+  it('a lone AI car takes the racing line from any lane, and laps within 4 % of the old classic pace', () => {
     const lanes = [-28.5, -9.5, 9.5, 28.5];
     const grip = lanes.map((d) => soloLap(d));
     const mean = (a: { lap: number }[]) => a.reduce((x, y) => x + y.lap, 0) / a.length;
     console.log(
-      `solo laps by lane ${lanes.join(' / ')}: ${grip.map((g) => g.lap.toFixed(2)).join(' / ')} (mean ${mean(grip).toFixed(2)}, classic ${CLASSIC_SOLO_LAP_S})`,
+      `solo laps from lane ${lanes.join(' / ')}: ${grip.map((g) => g.lap.toFixed(2)).join(' / ')} (mean ${mean(grip).toFixed(2)}, classic ${CLASSIC_SOLO_LAP_S})`,
     );
     for (const g of grip) expect(g.crashes).toBe(0);
-    // (4 %: since the grip fades above KNEE_MPH the oval's outer lanes corner at about 150 mph, not 174:
-    // an intended 3.4 % slower lap, accepted with the corner lab change)
+    // (since the grip fades above KNEE_MPH the lanes corner at about 150 mph, not 174; the racing line
+    // through the whole width wins most of that back)
     expect(Math.abs(mean(grip) / CLASSIC_SOLO_LAP_S - 1)).toBeLessThanOrEqual(0.04);
-    // the limit comes from the radius: the inside is the slowest, all within a second of each other
-    // (not strictly faster outwards: above KNEE_MPH a wider lane gains little speed for its longer way)
-    for (let i = 1; i < lanes.length; i++) expect(grip[i]!.lap).toBeLessThan(grip[0]!.lap);
-    expect(grip[0]!.lap - grip[3]!.lap).toBeLessThan(1);
+    // alone, the lane it started on no longer matters: every car is on the same line by lap 2
+    for (const g of grip) expect(Math.abs(g.lap - grip[0]!.lap)).toBeLessThan(0.05);
   }, 60_000);
 });
 
