@@ -4,6 +4,7 @@ import { cockpitOverlayMs } from '../../gfx/fpv/timing';
 import { drawCockpitView, prewarmCockpitView, prewarmScene } from '../../gfx/fpv/view';
 import { Particles } from '../../gfx/particles';
 import { driverName, prewarmPlayerCar } from '../../gfx/vehicles';
+import { VHS_CUT_S, VHS_S, VhsGlitch } from '../../gfx/vhs';
 import { drawCars, drawOil, drawTrack, trackCanvas } from '../../gfx/world';
 import { keyLabel } from '../../input';
 import { inFrame, layout } from '../../layout';
@@ -56,6 +57,8 @@ export class RaceState implements State {
   /** Out of fuel in a Grand Prix: the car the camera follows while the rest race on (watch.ts). */
   private watched: Car | null = null;
   private readonly camera = new RaceCamera();
+  /** The tape glitch that covers the switch to the cockpit (vhs.ts). */
+  private readonly glitch = new VhsGlitch();
   private readonly controls = new PlayerControls();
   // What the HUD and the cockpit show of the player's warnings (SKID blink phase, eased limit and LEDs).
   private readonly warnShown = new WarnDisplay();
@@ -89,6 +92,7 @@ export class RaceState implements State {
   private newRace(): Race {
     this.particles?.clear();
     this.camera?.reset();
+    this.glitch?.reset();
     this.controls?.reset();
     this.warnShown.reset();
     this.sound = new RaceSound(this.game.audio);
@@ -172,10 +176,18 @@ export class RaceState implements State {
 
   update(dt: number): void {
     const input = this.game.input;
+    this.glitch.update(dt);
     if (input.pressed('camera') && !this.watched) {
       const prefs = this.game.prefs;
       prefs.camera = prefs.camera === 'top' ? 'cockpit' : 'top';
-      this.game.audio.ui('move');
+      if (this.cockpit) {
+        this.glitch.start();
+        this.game.audio.tapeStatic(VHS_S, VHS_CUT_S);
+      } else {
+        // back to the top-down view: a plain cut
+        this.glitch.reset();
+        this.game.audio.ui('move');
+      }
     }
     if (this.game.params.debug && input.pressed('debugSpeed')) {
       this.game.timeScale = this.game.timeScale === 1 ? 4 : this.game.timeScale === 4 ? 8 : 1;
@@ -380,7 +392,10 @@ export class RaceState implements State {
   private updateWatch(): void {
     const player = this.race.player;
     if (!this.gpc || (!this.watched && !isStranded(player))) return;
-    if (!this.watched) this.game.prefs.camera = 'top';
+    if (!this.watched) {
+      this.game.prefs.camera = 'top';
+      this.glitch.reset();
+    }
     const input = this.game.input;
     const step = input.pressed('navLeft') ? -1 : input.pressed('navRight') ? 1 : 0;
     this.watched = nextWatched(this.race, this.watched ?? player, step) ?? this.watched ?? player;
@@ -397,7 +412,9 @@ export class RaceState implements State {
     const iy = (c: Car) => c.prevY + (c.y - c.prevY) * a;
     const ih = (c: Car) => c.prevHeading + wrapAngle(c.heading - c.prevHeading) * a;
     const view = layout.view;
-    const cockpit = this.cockpit;
+    // on a switch to the cockpit the top-down view stays until the cut, hidden in the glitch's noise
+    const cockpit = this.glitch.cockpitShown(this.cockpit);
+    const pixelScale = g.canvas.width / layout.w;
     const warn: Warn = this.warnShown.shown(this.phase === 'running' && race.started ? warnings(race.player, race.track) : null);
     if (cockpit) {
       const lt = this.lights;
@@ -406,7 +423,6 @@ export class RaceState implements State {
         ? { lit: out ? 0 : Math.min(LIGHTS_COUNT, Math.floor(lt.t / LIGHT_INTERVAL_S)), out, since: lt.t - lt.outAt }
         : undefined;
       const touch = this.game.touch;
-      const pixelScale = g.canvas.width / layout.w;
       drawCockpitView(g, {
         race,
         view,
@@ -426,6 +442,7 @@ export class RaceState implements State {
       this.renderTopDown(g, race, ix, iy, ih, a);
       prewarmCockpitView(g, view, race.player.colorIdx, this.game.touch);
     }
+    this.glitch.draw(g, view, pixelScale);
 
     drawHudTop(g, race, this.notices.notice);
     drawHudPanel(g, race, !cockpit, warn.vRef);

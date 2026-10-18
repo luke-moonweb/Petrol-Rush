@@ -381,6 +381,30 @@ export class GameAudio {
     for (let i = 0; i < 3; i++) this.beep(1200, 0.08, 0.15, 'square', i * 0.16);
   }
 
+  /** The hiss of a tape losing its tracking under a camera switch: `dur` s long, loudest at `peakAt`, with the buzz of the lost sync. */
+  tapeStatic(dur: number, peakAt: number): void {
+    const d = this.out(0.5, 0);
+    if (!d) return;
+    const ctx = this.ctx!;
+    const t = ctx.currentTime;
+    const src = ctx.createBufferSource();
+    src.buffer = this.noise;
+    const f = ctx.createBiquadFilter();
+    f.type = 'bandpass';
+    f.frequency.value = 2600;
+    f.Q.value = 0.6;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.25, t + 0.015);
+    g.gain.linearRampToValueAtTime(0.5, t + peakAt);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    src.connect(f);
+    f.connect(g);
+    g.connect(d);
+    src.start(t, Math.random() * 1.5, dur + 0.05);
+    this.tone(d, t, dur * 0.5, 'sawtooth', 60, 60, 0.12);
+  }
+
   ui(kind: UiSound): void {
     switch (kind) {
       case 'move':
