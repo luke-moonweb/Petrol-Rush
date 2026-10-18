@@ -5,7 +5,7 @@ import type { Track } from '../track/common';
 import type { SegmentTrack } from '../track/segment';
 import { buildCircuitCanvas } from './track/circuit/canvas';
 import { buildTrackCanvas } from './track/oval/canvas';
-import { CAR_ANCHOR_X, CAR_ANCHOR_Y, carDirIndex, carGlowSprite } from './vehicles';
+import { CAR_ANCHOR_X, CAR_ANCHOR_Y, carDirIndex, carGlowSprite, PLAYER_DIRECTIONS, playerCarSprite } from './vehicles';
 
 /** The part of the world shown in the race view. */
 export interface Cam {
@@ -131,6 +131,7 @@ export function drawCarLights(
   g.globalCompositeOperation = 'source-over';
 }
 
+/** `fine`: the car drawn at PLAYER_DIRECTIONS headings (the player's; none in the title demo). */
 export function drawCars(
   g: CanvasRenderingContext2D,
   cars: Car[],
@@ -138,11 +139,15 @@ export function drawCars(
   ix: (c: Car) => number,
   iy: (c: Car) => number,
   ih: (c: Car) => number,
+  fine?: Car,
 ): void {
   const visible = cars.filter((c) => inView(cam, c.x, c.y, 40)).sort((p, q) => iy(p) - iy(q));
   drawCarLights(g, visible, cam, ix, iy, ih, 'beams');
   for (const car of visible) {
-    const spr = carGlowSprite(car.colorIdx, carDirIndex(ih(car)));
+    const spr =
+      car === fine
+        ? playerCarSprite(car.colorIdx, carDirIndex(ih(car), PLAYER_DIRECTIONS))
+        : carGlowSprite(car.colorIdx, carDirIndex(ih(car)));
     g.drawImage(spr, Math.round(ix(car)) - cam.x - CAR_ANCHOR_X, Math.round(iy(car)) - cam.y - CAR_ANCHOR_Y);
   }
   drawCarLights(g, visible, cam, ix, iy, ih, 'lamps');

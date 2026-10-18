@@ -59,6 +59,9 @@ export function driverName(colorIdx: number): string {
 }
 
 export const CAR_DIRECTIONS = 32;
+/** The player's car turns in finer steps (the nose moves ~1 px per step), so small turns show. */
+export const PLAYER_DIRECTIONS = 128;
+const FINE_STEP = PLAYER_DIRECTIONS / CAR_DIRECTIONS;
 const CAR_SCALE = (CONFIG.CAR_LEN + 4) / 4;
 const SPRITE = 60;
 export const CAR_ANCHOR_X = SPRITE / 2;
@@ -275,9 +278,10 @@ export const MODEL_SCALE = CAR_SCALE;
 
 const carCache = new Map<string, HTMLCanvasElement>();
 
-export function carDirIndex(heading: number): number {
+/** The sprite direction (of `dirs`) nearest to a heading. */
+export function carDirIndex(heading: number, dirs = CAR_DIRECTIONS): number {
   const t = heading / (Math.PI * 2);
-  return ((Math.round(t * CAR_DIRECTIONS) % CAR_DIRECTIONS) + CAR_DIRECTIONS) % CAR_DIRECTIONS;
+  return ((Math.round(t * dirs) % dirs) + dirs) % dirs;
 }
 
 export function carSprite3d(colorIdx: number, dir: number): HTMLCanvasElement {
@@ -286,20 +290,13 @@ export function carSprite3d(colorIdx: number, dir: number): HTMLCanvasElement {
   if (cached) return cached;
   const c = makeCanvas(SPRITE, SPRITE);
   const g = c.getContext('2d')!;
-  const sc = CAR_SCHEMES[colorIdx % CAR_SCHEMES.length]!;
-  renderModel(
-    g,
-    carModel(sc, LIVERIES[colorIdx % LIVERIES.length]!),
-    (dir / CAR_DIRECTIONS) * Math.PI * 2,
-    CAR_SCALE,
-    CAR_ANCHOR_X,
-    CAR_ANCHOR_Y,
-  );
+  renderModel(g, carFaces(colorIdx), (dir / CAR_DIRECTIONS) * Math.PI * 2, CAR_SCALE, CAR_ANCHOR_X, CAR_ANCHOR_Y);
   carCache.set(key, c);
   return c;
 }
 
 const glowCache = new Map<string, HTMLCanvasElement>();
+const GLOW = 'rgba(255,215,140,0.95)';
 
 export function carGlowSprite(colorIdx: number, dir: number): HTMLCanvasElement {
   const key = `${colorIdx}:${dir}`;
@@ -307,13 +304,54 @@ export function carGlowSprite(colorIdx: number, dir: number): HTMLCanvasElement 
   if (cached) return cached;
   const c = makeCanvas(SPRITE, SPRITE);
   const g = c.getContext('2d')!;
-  g.shadowColor = 'rgba(255,215,140,0.95)';
+  g.shadowColor = GLOW;
   g.shadowBlur = 5;
   g.drawImage(carSprite3d(colorIdx, dir), 0, 0);
   g.shadowBlur = 0;
   g.drawImage(carSprite3d(colorIdx, dir), 0, 0);
   glowCache.set(key, c);
   return c;
+}
+
+// The player's in-between directions (those not a multiple of FINE_STEP) are cached for one colour
+// only, so an AI car of the same colour never gets one; `warmed` counts the directions prewarmed.
+let fine: { colorIdx: number; sprites: HTMLCanvasElement[]; warmed: number } = { colorIdx: -1, sprites: [], warmed: 0 };
+// The bare car of an in-between direction, drawn here before its glow.
+let fineRaw: HTMLCanvasElement | null = null;
+
+function fineCache(colorIdx: number): typeof fine {
+  if (fine.colorIdx !== colorIdx) fine = { colorIdx, sprites: [], warmed: 0 };
+  return fine;
+}
+
+/** The player's car, with its glow, at direction `dir` of PLAYER_DIRECTIONS. */
+export function playerCarSprite(colorIdx: number, dir: number): HTMLCanvasElement {
+  if (dir % FINE_STEP === 0) return carGlowSprite(colorIdx, dir / FINE_STEP);
+  const f = fineCache(colorIdx);
+  const cached = f.sprites[dir];
+  if (cached) return cached;
+  fineRaw ??= makeCanvas(SPRITE, SPRITE);
+  const r = fineRaw.getContext('2d')!;
+  r.clearRect(0, 0, SPRITE, SPRITE);
+  renderModel(r, carFaces(colorIdx), (dir / PLAYER_DIRECTIONS) * Math.PI * 2, CAR_SCALE, CAR_ANCHOR_X, CAR_ANCHOR_Y);
+  const c = makeCanvas(SPRITE, SPRITE);
+  const g = c.getContext('2d')!;
+  g.shadowColor = GLOW;
+  g.shadowBlur = 5;
+  g.drawImage(fineRaw, 0, 0);
+  g.shadowBlur = 0;
+  g.drawImage(fineRaw, 0, 0);
+  f.sprites[dir] = c;
+  return c;
+}
+
+/**
+ * Draws up to `n` more of the player's sprites. The start lights call it every step: all 128 at once
+ * would stall a frame, and a car turning fast needs 3-4 new directions a frame.
+ */
+export function prewarmPlayerCar(colorIdx: number, n = 8): void {
+  const f = fineCache(colorIdx);
+  while (f.warmed < PLAYER_DIRECTIONS && n-- > 0) playerCarSprite(colorIdx, f.warmed++);
 }
 
 export function carIcon(g: CanvasRenderingContext2D, colorIdx: number, cx: number, cy: number, scale = 1): void {
