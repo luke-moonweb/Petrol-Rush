@@ -109,18 +109,47 @@ function resetGrip(car: Car): void {
   car.wallYaw = 0;
 }
 
+/** Lateral grip (px/s^2) at v px/s: GRIP up to KNEE_MPH, then fading linearly to TOP at MAX_MPH (and TOP beyond). */
+export function gripAt(v: number): number {
+  const C = CONFIG;
+  const G = C.GRIP;
+  const vk = G.KNEE_MPH * C.PX_PER_MPH;
+  const a = Math.abs(v);
+  if (a <= vk || G.KNEE_MPH >= C.MAX_MPH) return G.GRIP;
+  const fade = (G.GRIP - G.TOP) / ((C.MAX_MPH - G.KNEE_MPH) * C.PX_PER_MPH);
+  return Math.max(G.TOP, G.GRIP - fade * (a - vk));
+}
+
+/** How hard a loose rear swings, as a share of OS_KICK / LOOSE_GAIN: a slow slide is easier to catch. */
+function slideScale(v: number): number {
+  const G = CONFIG.GRIP;
+  const t = (v / CONFIG.PX_PER_MPH - G.SLIDE_SOFT_MPH) / Math.max(1, G.KNEE_MPH - G.SLIDE_SOFT_MPH);
+  return G.SLIDE_SOFT + (1 - G.SLIDE_SOFT) * Math.max(0, Math.min(1, t));
+}
+
 /** Highest curvature (1/px) the steering can ask for at v px/s: the full-lock envelope. */
 export function maxCurvature(v: number): number {
   const C = CONFIG;
   const a = Math.max(Math.abs(v), 1);
-  return Math.min(1 / C.MIN_TURN_RADIUS, C.MAX_TURN_RATE / a, (C.GRIP.STEER_CAP * C.GRIP.GRIP) / (a * a));
+  return Math.min(1 / C.MIN_TURN_RADIUS, C.MAX_TURN_RATE / a, (C.GRIP.STEER_CAP * gripAt(a)) / (a * a));
 }
 
-/** Grip-limited cornering speed (mph) on a line of curvature k (1/px), at grip fraction f. */
+/** Grip-limited cornering speed (mph) on a line of curvature k (1/px), at grip fraction f: v^2 |k| = f gripAt(v). */
 export function limitMph(k: number, f = 1): number {
+  const C = CONFIG;
+  const G = C.GRIP;
+  const pxm = C.PX_PER_MPH;
   const a = Math.abs(k);
   if (a < 1e-9) return Infinity;
-  return Math.sqrt((CONFIG.GRIP.GRIP * f) / a) / CONFIG.PX_PER_MPH;
+  const below = Math.sqrt((G.GRIP * f) / a);
+  const vk = G.KNEE_MPH * pxm;
+  const vMax = C.MAX_MPH * pxm;
+  if (below <= vk || vk >= vMax) return below / pxm;
+  // over the knee: a v^2 = f (GRIP - m (v - vk)), a quadratic in v
+  const m = (G.GRIP - G.TOP) / (vMax - vk);
+  const v = (-f * m + Math.sqrt(f * f * m * m + 4 * a * f * (G.GRIP + m * vk))) / (2 * a);
+  // past top speed the grip stays at TOP
+  return (v > vMax ? Math.sqrt((G.TOP * f) / a) : v) / pxm;
 }
 
 function longitudinal(car: Car, input: DriveInput, dt: number, hasFuel: boolean): void {
@@ -209,7 +238,11 @@ function gripStep(car: Car, input: DriveInput, dt: number, v: number, aLong: num
   const G = C.GRIP;
   const pxm = C.PX_PER_MPH;
   const fLong = Math.min(1, aLong / (C.BRAKE_MPH_S_HIGH * pxm));
-  const muAv = G.GRIP * Math.sqrt(Math.max(0, 1 - (G.FC_K * fLong) ** 2));
+  const grip = gripAt(v);
+  // the yaw rates below (rad/s) were set for the full grip: they scale with it, so a slide keeps its
+  // proportion to how fast the tyres can turn the course
+  const share = grip / G.GRIP;
+  const muAv = grip * Math.sqrt(Math.max(0, 1 - (G.FC_K * fLong) ** 2));
   const kCmd = input.steer * maxCurvature(v);
   const aCmd = v * v * kCmd;
   const u = Math.abs(aCmd) / muAv;
@@ -258,11 +291,12 @@ function gripStep(car: Car, input: DriveInput, dt: number, v: number, aLong: num
       : Math.max(0, Math.min(1, (G.TUCK_SLIP - slip * dir) / G.TUCK_FADE));
   const muFront = muAv * (1 + G.FRONT_GAIN * car.weightFwd * tuckRoom);
   let yaw = dir * Math.min(Math.abs(v * kCmd), muFront / v);
-  const load = Math.min(1, Math.abs(aLat) / G.GRIP);
-  if (load > 0.5) yaw += Math.sign(aLat) * G.LIFT_YAW * car.weightFwd * ((load - 0.5) / 0.5) * tuckRoom;
+  const load = Math.min(1, Math.abs(aLat) / grip);
+  if (load > 0.5) yaw += Math.sign(aLat) * G.LIFT_YAW * share * car.weightFwd * ((load - 0.5) / 0.5) * tuckRoom;
   if (car.rearLoose) {
-    yaw += dir * G.OS_KICK * Math.min(over, 0.5);
-    if (Math.abs(slip) > G.LOOSE_SLIP) yaw += Math.sign(slip) * G.LOOSE_GAIN * (Math.abs(slip) - G.LOOSE_SLIP);
+    const swing = slideScale(v) * share;
+    yaw += dir * G.OS_KICK * swing * Math.min(over, 0.5);
+    if (Math.abs(slip) > G.LOOSE_SLIP) yaw += Math.sign(slip) * G.LOOSE_GAIN * swing * (Math.abs(slip) - G.LOOSE_SLIP);
   }
   car.heading += yaw * dt;
   slip = wrapAngle(car.heading - car.moveAngle);
@@ -272,7 +306,8 @@ function gripStep(car: Car, input: DriveInput, dt: number, v: number, aLong: num
   car.speed = Math.max(0, car.speed - (drag / pxm) * dt);
 
   car.gripOver = over;
-  car.gripUse = Math.max(u, Math.hypot(Math.abs(aLat) / G.GRIP, G.FC_K * fLong));
+  car.turnDir = dir;
+  car.gripUse = Math.max(u, Math.hypot(Math.abs(aLat) / grip, G.FC_K * fLong));
   const sliding = over > G.SLIDE_OVER_MIN || Math.abs(slip) > G.SLIDE_SLIP_MIN;
   car.slideTime = sliding ? car.slideTime + dt : 0;
 
@@ -335,7 +370,13 @@ function applyWallGrip(car: Car, n: WallNormal, dt: number): void {
   const g0 = (G.WALL_GLANCE_DEG * Math.PI) / 180;
   const g1 = (G.WALL_SPIN_DEG * Math.PI) / 180;
 
-  if (car.spinTime <= 0 && car.speed > 0 && angle > g1 && -vn > G.WALL_SPIN_MPH) {
+  // A car that ran wide onto the outer wall because it was too fast for the corner (tyres over their
+  // grip, rear still holding, steering away from that wall) ploughs along it and loses a lot of speed
+  // instead of spinning; with the rear loose (e.g. a key held into the bend) a steep hit still spins.
+  // (the wall normal points into the track: along the turn means the wall is on the outside)
+  const outside = car.turnDir * (Math.cos(car.heading) * n.ny - Math.sin(car.heading) * n.nx) > 0;
+  const ploughing = car.gripOver > G.SLIDE_OVER_MIN && !car.rearLoose && outside;
+  if (car.spinTime <= 0 && car.speed > 0 && angle > g1 && -vn > G.WALL_SPIN_MPH && !ploughing) {
     const cross = Math.cos(car.heading) * n.ny - Math.sin(car.heading) * n.nx;
     if (startSpin(car, C.SPIN_RATE * 0.8, cross >= 0 ? 1 : -1)) GRIP_SPINS.wall++;
   }
@@ -371,7 +412,7 @@ function applyWallGrip(car: Car, n: WallNormal, dt: number): void {
   car.wallAgo = 0;
   const newMag = Math.max(0, tmag * fresh - G.WALL_FRICTION * -vn);
   const back = car.speed < 0;
-  if (angle > g1) {
+  if (angle > g1 && !ploughing) {
     // Steep but too slow to spin: the car stops against the wall (it keeps
     // its heading and loses the speed into the wall) instead of being turned along it.
     car.speed = Math.sign(car.speed) * newMag;
@@ -382,7 +423,7 @@ function applyWallGrip(car: Car, n: WallNormal, dt: number): void {
   // the track) by a share of the impact angle, which the tyres then recover as slip. Below it the
   // nose is straightened along the wall. The nose turns there at WALL_TURN_RATE at most, so the
   // cockpit view never jumps.
-  const kick = back ? 0 : Math.max(0, Math.min(1, (angle - g0) / (g1 - g0))) * WALL_KICK;
+  const kick = back ? 0 : Math.max(0, Math.min(1, (angle - g0) / (g1 - g0))) * WALL_KICK * (angle > g1 ? g1 / angle : 1);
   const away = Math.cos(along) * n.ny - Math.sin(along) * n.nx >= 0 ? 1 : -1;
   car.wallYaw = wrapAngle(along + away * kick * angle - car.heading);
   turnFromWall(car, dt);

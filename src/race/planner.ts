@@ -3,6 +3,7 @@
 import { CONFIG } from '../config';
 import { type CurvatureTable, laneCurvature } from '../track/curvature';
 import type { Car } from './car';
+import { limitMph } from './physics';
 
 export const PLAN = {
   /** Planning deceleration as a share of BRAKE_MPH_S. */
@@ -23,8 +24,7 @@ export function gripFrac(car: Car): number {
 /** Cornering speed (mph) on curvature k at lateral offset d, using grip fraction f. */
 export function cornerMph(k: number, d: number, f: number): number {
   const inside = d + (k < 0 ? -PLAN.PATH_MARGIN : PLAN.PATH_MARGIN);
-  const kl = Math.abs(laneCurvature(k, inside));
-  return Math.sqrt((CONFIG.GRIP.GRIP * f) / kl) / CONFIG.PX_PER_MPH;
+  return limitMph(laneCurvature(k, inside), f);
 }
 
 /**

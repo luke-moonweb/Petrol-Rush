@@ -127,6 +127,7 @@ export class Race {
       slideTime: 0,
       gripUse: 0,
       gripOver: 0,
+      turnDir: 0,
       rearLoose: false,
       rearStress: 0,
       weightFwd: 0,
@@ -381,7 +382,9 @@ export class Race {
 
   projectedPosition(car: Car): number {
     const key = (c: Car) => this.timeBehindLeader(c) + c.penalty;
-    const sorted = [...this.cars].sort((a, b) => key(a) - key(b));
+    // equal times (gaps clamp at 0) keep the order on the track
+    const order = this.standings();
+    const sorted = [...order].sort((a, b) => key(a) - key(b));
     return sorted.indexOf(car) + 1;
   }
 

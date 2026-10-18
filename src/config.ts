@@ -37,10 +37,18 @@ export const CONFIG = {
   STRAIGHT_ASSIST_RATE: 0.6,
   MIN_TURN_RADIUS: 34,
 
-  // Grip model. Lateral limit: v_lim(r) = sqrt(GRIP * r) / PX_PER_MPH.
+  // Grip model. Lateral limit on a line of radius r: v^2 / r = gripAt(v) (race/physics.ts): GRIP up to
+  // KNEE_MPH, then fading linearly to TOP at MAX_MPH, so only gentle bends are flat out (corner lab: npm run lab).
   GRIP: {
-    /** px/s^2 of tyre force, shared by cornering and braking (friction ellipse). */
+    /** px/s^2 of tyre force up to KNEE_MPH, shared by cornering and braking (friction ellipse). */
     GRIP: 500,
+    /** Above this speed the grip fades... */
+    KNEE_MPH: 140,
+    /** ...linearly to this (px/s^2) at MAX_MPH: a line of radius MAX_MPH^2 / TOP and wider is flat out. */
+    TOP: 120,
+    /** A loose rear swings at SLIDE_SOFT x its full rate up to SLIDE_SOFT_MPH, rising to the full rate at KNEE_MPH. */
+    SLIDE_SOFT: 0.5,
+    SLIDE_SOFT_MPH: 100,
     /** Share of the grip that full braking at top speed takes away. */
     FC_K: 0.6,
     /** 1/s: how fast the tyres pull the direction of travel back to the nose. */

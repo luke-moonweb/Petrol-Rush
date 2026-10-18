@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { CONFIG } from '../src/config';
-import { curvatureAssist, limitMph, maxCurvature, stepCar } from '../src/race/physics';
+import { curvatureAssist, gripAt, limitMph, maxCurvature, stepCar } from '../src/race/physics';
 import { keyCap, PlayerSteering } from '../src/race/steering';
 import { laneCurvature } from '../src/track/curvature';
 import { CAR_R, HALF_W, pointAt, project, RC, S_BOTTOM, S_TURN1, S_TURN2, trackHeadingAt, wrapAngle } from '../src/track/oval';
@@ -86,7 +86,8 @@ describe('grip model: straight assist', () => {
       stepCar(car, { steer: st.steer, straightTo: st.straightTo, gas: true, brake: false, toggleReverse: false }, 1 / 60, OVAL);
       Object.assign(car, project(car.x, car.y));
     }
-    expect(car.d).toBeGreaterThan(2.5);
+    // (under 1 px since the grip fades above KNEE_MPH: at top speed the car steers about 4 x less sharply)
+    expect(car.d).toBeGreaterThan(0.3);
     expect(car.d).toBeLessThan(10);
   });
 
@@ -100,7 +101,8 @@ describe('grip model: straight assist', () => {
       Object.assign(car, project(car.x, car.y));
       maxD = Math.max(maxD, car.d);
     }
-    expect(maxD).toBeGreaterThan(15);
+    // (a few px since the grip fades above KNEE_MPH)
+    expect(maxD).toBeGreaterThan(2);
     expect(maxD).toBeLessThan(HALF_W - CAR_R - 2);
     expect(car.spinTime).toBe(0);
   });
@@ -109,7 +111,7 @@ describe('grip model: straight assist', () => {
 describe('grip model: key and touch steering cap (designer H2)', () => {
   const demand = (car: { speed: number }, steer: number) => {
     const v = car.speed * CONFIG.PX_PER_MPH;
-    return (Math.abs(steer) * maxCurvature(v) * v * v) / CONFIG.GRIP.GRIP;
+    return (Math.abs(steer) * maxCurvature(v) * v * v) / gripAt(v);
   };
   const hold = (ps: PlayerSteering, car: ReturnType<typeof carAt>, key: number, s: number, brake = false) => {
     let st = ps.update(car, key, 1 / 60, brake);
@@ -135,9 +137,26 @@ describe('grip model: key and touch steering cap (designer H2)', () => {
     expect(Math.abs(hold(new PlayerSteering(), car, 1, 0.5, true))).toBeCloseTo(keyCap(car, true), 9);
   });
 
+  /**
+   * Speed factor over the lane limit at which the line needs 1 + over x the grip. (Above KNEE_MPH the grip
+   * fades with speed, so a few % of speed is many % of grip: the tests below are stated in grip.)
+   */
+  const overBy = (over: number, d = 0) => {
+    const k = Math.abs(laneCurvature(-1 / RC, d));
+    const lim = limitMph(k);
+    const need = (f: number) => {
+      const v = lim * f * CONFIG.PX_PER_MPH;
+      return (v * v * k) / gripAt(v) - 1;
+    };
+    let lo = 1;
+    let hi = 1.5;
+    for (let i = 0; i < 40; i++) [lo, hi] = need((lo + hi) / 2) < over ? [(lo + hi) / 2, hi] : [lo, (lo + hi) / 2];
+    return lo;
+  };
+
   it('at or under the limit a key held for the whole corner never goes past the cap (no overdrive)', () => {
     const lim = limitMph(laneCurvature(-1 / RC, 0));
-    for (const f of [0.9, 1.0, 1.04]) {
+    for (const f of [0.9, 1.0, overBy(0.08)]) {
       const ps = new PlayerSteering();
       const car = carAt(S_TURN1 + 50, 0, lim * f);
       expect(demand(car, hold(ps, car, -1, 3)), `x${f}`).toBeLessThanOrEqual(CONFIG.GRIP.KEY_CAP + 1e-9);
@@ -151,15 +170,17 @@ describe('grip model: key and touch steering cap (designer H2)', () => {
       return demand(car, hold(new PlayerSteering(), car, -1, s));
     };
     const G = CONFIG.GRIP;
-    // 7 % over (14 % over the grip): opens a little, after OVERDRIVE_S / 1.4
-    expect(opened(1.07, 0.3)).toBeCloseTo(G.KEY_CAP, 6);
-    expect(opened(1.07, 2)).toBeGreaterThan(G.KEY_CAP + 0.02);
-    expect(opened(1.07, 2)).toBeLessThan(1.3);
-    // 13 % over: further, sooner
-    expect(opened(1.13, 1)).toBeGreaterThan(1.25);
-    expect(opened(1.13, 0.4)).toBeGreaterThan(opened(1.07, 0.4));
-    // 20 % over (44 % over the grip): full lock (STEER_CAP x the grip) within half a second
-    expect(opened(1.2, 0.5, -28.5)).toBeCloseTo(G.STEER_CAP, 6);
+    const small = overBy(0.14);
+    const more = overBy(0.28);
+    // 14 % over the grip: opens a little, after OVERDRIVE_S / 1.4
+    expect(opened(small, 0.3)).toBeCloseTo(G.KEY_CAP, 6);
+    expect(opened(small, 2)).toBeGreaterThan(G.KEY_CAP + 0.02);
+    expect(opened(small, 2)).toBeLessThan(1.3);
+    // 28 % over: further, sooner
+    expect(opened(more, 1)).toBeGreaterThan(1.25);
+    expect(opened(more, 0.4)).toBeGreaterThan(opened(small, 0.4));
+    // 44 % over the grip: full lock (STEER_CAP x the grip) within half a second
+    expect(opened(overBy(0.44, -28.5), 0.5, -28.5)).toBeCloseTo(G.STEER_CAP, 6);
   });
 
   it('a key out of the bend (countersteer) or a released key never overdrives', () => {
