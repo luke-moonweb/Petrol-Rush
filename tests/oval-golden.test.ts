@@ -83,7 +83,7 @@ describe('oval golden master', () => {
   let restoreMath: () => void;
   beforeAll(() => {
     saved = CONFIG.DRIVE_MODEL;
-    CONFIG.DRIVE_MODEL = 'classic';
+    CONFIG.DRIVE_MODEL = 'grip';
     restoreMath = useFdlibm();
   });
   afterAll(() => {
