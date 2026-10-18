@@ -164,6 +164,18 @@ export function updateProgress(car: Car, track: Track): boolean {
   return false;
 }
 
+/** Under this speed (mph) a car out of fuel counts as standing. */
+const STRANDED_MPH = 1;
+
+/**
+ * Out of fuel and standing (a car in its pit box gets fuel, so it never counts): the car takes no
+ * further part, the race can end without it (race.ts `raceOver`), and it is classified by the distance
+ * it covered.
+ */
+export function isStranded(car: Car): boolean {
+  return !car.finished && car.fuel <= 0 && Math.abs(car.speed) < STRANDED_MPH;
+}
+
 export function isServicing(o: Car): boolean {
   return o.ai.pitPhase === 'fueling' || o.ai.pitPhase === 'parked' || o.refueling;
 }

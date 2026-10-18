@@ -231,7 +231,11 @@ export function saveGp(gp: GrandPrix | null): void {
   } catch {}
 }
 
-/** The race's result for the championship: a retired player is classified last. */
+/**
+ * The race's result for the championship: a retired player is classified last; a car out of fuel
+ * (car.ts `isStranded`) keeps its place by the distance it covered, but like every car that did not
+ * finish it scores nothing.
+ */
 export function raceResult(race: Race): GpRaceResult {
   let order = race.classification();
   if (race.playerRetired) order = [...order.filter((c) => !c.isPlayer), race.player];

@@ -3,11 +3,13 @@ import { PIT_SOON_LAPS, stepCabin } from '../../gfx/fpv/cabin';
 import { cockpitOverlayMs } from '../../gfx/fpv/timing';
 import { drawCockpitView, prewarmCockpitView, prewarmScene } from '../../gfx/fpv/view';
 import { Particles } from '../../gfx/particles';
+import { driverName } from '../../gfx/vehicles';
 import { drawCars, drawOil, drawTrack, trackCanvas } from '../../gfx/world';
 import { keyLabel } from '../../input';
 import { inFrame, layout } from '../../layout';
-import type { Car } from '../../race/car';
+import { type Car, isStranded } from '../../race/car';
 import { type GrandPrix, gridOrder, raceResult, raceSeed, round, saveGp } from '../../race/grandprix';
+import { NO_INPUT } from '../../race/physics';
 import { Race } from '../../race/race';
 import { type Warn, WarnDisplay, warnings } from '../../race/warnings';
 import type { TouchLayout } from '../../touch';
@@ -27,6 +29,7 @@ import { RaceNotices } from './notices';
 import { changeOption, OPTION_LABELS, optionRows, START_ROW } from './options';
 import { RaceSound } from './sound';
 import { drawDebug, drawRaceMessage, drawStartLights, LIGHT_INTERVAL_S, LIGHTS_COUNT, resultRows, type StartLights } from './view';
+import { nextWatched } from './watch';
 
 type Phase = 'choose' | 'options' | 'running' | 'paused' | 'finishing' | 'results';
 
@@ -50,6 +53,8 @@ export class RaceState implements State {
   private midRace = false;
   private savedRace: Race | null = null;
   private finishTimer = 0;
+  /** Out of fuel in a Grand Prix: the car the camera follows while the rest race on (watch.ts). */
+  private watched: Car | null = null;
   private readonly camera = new RaceCamera();
   private readonly controls = new PlayerControls();
   // What the HUD and the cockpit show of the player's warnings (SKID blink phase, eased limit and LEDs).
@@ -88,6 +93,7 @@ export class RaceState implements State {
     this.warnShown.reset();
     this.sound = new RaceSound(this.game.audio);
     this.lightsShown = 0;
+    this.watched = null;
     const prefs = this.game.prefs;
     // Every race starts with the top-down camera; the cockpit is chosen per race.
     prefs.camera = 'top';
@@ -103,7 +109,7 @@ export class RaceState implements State {
   }
 
   touchLayout(): TouchLayout {
-    return this.phase === 'running' ? 'race' : 'menu';
+    return this.phase === 'running' && !this.watched ? 'race' : 'menu';
   }
 
   touchCamera(): boolean {
@@ -141,8 +147,8 @@ export class RaceState implements State {
     race.pitAuto = false;
     const dt = 1 / CONFIG.STEP_HZ;
     const limit = (race.finishTime(race.classification()[0]!) ?? race.time) + FINISH_LIMIT_S;
-    for (let t = 0; t < FINISH_SIM_S && !race.allFinished() && race.time < limit; t += dt) race.step(dt, null);
-    if (race.allFinished() || race.time >= limit) {
+    for (let t = 0; t < FINISH_SIM_S && !race.raceOver() && race.time < limit; t += dt) race.step(dt, null);
+    if (race.raceOver() || race.time >= limit) {
       this.particles.clear();
       this.phase = 'results';
     }
@@ -166,7 +172,7 @@ export class RaceState implements State {
 
   update(dt: number): void {
     const input = this.game.input;
-    if (input.pressed('camera')) {
+    if (input.pressed('camera') && !this.watched) {
       const prefs = this.game.prefs;
       prefs.camera = prefs.camera === 'top' ? 'cockpit' : 'top';
       this.game.audio.ui('move');
@@ -325,7 +331,12 @@ export class RaceState implements State {
       this.game.set(new HelpState(this.game, this));
       return;
     }
-    const drive = this.controls.update(input, this.race, dt);
+    if (this.watched && input.pressed('enter')) {
+      // the rest of the race is run in the background, as after the player's own finish
+      this.phase = 'finishing';
+      return;
+    }
+    const drive = this.watched ? NO_INPUT : this.controls.update(input, this.race, dt);
     if (this.lights) {
       this.lights.t += dt;
       const lit = Math.min(LIGHTS_COUNT, Math.floor(this.lights.t / LIGHT_INTERVAL_S));
@@ -347,23 +358,31 @@ export class RaceState implements State {
     stepCabin(this.race, dt);
     this.particles.emit(this.race.cars, dt);
     this.particles.update(dt);
-    this.camera.update(this.race.track, this.race.player, dt);
+    this.updateWatch();
+    const focus = this.watched ?? this.race.player;
+    this.camera.update(this.race.track, focus, dt);
 
     const used = this.race.pitAuto ? this.race.playerDrive : drive;
-    this.sound.update(
-      dt,
-      this.race,
-      used,
-      this.camera.at(this.race.track, this.race.player, this.race.player.x, this.race.player.y).x,
-      this.cockpit,
-    );
+    this.sound.update(dt, this.race, used, this.camera.at(this.race.track, focus, focus.x, focus.y).x, this.cockpit);
     this.notices.update(this.race, dt, this.game.audio);
-    const p = this.race.player;
 
-    if (p.finished) {
+    if (this.race.player.finished || (this.watched && this.race.raceOver())) {
       this.finishTimer += dt;
       if (this.finishTimer > 3) this.phase = this.gpc ? 'finishing' : 'results';
     }
+  }
+
+  /**
+   * Out of fuel in a Grand Prix, the player watches the cars still racing until they are all home:
+   * the top-down camera follows one, the arrows switch to another (watch.ts).
+   */
+  private updateWatch(): void {
+    const player = this.race.player;
+    if (!this.gpc || (!this.watched && !isStranded(player))) return;
+    if (!this.watched) this.game.prefs.camera = 'top';
+    const input = this.game.input;
+    const step = input.pressed('navLeft') ? -1 : input.pressed('navRight') ? 1 : 0;
+    this.watched = nextWatched(this.race, this.watched ?? player, step) ?? this.watched ?? player;
   }
 
   render(g: CanvasRenderingContext2D, alpha = 1): void {
@@ -413,6 +432,9 @@ export class RaceState implements State {
     const msg = this.message();
     const low = Math.round(view.h * 0.22);
     if (msg) drawRaceMessage(g, msg, cockpit ? low + 30 : 44);
+    if (this.watched && this.phase === 'running') {
+      drawRaceMessage(g, `← →  OTHER CAR  ·  ${this.game.touch ? 'OK' : 'ENTER'}  RESULTS`, 64, 10);
+    }
     if (this.lights && this.phase !== 'choose' && this.phase !== 'options') drawStartLights(g, this.lights, cockpit ? low : 12);
     this.renderPhase(g);
   }
@@ -424,7 +446,8 @@ export class RaceState implements State {
     iy: (c: Car) => number,
     ih: (c: Car) => number,
   ): void {
-    const cam = this.camera.at(race.track, race.player, Math.round(ix(race.player)), Math.round(iy(race.player)));
+    const focus = this.watched ?? race.player;
+    const cam = this.camera.at(race.track, focus, Math.round(ix(focus)), Math.round(iy(focus)));
     g.save();
     const view = layout.view;
     g.translate(view.x, view.y);
@@ -437,15 +460,8 @@ export class RaceState implements State {
 
     drawCars(g, race.cars, cam, ix, iy, ih);
     this.particles.renderSparks(g, cam);
-    const px = Math.round(ix(race.player)) - cam.x;
-    const py = Math.round(iy(race.player)) - cam.y - 26;
-    g.fillStyle = PR.teal;
-    g.beginPath();
-    g.moveTo(px - 5, py - 6);
-    g.lineTo(px + 5, py - 6);
-    g.lineTo(px, py);
-    g.closePath();
-    g.fill();
+    drawMarker(g, Math.round(ix(race.player)) - cam.x, Math.round(iy(race.player)) - cam.y - 26, PR.teal);
+    if (focus !== race.player) drawMarker(g, Math.round(ix(focus)) - cam.x, Math.round(iy(focus)) - cam.y - 26, PR.amber);
     g.restore();
   }
 
@@ -499,7 +515,8 @@ export class RaceState implements State {
     if (this.phase !== 'running' && this.phase !== 'paused') return null;
     const p = this.race.player;
     if (p.finished) return `FINISHED ${ordinal(this.race.classification().indexOf(p) + 1)}!`;
-    if (p.fuel <= 0 && Math.abs(p.speed) < 1) return this.game.touch ? 'OUT OF FUEL  –  open MENU' : 'OUT OF FUEL  –  press ESC';
+    if (this.watched && this.watched !== p) return `OUT OF FUEL  –  WATCHING ${driverName(this.watched.colorIdx)}`;
+    if (isStranded(p)) return this.gpc ? 'OUT OF FUEL' : this.game.touch ? 'OUT OF FUEL  –  open MENU' : 'OUT OF FUEL  –  press ESC';
     if (p.refueling) return 'REFUELING  –  GAS to leave';
     if (this.race.pitAuto) return 'PIT LANE  –  AUTO';
     if (p.fuel < CONFIG.LOW_FUEL && Math.floor(this.race.time * 2) % 2 === 0) return 'LOW FUEL';
@@ -528,4 +545,15 @@ export class RaceState implements State {
       ...(this.cockpit ? [this.overlayLine()] : []),
     ];
   }
+}
+
+/** The arrow over a car in the top-down view: the player's (teal) and the watched car's (amber). */
+function drawMarker(g: CanvasRenderingContext2D, x: number, y: number, color: string): void {
+  g.fillStyle = color;
+  g.beginPath();
+  g.moveTo(x - 5, y - 6);
+  g.lineTo(x + 5, y - 6);
+  g.lineTo(x, y);
+  g.closePath();
+  g.fill();
 }

@@ -13,6 +13,15 @@ exports[`screens, headless > a race on a Grand Prix circuit, top-down and in the
 }
 `;
 
+exports[`screens, headless > out of fuel in a Grand Prix, the player watches the cars still racing until all are home 1`] = `
+{
+  "watching": {
+    "calls": 517,
+    "hash": "352a4a63",
+  },
+}
+`;
+
 exports[`screens, headless > title → race menu → settings → a race with the cockpit, pause and menu → results; fingerprints of each screen 1`] = `
 {
   "cockpit": {
