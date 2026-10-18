@@ -2,7 +2,8 @@
 import { describe, expect, it } from 'vitest';
 
 // The CLAUDE.md files are the agents' map of the code. They travel with it: a file added to an area
-// must be named in that area's CLAUDE.md, and a path a CLAUDE.md names must still exist.
+// must be named in that area's CLAUDE.md, and a path a CLAUDE.md names must still exist. The docs are
+// gitignored (local only), so on CI and in fresh clones there are none and this test is skipped.
 
 /** Vite keys are relative to this file: '../src/x.ts' or './sim/x.ts' → repo paths 'src/x.ts', 'tests/sim/x.ts'. */
 const repoPath = (key: string) => (key.startsWith('./') ? `tests/${key.slice(2)}` : key.slice(3));
@@ -18,7 +19,7 @@ const ALSO_COVERS: Record<string, string[]> = {
 const globRe = (glob: string) => new RegExp(`^${glob.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '[^/]*')}$`);
 const named = (doc: string) => [...doc.matchAll(/`([^`\s<>]+)`/g)].map((m) => m[1]!);
 
-describe('CLAUDE.md files', () => {
+describe.skipIf(!DOCS['../CLAUDE.md'])('CLAUDE.md files', () => {
   const docs = Object.entries(DOCS).map(([path, text]) => ({ path: repoPath(path), text }));
 
   it('finds the root and the area docs', () => {
