@@ -91,22 +91,23 @@ describe('championship', () => {
     expect(standings(g)[0]!.points).toBe(125);
   });
 
-  it('grid: the player starts from the chosen position, AI by standings after round 1', () => {
-    for (const [q, slot] of [
-      ['pole', 0],
-      ['middle', 10],
-      ['last', 19],
-    ] as const) {
+  it('grid: the player starts last in round 1, then everyone by the standings', () => {
+    // (an old save's grid position no longer matters)
+    for (const q of ['pole', 'middle', 'last', 'random'] as const) {
       const g = gp({ ...SETUP, qualifying: q });
-      expect(gridOrder(g).indexOf(4)).toBe(slot);
+      expect(gridOrder(g).indexOf(4)).toBe(19);
       expect(gridOrder(g)).toEqual(gridOrder(g));
+      expect(new Set(gridOrder(g)).size).toBe(20);
     }
     let g = gp({ ...SETUP, qualifying: 'pole' });
-    const order = orderWithPlayerAt(g, 20);
-    g = withResult(g, { order, dnf: [] });
-    const grid = gridOrder(g);
-    expect(grid[0]).toBe(4);
-    expect(grid.slice(1)).toEqual(order.slice(0, 19));
+    const first = orderWithPlayerAt(g, 3);
+    g = withResult(g, { order: first, dnf: [] });
+    expect(gridOrder(g)).toEqual(first);
+    expect(gridOrder(g).indexOf(4)).toBe(2);
+    // Round 3: the grid is the championship table, not the last race's result.
+    g = withResult(g, { order: [...first].reverse(), dnf: [] });
+    expect(gridOrder(g)).toEqual(standings(g).map((s) => s.colorIdx));
+    expect(gridOrder(g)).not.toEqual([...first].reverse());
   });
 
   it('race seeds differ per round and repeat for the same championship', () => {
