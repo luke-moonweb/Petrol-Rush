@@ -94,6 +94,8 @@ export function aiInput(car: Car, view: AiView, dt: number): DriveInput {
     if (plan.free && plan.laneD !== laneD) leaveLine(car, plan);
     followTraffic(car, view, plan);
     blockInside(car, view, plan, diving);
+    // (hard: a pair turning in side by side, on the free line or a lane, sorts out who goes first)
+    if (ai.level.freeLine && ai.pitPhase === 'none') cornerPair(car, view, plan);
   }
   if (pit.lane === null && ai.pitPhase === 'none' && !plan.oilLane) avoidSideRub(car, view, plan);
   // (any of the above that picked a lane takes the car off the racing line)
@@ -247,6 +249,30 @@ function freeLine(car: Car, view: AiView, plan: Plan, ok: boolean, dt: number): 
   plan.laneD = hold.d;
   ai.lane = nearestLane(car.d);
   return true;
+}
+
+/**
+ * Hard, a pair in a corner: with a car alongside (overlapping along the track, not in line, within
+ * FREE_PAIR_GAP_PX across) in a bend or one coming up within FREE_PAIR_S, the car ahead (when level, the one
+ * on the inside of the bend) keeps its line and the other yields: no gas, and no faster than the leader less
+ * FREE_YIELD_MPH, so it drops in behind it instead of turning in side by side.
+ */
+function cornerPair(car: Car, view: AiView, plan: Plan): void {
+  const track = view.track;
+  const k = nextCurve(track.curves(), car.s, 40 + Math.max(0, car.speed) * CONFIG.PX_PER_MPH * FREE_PAIR_S);
+  if (k === 0) return;
+  let lead: Car | null = null;
+  for (const o of view.cars) {
+    if (!onTrack(track, car, o)) continue;
+    const ds = track.deltaS(car.s, o.s);
+    const dd = o.d - car.d;
+    if (Math.abs(ds) >= LINE_OVERLAP_PX || Math.abs(dd) < LINE_INLINE_PX || Math.abs(dd) > FREE_PAIR_GAP_PX) continue;
+    const leads = ds > FREE_LEVEL_PX || (ds >= -FREE_LEVEL_PX && Math.sign(k) * dd > 0);
+    if (leads && (!lead || o.speed < lead.speed)) lead = o;
+  }
+  if (!lead) return;
+  plan.held = true;
+  plan.target = Math.min(plan.target, Math.max(0, lead.speed - FREE_YIELD_MPH));
 }
 
 /** A lane pick takes the car off the line (and off a pass on the free line): the lane pursuit takes over. */
@@ -661,7 +687,9 @@ function steerAndPedals(car: Car, track: Track, pitLane: number | null, plan: Pl
   const diff = wrapAngle(Math.atan2(ty - car.y, tx - car.x) - car.heading);
   out.steer = plan.line ? lineSteer(car, track, plan.steerShift) : Math.max(-1, Math.min(1, diff * 5));
   // (off the line, wide or held off it by a car alongside: no gas until back on it)
-  out.gas = car.speed < plan.target - 0.5 && !(plan.line && (plan.held || runningWide(car, track, plan.lineShift)));
+  // (on the free line only at speed: a car stopped wide of its line, at the wall, drives back to it)
+  const wide = (!plan.free || car.speed > FREE_HELD_MPH) && runningWide(car, track, plan.lineShift);
+  out.gas = car.speed < plan.target - 0.5 && !(plan.line && (plan.held || wide));
   out.brake = car.speed > plan.target + 1.5;
   if (car.speed > 0 && !car.reverse) {
     // A smooth driver never asks the tyres for more than they have left after braking.
@@ -977,8 +1005,12 @@ const FREE_PASS_DONE_PX = 10;
 const FREE_BACK_S = 0.8;
 const FREE_LEVEL_PX = 8;
 const FREE_PLAN_PX = 3;
-/** Under this speed (mph) a car held off by one ahead of it keeps the gas on. */
+/** Under this speed (mph) a car held off by one ahead of it, or wide of its line, keeps the gas on. */
 const FREE_HELD_MPH = 40;
+/** A pair in a corner (cornerPair): a car alongside within FREE_PAIR_GAP_PX across, a bend within FREE_PAIR_S; the other yields by FREE_YIELD_MPH. */
+const FREE_PAIR_GAP_PX = 40;
+const FREE_PAIR_S = 1;
+const FREE_YIELD_MPH = 4;
 /** Extra lateral reach (px) of the follow logic for a car 60+ mph slower. */
 const FOLLOW_WIDE_PX = 8;
 /** A car moving to a new line (pit entry or exit) counts there for cars this far behind it or more. */

@@ -11,7 +11,7 @@ declare const process: { env: Record<string, string | undefined>; stdout: { writ
 // Crash survey (not a test): 20-car, CR_LAPS-lap races over CR_SEEDS seeds from CR_SEED0 on the CR_TRACKS
 // tracks, counting spins, contacts, wall hits, turn-in slides and blocks per track (CR_SEEDLOG=1: the
 // spins per seed). "corner" is the share of racing steps in a bend within CR_LINE_PX (6) of the car's own racing
-// line, "off" the mean distance (px) from it there. CR_OPTS adds race options (CR_LEVEL=hard: the difficulty); CR_MODE=noslide,noblock,neutral
+// line, "off" the mean distance (px) from it there. CR_OPTS adds race options (CR_LEVEL=hard: the difficulty); CR_MODE=noslide,noblock,neutral,nofree (lanes on hard)
 // switches personality traits off. Run: CR_TRACKS=oval,city npx vitest run --project lab tests/lab/crashes.lab.ts
 
 const tracks = (process.env.CR_TRACKS ?? 'oval,harbour,desert,city,forest,finale').split(',');
@@ -54,6 +54,7 @@ test('crash survey', () => {
         if (mode.includes('noslide')) c.ai.persona = { ...c.ai.persona, slide: 0 };
         if (mode.includes('noblock')) c.ai.persona = { ...c.ai.persona, blocks: false };
         if (mode.includes('neutral')) c.ai.persona = PERSONAS.neutral;
+        if (mode.includes('nofree')) c.ai.level = { ...c.ai.level, freeLine: false };
       }
       r.start();
       const was = r.cars.map(() => false);
