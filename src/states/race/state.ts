@@ -1,6 +1,7 @@
 import { CONFIG, type RaceOptions } from '../../config';
 import { stepCabin } from '../../gfx/fpv/cabin';
-import { cockpitOverlayMs, drawCockpitView, prewarmCockpitView, prewarmScene } from '../../gfx/fpv/view';
+import { cockpitOverlayMs } from '../../gfx/fpv/timing';
+import { drawCockpitView, prewarmCockpitView, prewarmScene } from '../../gfx/fpv/view';
 import { Particles } from '../../gfx/particles';
 import { drawCars, drawOil, drawTrack, trackCanvas } from '../../gfx/world';
 import { keyLabel } from '../../input';
