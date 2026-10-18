@@ -2,8 +2,8 @@
 
 exports[`screens, headless > a race on a Grand Prix circuit draws top-down and offers no cockpit 1`] = `
 {
-  "calls": 90810,
-  "hash": "92c5a5ed",
+  "calls": 90849,
+  "hash": "960d6ba8",
 }
 `;
 
@@ -26,8 +26,8 @@ exports[`screens, headless > title → race menu → settings → a race with th
     "hash": "1f2e8da3",
   },
   "results": {
-    "calls": 17575,
-    "hash": "6bdac83d",
+    "calls": 13966,
+    "hash": "f55ffbcd",
   },
   "settings": {
     "calls": 2592,

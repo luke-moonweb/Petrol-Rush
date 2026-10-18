@@ -15,7 +15,9 @@ for (const track of gpTracks()) {
     });
 
     it('low on fuel, all at once: every car pits, refuels and finishes', () => {
-      const r = runRace({ track, seed: 77, laps: 4, fuel0: 0.3 });
+      // (0.312: the laps of fuel 0.3 of a tank was before the racing line made a lone AI's lap cheaper
+      // and the fuel model was re-tuned to it, FUEL.LAP_WORK 76700 -> 73840)
+      const r = runRace({ track, seed: 77, laps: 4, fuel0: 0.312 });
       const pitted = [...r.pitStops.values()].filter((n) => n > 0).length;
       console.log(`${track.name} pits: ${pitted}/20 cars pitted, ${r.race.time.toFixed(1)} s, max still ${r.maxStill.toFixed(1)} s`);
       expect(r.offWorld).toBe(0);

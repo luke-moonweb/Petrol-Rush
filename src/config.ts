@@ -172,7 +172,7 @@ export const CONFIG = {
     /** FUEL_RANGE_LAPS times the oval's length (tests/fuel.test.ts checks it). */
     RANGE_PX: 54_860,
     /** Work (mph^2) one lap of the oval takes at the normal pace. */
-    LAP_WORK: 76700,
+    LAP_WORK: 73840,
     /** On the gas: work per mph*s driven (at least COAST_MPH_S, so coasting is never free). */
     DRAG: 25,
     /** Right behind another car: the share of the drag saved. */
