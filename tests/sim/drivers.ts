@@ -142,7 +142,6 @@ export function steerTrack(t: DriveTrack): SteerTrack {
   return {
     curves: () => t.table,
     headingAt: (x, y) => t.pointAt(t.project(x, y).s, 0).heading,
-    cornerAt: () => null,
   };
 }
 
@@ -169,12 +168,8 @@ export interface RunOpts {
   settle?: number;
   /** Brake to this speed before the first curve (planned at the given decel), instead of entering at `mph`. */
   approachMph?: number;
-  /**
-   * Speed by plan instead of `gas`: brake for every corner like the AI planner at this grip fraction
-   * (grip model), or for the classic model to `classicTurnMph` in the corners.
-   */
+  /** Speed by plan instead of `gas`: brake for every corner like the AI planner at this grip fraction. */
   planFrac?: number;
-  classicTurnMph?: number;
   /** Throttle: lift off (no gas) from this many seconds after turn-in on (any `gas` mode). */
   liftAfter?: number;
   /** human: holds the key into the bend for the whole bend, whatever happens (a panicking player). */
@@ -368,8 +363,8 @@ export function runCurve(
       input.gas = aiGas;
       input.brake = aiBrake;
     }
-    if (o.planFrac !== undefined || o.classicTurnMph !== undefined) {
-      const target = planTarget(t, st.s, st.d, d, car.speed, o);
+    if (o.planFrac !== undefined) {
+      const target = planSpeed(t.table, st.s, st.d, d, o.planFrac, car.speed);
       input.gas = car.speed < target - 0.5;
       input.brake = car.speed > target + 1.5;
     }
@@ -436,16 +431,6 @@ export function runCurve(
   }
   res.endMph = car.speed;
   return res;
-}
-
-/** Speed a planning driver aims for at s: the AI planner (grip) or a fixed corner speed (classic). */
-function planTarget(t: DriveTrack, s: number, dNow: number, d: number, mph: number, o: RunOpts): number {
-  if (CONFIG.DRIVE_MODEL === 'grip') return planSpeed(t.table, s, dNow, d, o.planFrac ?? 1, mph);
-  const turnV = o.classicTurnMph ?? 150;
-  if (t.table.at(s) !== 0) return turnV;
-  let dist = 0;
-  while (dist < 2000 && t.table.at(s + dist) === 0) dist += t.table.step;
-  return Math.min(CONFIG.MAX_MPH, Math.sqrt(turnV * turnV + (2 * CONFIG.BRAKE_MPH_S * 0.75 * dist) / PXM));
 }
 
 export function nextCurveS(t: DriveTrack, from: number): number {

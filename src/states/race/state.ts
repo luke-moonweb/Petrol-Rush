@@ -491,7 +491,7 @@ export class RaceState implements State {
     const ih = (c: Car) => c.prevHeading + wrapAngle(c.heading - c.prevHeading) * a;
     const view = layout.view;
     const cockpit = this.cockpit;
-    const warn: Warn = this.warnShown.shown(this.phase === 'running' && race.started ? warnings(race.player, race.track) : null, race.time);
+    const warn: Warn = this.warnShown.shown(this.phase === 'running' && race.started ? warnings(race.player, race.track) : null);
     if (cockpit) {
       const lt = this.lights;
       const out = !!lt && lt.t >= lt.outAt;
@@ -716,9 +716,7 @@ export class RaceState implements State {
       `x ${p.x.toFixed(0)} y ${p.y.toFixed(0)}  s ${p.s.toFixed(0)} d ${p.d.toFixed(1)}`,
       `mph ${p.speed.toFixed(1)}  fuel ${(p.fuel * 100).toFixed(1)}%  spin ${p.spinTime.toFixed(2)}`,
       `sector ${p.lastSector} passed ${p.sectorsPassed}  t ${this.race.time.toFixed(1)}`,
-      CONFIG.DRIVE_MODEL === 'grip'
-        ? `grip ${p.gripUse.toFixed(2)} slip ${((wrapAngle(p.heading - p.moveAngle) * 180) / Math.PI).toFixed(1)}° rear ${p.rearLoose ? 'LOOSE' : p.rearStress.toFixed(2)} limit ${warnings(p, this.race.track).vRef.toFixed(0)}`
-        : 'drive classic',
+      `grip ${p.gripUse.toFixed(2)} slip ${((wrapAngle(p.heading - p.moveAngle) * 180) / Math.PI).toFixed(1)}° rear ${p.rearLoose ? 'LOOSE' : p.rearStress.toFixed(2)} limit ${warnings(p, this.race.track).vRef.toFixed(0)}`,
       ...(this.cockpit ? [this.overlayLine()] : []),
     ];
   }

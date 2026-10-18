@@ -22,7 +22,6 @@ import {
   PIT_X0,
   PIT_X1,
   RC,
-  S_BOTTOM,
   S_TURN2,
   TRACK_LEN,
   TURN_LEN,
@@ -54,8 +53,6 @@ const MERGE_MAX_WAIT_S = 2.5;
 const MERGE_FORCE_S = 4;
 const MERGE_STOP_PX = 12;
 
-const grip = (): boolean => CONFIG.DRIVE_MODEL === 'grip';
-
 function pitPathR(phi: number): number {
   const r = islandHullR(phi) + CAR_CLEAR;
   return Math.max(PIT_ROAD_Y - CY, Math.min(RC - HALF_W + 9, r));
@@ -80,11 +77,10 @@ export const OVAL_PIT: PitLane = {
     return inWallRange(a.x) && inWallRange(b.x) && a.wasInPit && b.wasInPit && a.pitSide !== b.pitSide;
   },
 
-  // Grip model: decide on the straight before turn 2, so the move to the inside lane is done before
-  // the corner (a lane change inside a corner adds curvature the speed plan does not see).
+  // Decide on the straight before turn 2, so the move to the inside lane is done before the corner
+  // (a lane change inside a corner adds curvature the speed plan does not see).
   decideAt(s: number): boolean {
-    if (grip()) return s >= S_TURN2 - PIT_DECIDE_FROM && s < S_TURN2 - PIT_DECIDE_TO;
-    return s >= S_TURN2 && s < S_BOTTOM;
+    return s >= S_TURN2 - PIT_DECIDE_FROM && s < S_TURN2 - PIT_DECIDE_TO;
   },
 
   reachLaps: (PIT_DECIDE_FROM + TURN_LEN + (PIT_X1 - CX_L)) / TRACK_LEN,
@@ -111,7 +107,6 @@ export const OVAL_PIT: PitLane = {
   plan(car: Car, view: AiView, target: number, laneD: number, dt: number): PitPlan {
     const ai = car.ai;
     const pxm = CONFIG.PX_PER_MPH;
-    const g = grip();
     let pitY: number | null = null;
     if (ai.pitPhase === 'none' && car.pitSide && car.wasInPit && car.y > CY && car.x < WALL_X1) ai.pitPhase = 'exiting';
 
@@ -133,7 +128,7 @@ export const OVAL_PIT: PitLane = {
           }
         } else {
           laneD = PIT_APPROACH_D;
-          if (g && Math.abs(car.d - laneD) > 6) {
+          if (Math.abs(car.d - laneD) > 6) {
             // A car may skip the stop for a lap only if its fuel surely lasts another lap to the box,
             // and never twice running.
             const fuelLaps = car.fuel * CONFIG.FUEL_RANGE_LAPS;
@@ -153,13 +148,11 @@ export const OVAL_PIT: PitLane = {
               break;
             }
           }
-          if (g) {
-            // brake smoothly for the dive instead of the classic step down to 100 mph
-            const toDive = car.s < S_TURN2 - PIT_DECIDE_FROM ? Infinity : S_TURN2 + TURN_LEN * PIT_DIVE_AT - car.s;
-            const vDive = CONFIG.AI_PIT_MPH + 5;
-            const b = CONFIG.BRAKE_MPH_S * PLAN.BRAKE_FRAC;
-            target = Math.min(target, Math.sqrt(vDive * vDive + (2 * b * Math.max(0, toDive)) / pxm));
-          } else if (car.s > S_TURN2 + TURN_LEN * 0.5) target = Math.min(target, 100);
+          // brake smoothly for the dive
+          const toDive = car.s < S_TURN2 - PIT_DECIDE_FROM ? Infinity : S_TURN2 + TURN_LEN * PIT_DIVE_AT - car.s;
+          const vDive = CONFIG.AI_PIT_MPH + 5;
+          const b = CONFIG.BRAKE_MPH_S * PLAN.BRAKE_FRAC;
+          target = Math.min(target, Math.sqrt(vDive * vDive + (2 * b * Math.max(0, toDive)) / pxm));
           if (car.s > S_TURN2 + TURN_LEN * PIT_DIVE_AT) {
             const phi = (Math.atan2(car.y - CY, CX_L - car.x) * 180) / Math.PI;
             laneD = pitPathR(phi + 12) - RC;
@@ -186,12 +179,12 @@ export const OVAL_PIT: PitLane = {
             pitY = PIT_BOX_Y;
             target = 0;
           }
-          // Grip model: give way at the end of the pit road until the inside lane is clear, instead
+          // Give way at the end of the pit road until the inside lane is clear, instead
           // of merging into turn 1 alongside (or just ahead of) a car that cannot slow down in time.
           // After MERGE_MAX_WAIT_S stopped it goes as soon as nobody is alongside, after MERGE_FORCE_S
           // in any case; once it goes it is committed (racing cars allow for it and it no longer gives
           // way). Not for the player under the pit autopilot, who merges by hand after the hand-back.
-          if (g && car.x > WALL_X1 - MERGE_YIELD_PX) {
+          if (car.x > WALL_X1 - MERGE_YIELD_PX) {
             if (!ai.merging && !car.isPlayer) {
               const clear =
                 ai.mergeWait >= MERGE_FORCE_S ||
@@ -214,10 +207,10 @@ export const OVAL_PIT: PitLane = {
             }
           }
         } else {
-          // (grip: while the lane is not clear it keeps to the inside rather than easing out to EXIT_D,
+          // (while the lane is not clear it keeps to the inside rather than easing out to EXIT_D,
           // which overlaps a car on the inside lane)
           const clear = mergeClear(view.track, car, LANES[0]!, view.cars);
-          laneD = clear ? LANES[0]! : g ? Math.max(EXIT_D_MIN, Math.min(car.d, EXIT_D)) : EXIT_D;
+          laneD = clear ? LANES[0]! : Math.max(EXIT_D_MIN, Math.min(car.d, EXIT_D));
           if (Math.abs(car.d - LANES[0]!) < 5 || car.y < CY) {
             ai.pitPhase = 'none';
             ai.lane = LANES[0]!;
@@ -231,7 +224,7 @@ export const OVAL_PIT: PitLane = {
   },
 
   follow(car: Car, view: AiView, plan: PitPlan): void {
-    followInPits(ROAD, car, view.cars, plan, grip());
+    followInPits(ROAD, car, view.cars, plan, true);
   },
 
   aim(car: Car, lane: number, look: number): { x: number; y: number } {

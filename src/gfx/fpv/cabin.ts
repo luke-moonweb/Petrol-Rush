@@ -21,10 +21,6 @@ const HIT_MIN = 6;
 const HIT_FULL = 36;
 export const JOLT_GAP_S = 0.25;
 const GREEN_S = 0.4;
-const CASCADE_LED_S = 0.08;
-const CASCADE_LOOPS = 3;
-const SPIN_FLASH_S = 0.3;
-const CHASE_LEN = 3;
 
 export interface CabinState {
   oil: number;
@@ -33,7 +29,6 @@ export interface CabinState {
   joltK: number;
   joltX: number;
   joltY: number;
-  finishedAt: number;
   spinning: boolean;
 }
 
@@ -42,7 +37,7 @@ const cabins = new WeakMap<Race, CabinState>();
 export function cabinFor(race: Race): CabinState {
   let c = cabins.get(race);
   if (!c) {
-    c = { oil: 0, grit: 0, joltAt: -Infinity, joltK: 0, joltX: 0, joltY: 0, finishedAt: -1, spinning: false };
+    c = { oil: 0, grit: 0, joltAt: -Infinity, joltK: 0, joltX: 0, joltY: 0, spinning: false };
     cabins.set(race, c);
   }
   return c;
@@ -86,7 +81,6 @@ export function stepCabin(race: Race, dt: number): void {
   const spinning = p.spinTime > 0;
   if (spinning && !c.spinning) jolt(c, race.time, 0.6, p.spinDir || 1, 0);
   c.spinning = spinning;
-  if (p.finished && c.finishedAt < 0) c.finishedAt = race.time;
 }
 
 export function joltOffset(c: CabinState, time: number): { x: number; y: number; kick: number } {
@@ -105,9 +99,7 @@ export interface CabinInput {
   lapsToGo: number;
   started: boolean;
   finished: boolean;
-  finishAge: number;
   warn: Warn;
-  slideTime: number;
   spinTime: number;
   pitAuto: boolean;
   refueling: boolean;
@@ -141,7 +133,7 @@ function ledColor(i: number): string {
   return i < 4 ? PR.teal : i < 7 ? PR.amber : PR.red;
 }
 
-/** Grip model: the speed (mph) that lights LED i; all of them at MAX_MPH. */
+/** The speed (mph) that lights LED i; all of them at MAX_MPH. */
 export function ledMph(i: number): number {
   return CONFIG.MAX_MPH - LED_MPH_STEP * (LED_COUNT - 1 - i);
 }
@@ -149,46 +141,13 @@ const LED_MPH_STEP = 5;
 
 function leds(s: CabinInput, mph: number): (string | null)[] {
   const out: (string | null)[] = new Array(LED_COUNT).fill(null);
-  const all = (color: string | null) => out.fill(color);
-  const t = s.time;
   if (s.lights && !s.lights.out) {
     for (let i = 0; i < s.lights.lit && i < 5; i++) out[2 + i] = PR.red;
     return out;
   }
-  if (s.lights && s.lights.since < GREEN_S) return all(LED_GREEN);
-  if (CONFIG.DRIVE_MODEL === 'grip') {
-    // grip model: the strip only shows how close the car is to top speed (the user's decision)
-    for (let i = 0; i < LED_COUNT; i++) if (mph >= ledMph(i)) out[i] = ledColor(i);
-    return out;
-  }
-  if (s.finished) {
-    const loop = Math.floor(s.finishAge / (CASCADE_LED_S * LED_COUNT));
-    if (loop >= CASCADE_LOOPS) return out;
-    const n = Math.floor(s.finishAge / CASCADE_LED_S) % LED_COUNT;
-    for (let i = 0; i <= n; i++) out[i] = loop % 2 === 0 ? PR.teal : PR.amber;
-    return out;
-  }
-  if (s.spinTime > 0) {
-    const age = CONFIG.SPIN_MAX_S - s.spinTime;
-    if (age < SPIN_FLASH_S) return all(on(age, 3) ? PR.red : null);
-    const head = Math.floor(t / 0.06);
-    for (let i = 0; i < CHASE_LEN; i++) out[(head + i) % LED_COUNT] = PR.red;
-    return out;
-  }
-  const w = s.warn;
-  // classic: the strip turns red with the SKID lamp
-  if (w.skidLit) return all(PR.red);
-  if (w.skidHz > 0) return out;
-  if (s.pitAuto) {
-    const phase = Math.floor(t * 4) % 2;
-    for (let i = 0; i < LED_COUNT; i++) if (i % 2 === phase) out[i] = PR.teal;
-    return out;
-  }
-  for (let i = 0; i < LED_COUNT; i++) if (mph >= CONFIG.SPIN_MPH - 36 + 4 * i) out[i] = ledColor(i);
-  if (s.slideTime > 0.5 * CONFIG.SLIDE_MAX_S && on(t, 4)) {
-    out[0] = PR.amber;
-    out[LED_COUNT - 1] = PR.amber;
-  }
+  if (s.lights && s.lights.since < GREEN_S) return out.fill(LED_GREEN);
+  // the strip only shows how close the car is to top speed (the user's decision)
+  for (let i = 0; i < LED_COUNT; i++) if (mph >= ledMph(i)) out[i] = ledColor(i);
   return out;
 }
 

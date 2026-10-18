@@ -1,5 +1,4 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { CONFIG, type DriveModel } from '../src/config';
 import { useFdlibm } from './sim/fdlibm';
 import { hashState, runFor, runRace } from './sim/golden';
 
@@ -7,15 +6,11 @@ import { hashState, runFor, runRace } from './sim/golden';
 // of these changes, cars drive differently: only update the values for an intended change.
 // sin/cos/asin/atan2 come from a JS port of fdlibm so the hashes match on every platform.
 describe('driving model golden master', () => {
-  let saved: DriveModel;
   let restoreMath: () => void;
   beforeAll(() => {
-    saved = CONFIG.DRIVE_MODEL;
-    CONFIG.DRIVE_MODEL = 'grip';
     restoreMath = useFdlibm();
   });
   afterAll(() => {
-    CONFIG.DRIVE_MODEL = saved;
     restoreMath();
   });
 

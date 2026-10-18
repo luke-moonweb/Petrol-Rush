@@ -46,14 +46,7 @@ describe('segment track built from the oval', () => {
     }
   });
 
-  it('corners and grid match the oval', () => {
-    for (const s of [100, 1000, 1300, 2500, 3500, 4400]) {
-      const a = OVAL.pointAt(s, 10);
-      const b = seg.pointAt(s, 10);
-      expect(seg.cornerAt(b.x, b.y) !== null).toBe(OVAL.cornerAt(a.x, a.y) !== null);
-    }
-    // On straights (the only place the AI asks), the distance to the next corner matches.
-    for (const s of [100, 2500, 4400]) expect(seg.distToCorner(s)).toBeCloseTo(OVAL.distToCorner(s), 6);
+  it('grid matches the oval', () => {
     for (let slot = 0; slot < 20; slot++) expect(seg.gridSlot(slot)).toEqual(OVAL.gridSlot(slot));
   });
 });

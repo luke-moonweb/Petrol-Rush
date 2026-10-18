@@ -83,11 +83,11 @@ export class Particles {
       st.speed = car.speed;
       this.decel.set(car.id, st);
       const spinning = car.spinTime > 0;
-      // grip model: smoke grows with the slide (a brief over-the-limit tap does not smoke)
-      const amount = CONFIG.DRIVE_MODEL === 'grip' ? slideAmount(car) : car.slideTime > 0 ? 1 : 0;
+      // smoke grows with the slide (a brief over-the-limit tap does not smoke)
+      const amount = slideAmount(car);
       const sliding = amount > 0.15;
       if ((spinning && Math.abs(car.speed) > 8) || sliding || (st.avg > 42 && Math.abs(car.speed) > 20)) {
-        const rate = spinning ? 1 : sliding ? (CONFIG.DRIVE_MODEL === 'grip' ? 0.3 + 0.6 * amount : 0.8) : 0.6;
+        const rate = spinning ? 1 : sliding ? 0.3 + 0.6 * amount : 0.6;
         if (Math.random() < rate) this.smokePuffs(car, cvx, cvy, spinning ? 2 : 1, 1);
       }
     }

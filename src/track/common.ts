@@ -90,10 +90,6 @@ export interface Track {
   pointAt(s: number, d: number): TrackPoint;
   project(x: number, y: number): Frenet;
   headingAt(x: number, y: number): number;
-  /** The corner at this position, or null on a straight. */
-  cornerAt(x: number, y: number): Corner | null;
-  /** Distance along the track to the next corner entry (the caller checks `cornerAt` first). */
-  distToCorner(s: number): number;
   /** Keeps a car inside the walls; returns the wall normal on contact. */
   constrain(p: Constrainable): WallNormal | null;
   gridSlot(slot: number): Frenet;

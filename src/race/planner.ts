@@ -5,7 +5,7 @@ import { type CurvatureTable, laneCurvature } from '../track/curvature';
 import type { Car } from './car';
 
 export const PLAN = {
-  /** Planning deceleration as a share of BRAKE_MPH_S (same as the classic AI). */
+  /** Planning deceleration as a share of BRAKE_MPH_S. */
   BRAKE_FRAC: 0.75,
   LOOK_MIN: 120,
   LOOK_MARGIN: 60,
