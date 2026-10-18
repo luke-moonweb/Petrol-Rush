@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { CONFIG, DEFAULT_OPTIONS, type DriveModel, type RaceRules } from '../src/config';
+import { CONFIG, DEFAULT_OPTIONS, type RaceRules } from '../src/config';
 import { aiInput } from '../src/race/ai';
 import type { Car } from '../src/race/car';
 import { NO_INPUT } from '../src/race/physics';
@@ -79,15 +79,11 @@ function run(sc: Scenario) {
 }
 
 describe('oval golden master', () => {
-  let saved: DriveModel;
   let restoreMath: () => void;
   beforeAll(() => {
-    saved = CONFIG.DRIVE_MODEL;
-    CONFIG.DRIVE_MODEL = 'grip';
     restoreMath = useFdlibm();
   });
   afterAll(() => {
-    CONFIG.DRIVE_MODEL = saved;
     restoreMath();
   });
 

@@ -8,13 +8,13 @@ export interface DriveInput {
   brake: boolean;
   toggleReverse: boolean;
   /**
-   * Grip model only: the track heading to straighten towards when the car is on a straight and the
+   * The track heading to straighten towards when the car is on a straight and the
    * driver is not steering (the caller knows the track; the physics does not query it).
    */
   straightTo?: number;
 }
 
-/** Grip model diagnostics: spins started by the grip step (slip) and by walls, for tests and labs. */
+/** Diagnostics: spins started by the grip step (slip) and by walls, for tests and labs. */
 export const GRIP_SPINS = { slip: 0, wall: 0 };
 
 export const NO_INPUT: DriveInput = { steer: 0, gas: false, brake: false, toggleReverse: false };
@@ -55,19 +55,8 @@ export class SteerRamp {
   }
 }
 
-export function cornerAssist(car: Car, track: Pick<Track, 'cornerAt'>): number {
-  const C = CONFIG;
-  const corner = track.cornerAt(car.x, car.y);
-  if (!corner || car.reverse || car.spinTime > 0 || car.speed < C.CORNER_ASSIST_MIN_MPH) return 0;
-  if (car.pitSide && car.wasInPit) return 0;
-  const vpx = car.speed * C.PX_PER_MPH;
-  const rate = Math.min(C.MAX_TURN_RATE, vpx / C.MIN_TURN_RADIUS);
-  const r = Math.max(60, Math.hypot(car.x - corner.cx, car.y - corner.cy));
-  return corner.dir * Math.min(1, (C.CORNER_ASSIST * vpx) / r / rate);
-}
-
 /**
- * Grip model corner assist: a feed-forward share of the curvature of the car's line (kLane, from the
+ * Corner assist: a feed-forward share of the curvature of the car's line (kLane, from the
  * track's curvature table), so it works on any track and in both directions. It fades out while the
  * car slips, so it never fights a countersteer.
  */
@@ -81,11 +70,6 @@ export function curvatureAssist(car: Car, kLane: number): number {
   return Math.max(-1, Math.min(1, a)) * fade;
 }
 
-export function skidWarning(car: Car, track: Pick<Track, 'cornerAt'>): 0 | 1 | 2 {
-  if (car.spinTime > 0 || Math.round(Math.abs(car.speed)) <= CONFIG.SPIN_MPH) return 0;
-  return track.cornerAt(car.x, car.y) ? 2 : 1;
-}
-
 function accelAt(mph: number): number {
   const t = Math.min(Math.max(mph / CONFIG.MAX_MPH, 0), 1);
   return CONFIG.ACCEL_MPH_S_LOW + (CONFIG.ACCEL_MPH_S_HIGH - CONFIG.ACCEL_MPH_S_LOW) * t;
@@ -96,11 +80,9 @@ export function startSpin(car: Car, rate: number, dir: number): boolean {
     car.spinRate = Math.max(car.spinRate, rate);
     return false;
   }
-  if (CONFIG.DRIVE_MODEL === 'grip') {
-    car.slideTime = 0;
-    car.overTime = 0;
-    resetGrip(car);
-  }
+  car.slideTime = 0;
+  car.overTime = 0;
+  resetGrip(car);
   if (car.speed < 0) {
     car.moveAngle = wrapAngle(car.heading + Math.PI);
     car.speed = -car.speed;
@@ -114,89 +96,7 @@ export function startSpin(car: Car, rate: number, dir: number): boolean {
 }
 
 /** What the physics step needs from a track (tests may pass a stand-in without walls). */
-export type StepTrack = Pick<Track, 'len' | 'constrain' | 'cornerAt' | 'headingAt'>;
-
-export function stepCar(car: Car, input: DriveInput, dt: number, track: StepTrack): void {
-  if (CONFIG.DRIVE_MODEL === 'grip') stepCarGrip(car, input, dt, track);
-  else stepCarClassic(car, input, dt, track);
-}
-
-function stepCarClassic(car: Car, input: DriveInput, dt: number, track: StepTrack): void {
-  const C = CONFIG;
-  const pxm = C.PX_PER_MPH;
-  car.wallImpact = 0;
-
-  if (input.toggleReverse && car.spinTime <= 0) {
-    // Engaging reverse still needs a near-stop; leaving reverse is always instant.
-    if (car.reverse) car.reverse = false;
-    else if (Math.abs(car.speed) <= C.REVERSE_TOGGLE_MAX_MPH) car.reverse = true;
-  }
-
-  const hasFuel = car.fuel > 0;
-
-  if (car.spinTime > 0) {
-    const k = 0.25 + 0.75 * Math.min(1, car.speed / 120);
-    car.spinTime -= dt;
-    car.heading += car.spinDir * car.spinRate * k * dt;
-    car.speed = towards(car.speed, 0, C.SPIN_DECEL_MPH_S * dt);
-    if (car.spinTime <= 0 || car.speed < C.SPIN_END_MPH) endSpin(car);
-  } else {
-    if (input.brake) {
-      car.speed = towards(car.speed, 0, brakeAt(car.speed) * dt);
-    } else if (input.gas && hasFuel) {
-      if (car.reverse) {
-        car.speed =
-          car.speed > 0 ? towards(car.speed, 0, C.BRAKE_MPH_S * dt) : Math.max(car.speed - C.ACCEL_MPH_S_LOW * dt, -C.MAX_REVERSE_MPH);
-      } else {
-        car.speed = car.speed < 0 ? towards(car.speed, 0, C.BRAKE_MPH_S * dt) : Math.min(car.speed + accelAt(car.speed) * dt, C.MAX_MPH);
-      }
-    } else if (C.THROTTLE_MODE === 'hold') {
-      car.speed = towards(car.speed, 0, C.COAST_MPH_S * dt);
-    }
-    if (!hasFuel && Math.abs(car.speed) > C.OUT_OF_FUEL_CRAWL_MPH) {
-      car.speed = towards(car.speed, 0, C.COAST_MPH_S * 2 * dt);
-    }
-    car.speed = Math.min(car.speed, C.MAX_MPH);
-
-    const vpx = Math.abs(car.speed) * pxm;
-    const rate = Math.min(C.MAX_TURN_RATE, vpx / C.MIN_TURN_RADIUS);
-    const over = Math.round(car.speed) - C.SPIN_MPH;
-    const inCorner = track.cornerAt(car.x, car.y) !== null;
-    const sliding = inCorner && over > 0 && over < C.SLIDE_SPIN_OVER;
-    car.slideTime = sliding ? car.slideTime + dt : 0;
-    const grip = sliding ? C.SLIDE_GRIP : 1;
-    if (sliding) car.speed = Math.max(C.SPIN_MPH - 4, car.speed - C.SLIDE_DECEL_MPH_S * dt);
-    car.heading += input.steer * rate * grip * dt * (car.speed >= 0 ? 1 : -1);
-    if (input.steer === 0 && car.speed > 20 && !inCorner) {
-      const err = wrapAngle(track.headingAt(car.x, car.y) - car.heading);
-      if (Math.abs(err) < (C.STRAIGHT_ASSIST_DEG * Math.PI) / 180) {
-        const step = C.STRAIGHT_ASSIST_RATE * dt;
-        car.heading += Math.max(-step, Math.min(step, err));
-      }
-    }
-    car.moveAngle = car.heading;
-
-    if (sliding) {
-      car.overTime = 0;
-      if (car.slideTime > C.SLIDE_MAX_S) startSpin(car, C.SPIN_RATE, input.steer > 0 ? 1 : -1);
-    } else if (inCorner && over > 0) {
-      car.overTime += dt;
-      if (car.overTime > C.SPIN_GRACE_S) startSpin(car, C.SPIN_RATE, input.steer > 0 ? 1 : -1);
-    } else {
-      car.overTime = 0;
-    }
-  }
-
-  const dist = car.speed * pxm * dt;
-  car.x += Math.cos(car.moveAngle) * dist;
-  car.y += Math.sin(car.moveAngle) * dist;
-  if (!car.finished) car.fuel = Math.max(0, car.fuel - Math.abs(dist) / (C.FUEL_RANGE_LAPS * track.len));
-
-  const hit = track.constrain(car);
-  if (hit) applyWall(car, hit);
-  car.heading = wrapAngle(car.heading);
-  car.moveAngle = wrapAngle(car.moveAngle);
-}
+export type StepTrack = Pick<Track, 'len' | 'constrain'>;
 
 function resetGrip(car: Car): void {
   car.weightFwd = 0;
@@ -242,12 +142,12 @@ function longitudinal(car: Car, input: DriveInput, dt: number, hasFuel: boolean)
   car.speed = Math.min(car.speed, C.MAX_MPH);
 }
 
-// Grip model. The car has a nose (heading) and a direction of travel (moveAngle); the slip angle is
+// The driving model. The car has a nose (heading) and a direction of travel (moveAngle); the slip angle is
 // their difference. The tyres turn the travel direction with at most the grip left after braking or
 // accelerating, so the cornering limit is sqrt(GRIP * r) on any radius without asking the track.
 // Over the limit the car first understeers (runs wide, scrubs speed); sustained or provoked excess
 // lets the rear go (oversteer), which countersteer catches; only a slip beyond SPIN_SLIP spins.
-function stepCarGrip(car: Car, input: DriveInput, dt: number, track: StepTrack): void {
+export function stepCar(car: Car, input: DriveInput, dt: number, track: StepTrack): void {
   // a zero (or broken) step changes nothing; the grip budget below divides by dt
   if (!(dt > 0)) return;
   const C = CONFIG;
@@ -277,7 +177,7 @@ function stepCarGrip(car: Car, input: DriveInput, dt: number, track: StepTrack):
     const aLong = (Math.abs(car.speed - before) / dt) * pxm;
     const v = car.speed * pxm;
     if (car.speed <= 0 || car.reverse || v < G.MIN_V) {
-      // Reverse, the pit box and nearly stopped cars: kinematic steering as in the classic model.
+      // Reverse, the pit box and nearly stopped cars: kinematic steering.
       const rate = Math.min(C.MAX_TURN_RATE, (Math.abs(car.speed) * pxm) / C.MIN_TURN_RADIUS);
       car.heading += input.steer * rate * dt * (car.speed >= 0 ? 1 : -1);
       car.moveAngle = car.heading;
@@ -406,53 +306,7 @@ function endSpin(car: Car): void {
   car.moveAngle = car.heading;
 }
 
-function applyWall(car: Car, n: WallNormal): void {
-  const C = CONFIG;
-  const vx = Math.cos(car.moveAngle) * car.speed;
-  const vy = Math.sin(car.moveAngle) * car.speed;
-  const vn = vx * n.nx + vy * n.ny;
-  if (vn >= 0) return;
-  const mag0 = Math.hypot(vx, vy) || 1e-6;
-  const impact = -vn / mag0;
-  car.wallImpact = -vn;
-  markContact(car, car.x - n.nx * CAR_R, car.y - n.ny * CAR_R, -vn);
-
-  if (car.spinTime <= 0 && -vn > C.WALL_CRASH_MPH) {
-    const cross = Math.cos(car.heading) * n.ny - Math.sin(car.heading) * n.nx;
-    startSpin(car, C.SPIN_RATE * 0.8, cross >= 0 ? 1 : -1);
-  }
-
-  if (car.spinTime > 0) {
-    const nvx = vx - (1 + C.WALL_BOUNCE) * vn * n.nx;
-    const nvy = vy - (1 + C.WALL_BOUNCE) * vn * n.ny;
-    car.moveAngle = Math.atan2(nvy, nvx);
-    car.speed = Math.hypot(nvx, nvy) * (1 - C.WALL_SCRUB - 0.35 * impact);
-    return;
-  }
-
-  const tx = vx - vn * n.nx;
-  const ty = vy - vn * n.ny;
-  const tmag = Math.hypot(tx, ty);
-  if (tmag < 1) {
-    car.speed *= 0.2;
-    return;
-  }
-  const ang = Math.atan2(ty, tx);
-  const newMag = tmag * (1 - C.WALL_SCRUB) * (1 - 0.3 * impact);
-  if (impact > C.WALL_GLANCE) {
-    car.speed = Math.sign(car.speed) * newMag;
-    return;
-  }
-  if (car.speed >= 0) {
-    car.heading = car.moveAngle = ang;
-    car.speed = newMag;
-  } else {
-    car.heading = car.moveAngle = ang + Math.PI;
-    car.speed = -newMag;
-  }
-}
-
-// Grip-model walls: graded by the impact angle. Glancing hits redirect the car along the wall and
+// Walls: graded by the impact angle. Glancing hits redirect the car along the wall and
 // cost friction proportional to the normal speed (so riding a curved wall does not glue the car);
 // medium hits leave part of the angle as a slip the tyres must recover; steep, fast hits spin.
 /** Turn the nose by what is left of a wall contact's rotation, at WALL_TURN_RATE at most. */
@@ -496,7 +350,7 @@ function applyWallGrip(car: Car, n: WallNormal, dt: number): void {
   const tmag = Math.hypot(tx, ty);
   if (tmag < 1) {
     // Creeping along the wall from (nearly) rest: keep the part along the wall, so a car with its
-    // nose a little into the wall can still drive away (the classic model pins it).
+    // nose a little into the wall can still drive away.
     if (angle <= g1 && tmag > 0) {
       const sgn = car.speed < 0 ? -1 : 1;
       car.moveAngle = Math.atan2(ty, tx) + (sgn < 0 ? Math.PI : 0);
@@ -515,7 +369,7 @@ function applyWallGrip(car: Car, n: WallNormal, dt: number): void {
   const newMag = Math.max(0, tmag * fresh - G.WALL_FRICTION * -vn);
   const back = car.speed < 0;
   if (angle > g1) {
-    // Steep but too slow to spin: like the classic model the car stops against the wall (it keeps
+    // Steep but too slow to spin: the car stops against the wall (it keeps
     // its heading and loses the speed into the wall) instead of being turned along it.
     car.speed = Math.sign(car.speed) * newMag;
     return;
@@ -555,10 +409,9 @@ function setVelocity(car: Car, vx: number, vy: number): void {
   }
 }
 
-/** A car hit from behind spins more easily while cornering: in a turn (classic) or loaded (grip). */
-function rearLoaded(car: Car, track: Track): boolean {
-  if (CONFIG.DRIVE_MODEL === 'grip') return car.gripUse >= CONFIG.GRIP.LOADED_USE;
-  return track.cornerAt(car.x, car.y) !== null;
+/** A car hit from behind spins more easily while cornering, i.e. with its tyres loaded. */
+function rearLoaded(car: Car): boolean {
+  return car.gripUse >= CONFIG.GRIP.LOADED_USE;
 }
 
 export type CrashHandler = (culprit: Car | null, victims: Car[]) => void;
@@ -665,7 +518,7 @@ export function collideCars(cars: Car[], track: Track, mode: CollisionMode = 're
         const za = zoneOf(a, nx, ny, px, py);
         const zb = zoneOf(b, -nx, -ny, px, py);
         const hitSpins = (v: Car, zv: Zone): boolean => {
-          if (zv === 'rear') return closing > (rearLoaded(v, track) ? C.REAR_SPIN_TURN_MPH : C.REAR_SPIN_MPH);
+          if (zv === 'rear') return closing > (rearLoaded(v) ? C.REAR_SPIN_TURN_MPH : C.REAR_SPIN_MPH);
           if (zv === 'sideRear') return closing > C.SIDE_REAR_SPIN_MPH;
           return false;
         };

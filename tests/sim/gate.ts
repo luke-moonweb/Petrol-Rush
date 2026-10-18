@@ -3,8 +3,8 @@ import { Race } from '../../src/race/race';
 import { inPitLane } from '../../src/track/oval';
 
 // Invariant gate over 40 fresh seeds (review r2, critic #3): not tuned on, so it catches pit-logic
-// cliffs that a curated handful of seeds hides. Seeds 107 and 135 are left out: the classic model on
-// main does not finish them either (a car runs dry). The seeds are split over tests/gate/*.test.ts
+// cliffs that a curated handful of seeds hides. Seeds 107 and 135 are left out: the old classic
+// driving model did not finish them either (a car runs dry). The seeds are split over tests/gate/*.test.ts
 // (vitest runs files in parallel, the tests inside one file one after another).
 export const GATE_SEEDS = Array.from({ length: 42 }, (_, i) => 100 + i).filter((s) => s !== 107 && s !== 135);
 export const GATE_CHUNKS = 8;
@@ -16,7 +16,7 @@ export interface GateResult {
   spins: number;
 }
 
-/** One 20-car, 18-lap grip race; call with CONFIG.DRIVE_MODEL = 'grip'. */
+/** One 20-car, 18-lap race. */
 export function runGateSeed(seed: number): GateResult {
   const waits: number[] = [];
   const problems: string[] = [];

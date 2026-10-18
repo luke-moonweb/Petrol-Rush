@@ -17,14 +17,14 @@ parameters. This file covers only what saves time when making changes.
 - To run one gate seed quickly while debugging, call `runGateSeed(seed)` from `tests/sim/gate.ts`.
 - Don't loop full-suite runs to "check determinism": the simulation is deterministic per seed.
 - `vitest related` doesn't help much here, because nearly every test imports `Race` and so pulls in the slow tier.
-- The golden masters (`golden.test.ts`, `oval-golden.test.ts`) pin the **classic** model bit for bit.
+- The golden masters (`golden.test.ts`, `oval-golden.test.ts`) pin the driving model, AI and race flow on the oval bit for bit.
   - They swap in a JS fdlibm (`tests/sim/fdlibm.ts`), so they pass on macOS arm64 too.
-  - If a golden test fails, the classic driving behaviour really changed. Don't re-record it unless the change is intended.
+  - If a golden test fails, the race behaviour really changed. A refactor must keep them green; only re-record for an intended change (`npx vitest run tests/oval-golden.test.ts -u`, and the hashes in `golden.test.ts`).
 
 ## Where things are (most-edited files)
 
-- `src/config.ts`: every tuning constant, plus `CONFIG.DRIVE_MODEL` (`grip` is the default, `classic` is the old model).
-- `src/race/physics.ts`: `stepCar` and the grip/classic models. `collideCars` sits at the end of the file.
+- `src/config.ts`: every tuning constant (the grip model's are under `CONFIG.GRIP`).
+- `src/race/physics.ts`: `stepCar` (the grip driving model) and walls. `collideCars` sits at the end of the file.
 - `src/race/race.ts`: the `Race` class, which handles the step, laps, pit stops, penalties and classification.
 - `src/race/ai.ts`: `aiInput`. The pit-lane AI is in `src/track/pitAi.ts`.
 - `src/states/race/state.ts`: the race screen.

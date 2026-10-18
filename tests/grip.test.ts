@@ -1,5 +1,5 @@
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { CONFIG, type DriveModel } from '../src/config';
+import { describe, expect, it } from 'vitest';
+import { CONFIG } from '../src/config';
 import { collideCars, limitMph, startSpin, stepCar } from '../src/race/physics';
 import { OVAL } from '../src/track/ovalTrack';
 import { CurveTrack, chicane, circle, hairpin, sBend } from './sim/curves';
@@ -7,14 +7,6 @@ import { type DriverKind, firstCurveS, freshCar, type Gas, runCurve, withWalls }
 
 // Grip model acceptance on open-plane fixtures (spec section 6.2, with the user's graded decision:
 // spins only on clear excess or an uncaught slide).
-let saved: DriveModel;
-beforeAll(() => {
-  saved = CONFIG.DRIVE_MODEL;
-  CONFIG.DRIVE_MODEL = 'grip';
-});
-afterAll(() => {
-  CONFIG.DRIVE_MODEL = saved;
-});
 
 /** Highest entry speed the ideal driver holds on the circle without a slide frame or running wide. */
 function maxClean(r: number): number {

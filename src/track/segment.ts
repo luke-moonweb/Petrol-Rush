@@ -141,7 +141,6 @@ export class SegmentTrack implements Track {
   readonly finishAt: number;
   /** s at the start of the main straight. */
   readonly startS: number;
-  private readonly arcStarts: number[];
   private readonly kerbL: Float32Array;
   private readonly kerbR: Float32Array;
   private readonly gridSide: number;
@@ -180,7 +179,6 @@ export class SegmentTrack implements Track {
       if (g.kind === 'line') return { ...g, s0, x0: g.x0 + ox, y0: g.y0 + oy };
       return { ...g, s0, corner: { ...g.corner, cx: g.corner.cx + ox, cy: g.corner.cy + oy } };
     });
-    this.arcStarts = this.segments.filter((g) => g.kind === 'arc').map((g) => this.wrapS(g.s0));
 
     const n = Math.ceil(this.len / KERB_STEP) + 1;
     this.kerbL = new Float32Array(n);
@@ -276,17 +274,6 @@ export class SegmentTrack implements Track {
 
   headingAt(x: number, y: number): number {
     return this.pointAt(this.project(x, y).s, 0).heading;
-  }
-
-  cornerAt(x: number, y: number): Corner | null {
-    const n = this.nearest(x, y);
-    return n.g.kind === 'arc' && n.u > 0 && n.u < n.g.len ? n.g.corner : null;
-  }
-
-  distToCorner(s: number): number {
-    let best = Infinity;
-    for (const a of this.arcStarts) best = Math.min(best, this.wrapS(a - s));
-    return best;
   }
 
   /** Extra drivable width on each side at s: [left, right]. */

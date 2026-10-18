@@ -1,20 +1,11 @@
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { CONFIG, type DriveModel } from '../src/config';
+import { describe, expect, it } from 'vitest';
+import { CONFIG } from '../src/config';
 import { curvatureAssist, limitMph, maxCurvature, stepCar } from '../src/race/physics';
 import { keyCap, PlayerSteering } from '../src/race/steering';
 import { laneCurvature } from '../src/track/curvature';
 import { CAR_R, HALF_W, pointAt, project, RC, S_BOTTOM, S_TURN1, S_TURN2, trackHeadingAt, wrapAngle } from '../src/track/oval';
 import { OVAL } from '../src/track/ovalTrack';
 import { freshCar } from './sim/drivers';
-
-let saved: DriveModel;
-beforeAll(() => {
-  saved = CONFIG.DRIVE_MODEL;
-  CONFIG.DRIVE_MODEL = 'grip';
-});
-afterAll(() => {
-  CONFIG.DRIVE_MODEL = saved;
-});
 
 function carAt(s: number, d: number, mph: number) {
   const car = freshCar();
@@ -183,14 +174,5 @@ describe('grip model: key and touch steering cap (designer H2)', () => {
     expect(ps.overdrive).toBeGreaterThan(0);
     hold(ps, car, 0, 1.2);
     expect(ps.overdrive).toBe(0);
-  });
-
-  it('classic model: no cap, a held key is full lock', () => {
-    CONFIG.DRIVE_MODEL = 'classic';
-    try {
-      expect(hold(new PlayerSteering(), carAt(S_BOTTOM + 100, 0, 180), 1, 1)).toBe(1);
-    } finally {
-      CONFIG.DRIVE_MODEL = 'grip';
-    }
   });
 });

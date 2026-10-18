@@ -302,7 +302,7 @@ function needle(g: CanvasRenderingContext2D, cx: number, cy: number, a: number, 
   g.stroke();
 }
 
-/** `redFrom`: where the red arc starts (classic: SPIN_MPH; grip: the next corner's limit speed). */
+/** `redFrom`: where the red arc starts (in a race: the next corner's limit speed). */
 export function drawSpeedo(
   g: CanvasRenderingContext2D,
   mph: number,

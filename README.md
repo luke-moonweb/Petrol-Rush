@@ -193,7 +193,6 @@ Handy for testing and tuning:
 | `?debug` | Debug overlay, `]` speeds up time ×4/×8, `window.__game` and `window.__race` in the console, `__ff(seconds)` fast-forwards the game at once |
 | `?overlay=URL` | Semi-transparent 640×480 image over the screen for layout comparison |
 | `?touch` / `?touch=0` | Force touch controls on / off, regardless of the device |
-| `?drive=classic` | The old driving model (150 mph corner rule) for comparison; `?drive=grip` (default) is the grip model |
 
 ## 🧱 How it's built
 

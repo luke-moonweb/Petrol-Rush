@@ -52,8 +52,8 @@ export function freeBox(road: PitRoad, car: Car, cars: Car[]): number {
 }
 
 /**
- * Can a car leaving the pits take `lane`? Classic: nobody alongside and nobody closing in within
- * `closeS`. Grip (`brakeRoom`): a car coming up behind must also have room to slow to the merging
+ * Can a car leaving the pits take `lane`? Nobody alongside and nobody closing in within `closeS`;
+ * with `brakeRoom`, a car coming up behind must also have room to slow to the merging
  * car's speed after a reaction, at the follow-logic braking rate (it may be carrying more speed
  * into turn 1 than the merging car will have).
  */
