@@ -116,39 +116,19 @@ export function standings(gp: GrandPrix): Standing[] {
 }
 
 /**
- * Starting order (colorIdx per grid slot) for the next race. The player starts from the chosen
- * grid position; the AI drivers line up by championship standing (random order before round 1).
+ * Starting order (colorIdx per grid slot) for the next race. In round 1 the AI drivers line up in
+ * random order and the player starts last; from round 2 on everyone, the player included, starts
+ * from their place in the championship standings.
  */
 export function gridOrder(gp: GrandPrix): number[] {
-  const r = round(gp);
+  if (round(gp) > 0) return standings(gp).map((s) => s.colorIdx);
   const ai = gp.entries.filter((e) => e.colorIdx !== gp.playerColor).map((e) => e.colorIdx);
-  if (r === 0) {
-    const rng = createRng(raceSeed(gp, -1));
-    for (let i = ai.length - 1; i > 0; i--) {
-      const j = Math.floor(rng() * (i + 1));
-      [ai[i], ai[j]] = [ai[j]!, ai[i]!];
-    }
-  } else {
-    const pos = new Map(standings(gp).map((s, i) => [s.colorIdx, i]));
-    ai.sort((a, b) => pos.get(a)! - pos.get(b)!);
+  const rng = createRng(raceSeed(gp, -1));
+  for (let i = ai.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [ai[i], ai[j]] = [ai[j]!, ai[i]!];
   }
-  const n = ai.length + 1;
-  let slot: number;
-  switch (gp.qualifying) {
-    case 'pole':
-      slot = 0;
-      break;
-    case 'middle':
-      slot = Math.floor(n / 2);
-      break;
-    case 'random':
-      slot = Math.floor(createRng(raceSeed(gp, r) ^ 0xabc)() * n);
-      break;
-    default:
-      slot = n - 1;
-  }
-  ai.splice(slot, 0, gp.playerColor);
-  return ai;
+  return [...ai, gp.playerColor];
 }
 
 export function withResult(gp: GrandPrix, result: GpRaceResult): GrandPrix {

@@ -1,4 +1,4 @@
-import { DIFFICULTY_CHOICES, LAP_CHOICES, QUALIFYING_CHOICES, type RaceOptions } from '../config';
+import { DIFFICULTY_CHOICES, LAP_CHOICES, type RaceOptions } from '../config';
 import { driverName } from '../gfx/vehicles';
 import {
   type GpSetup,
@@ -23,13 +23,8 @@ import { type Game, loadOptions, type State, tapSide } from './game';
 import { DIFFICULTY_LABELS } from './race/options';
 import { RaceState } from './race/state';
 
-const SETUP_LABELS = ['CARS', 'LAPS', 'YOUR CAR', 'GRID POSITION', 'DIFFICULTY'];
-const QUALIFYING_LABELS: Record<string, string> = {
-  last: 'BACK OF GRID',
-  middle: 'MIDDLE OF GRID',
-  pole: 'POLE POSITION',
-  random: 'RANDOM',
-};
+// (no grid position: round 1 starts the player last, later rounds line up by the standings)
+const SETUP_LABELS = ['CARS', 'LAPS', 'YOUR CAR', 'DIFFICULTY'];
 
 let gpCount = 0;
 const GP_DEFAULT_LAPS = 5;
@@ -54,7 +49,7 @@ export class GrandPrixState implements State {
       cars: o.cars,
       laps: gp?.laps ?? GP_DEFAULT_LAPS,
       playerColor: o.playerColor,
-      qualifying: o.qualifying,
+      qualifying: 'last',
       difficulty: o.difficulty,
     };
   }
@@ -66,8 +61,7 @@ export class GrandPrixState implements State {
       { label: SETUP_LABELS[0]!, value: String(s.cars) },
       { label: SETUP_LABELS[1]!, value: `${s.laps} PER RACE` },
       { label: SETUP_LABELS[2]!, carColor: s.playerColor },
-      { label: SETUP_LABELS[3]!, value: QUALIFYING_LABELS[s.qualifying]! },
-      { label: SETUP_LABELS[4]!, value: DIFFICULTY_LABELS[s.difficulty]! },
+      { label: SETUP_LABELS[3]!, value: DIFFICULTY_LABELS[s.difficulty]! },
     ];
   }
 
@@ -150,11 +144,6 @@ export class GrandPrixState implements State {
         s.playerColor = (s.playerColor + delta + NUM_COLORS) % NUM_COLORS;
         break;
       case 3: {
-        const idx = QUALIFYING_CHOICES.indexOf(s.qualifying);
-        s.qualifying = QUALIFYING_CHOICES[(idx + delta + QUALIFYING_CHOICES.length) % QUALIFYING_CHOICES.length]!;
-        break;
-      }
-      case 4: {
         const idx = DIFFICULTY_CHOICES.indexOf(s.difficulty);
         s.difficulty = DIFFICULTY_CHOICES[(idx + delta + DIFFICULTY_CHOICES.length) % DIFFICULTY_CHOICES.length]!;
         break;
