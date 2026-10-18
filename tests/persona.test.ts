@@ -110,12 +110,16 @@ describe('difficulty', () => {
       expect(gripFrac(ch)).toBeGreaterThanOrEqual(gripFrac(cn));
       expect(gripFrac(ch)).toBeLessThanOrEqual(Math.max(gripFrac(cn), PLAN.GRIP_FRAC_MAX));
       expect(lineUse(c)).toBeLessThan(lineUse(cn));
-      expect(lineUse(ch)).toBeGreaterThanOrEqual(lineUse(cn));
+      // (hard races the free line: the gentle driver's line is narrower, the aggressive one's uses all of it)
+      if (ch.ai.persona.freeLineUse >= 1) expect(lineUse(ch)).toBeGreaterThanOrEqual(lineUse(cn));
+      if (ch.ai.persona.kind === 'gentle') expect(lineUse(ch)).toBeLessThan(lineUse(cn));
       expect(c.ai.reaction).toBeGreaterThan(cn.ai.reaction);
       expect(ch.ai.reaction).toBeLessThan(cn.ai.reaction);
     });
     expect(LEVELS.easy.slide).toBeGreaterThan(LEVELS.normal.slide);
     expect(LEVELS.hard.slide).toBeLessThan(LEVELS.normal.slide);
+    // (only hard drops the lanes for the free racing line)
+    expect([LEVELS.easy.freeLine, LEVELS.normal.freeLine, LEVELS.hard.freeLine]).toEqual([false, false, true]);
   });
 
   it('the race settings cycle the difficulty and show it', () => {

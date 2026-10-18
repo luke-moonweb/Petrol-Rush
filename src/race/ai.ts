@@ -1,5 +1,5 @@
 import { CONFIG } from '../config';
-import { LANES, NUM_SECTORS, type Track, wrapAngle } from '../track/common';
+import { HALF_W, LANES, NUM_SECTORS, type Track, wrapAngle } from '../track/common';
 import type { CurvatureTable } from '../track/curvature';
 import { PIT_FUEL_MARGIN_LAPS } from '../track/pitAi';
 import { racingLine } from '../track/racingLine';
@@ -21,13 +21,13 @@ export interface AiView {
   pitAuto?: boolean;
 }
 
-function laneFree(track: Track, car: Car, lane: number, cars: Car[], backPx = 55): boolean {
+function laneFree(track: Track, car: Car, lane: number, cars: Car[], backPx = 55, skip: Car | null = null): boolean {
   const lo = Math.min(car.d, lane) - 14;
   const hi = Math.max(car.d, lane) + 14;
   const back = car.speed < 30 ? -25 : -backPx;
   const front = car.speed < 30 ? 50 : 90;
   for (const o of cars) {
-    if (o === car) continue;
+    if (o === car || o === skip) continue;
     const ds = track.deltaS(car.s, o.s);
     if (ds > back && ds < front && o.d > lo && o.d < hi) return false;
     // (a car going to or from the pits also takes up the line it is moving to, and as it is slow
@@ -59,7 +59,7 @@ export function aiInput(car: Car, view: AiView, dt: number): DriveInput {
     ai.mergeWait = 0;
   }
   const pit = track.pit.plan(car, view, ai.topMph, ai.lane, dt);
-  const plan: Plan = { target: pit.target, laneD: pit.laneD, oilLane: false, line: false, lineShift: 0 };
+  const plan: Plan = { target: pit.target, laneD: pit.laneD, oilLane: false, line: false, lineShift: 0, held: false, free: false, steerShift: 0 };
 
   if (pit.lane !== null) {
     ai.onLine = false;
@@ -69,15 +69,19 @@ export function aiInput(car: Car, view: AiView, dt: number): DriveInput {
     // A car already diving for the pit entry stays on its line (it only slows for oil and
     // hazards); a lane change there would make it miss the pit road.
     const diving = track.pit.diving(car);
-    takeLine(car, view, plan, !diving && pit.laneD === ai.lane && ai.blockLane === null);
+    const ok = !diving && pit.laneD === ai.lane && ai.blockLane === null;
+    if (!(ai.level.freeLine && freeLine(car, view, plan, ok, dt))) takeLine(car, view, plan, ok);
+    const laneD = plan.laneD;
     avoidOil(car, view, plan, dt, diving);
     avoidHazards(car, view, plan, dt, diving);
+    // (on the free line, oil or a hazard that picked a lane takes the car off it)
+    if (plan.free && plan.laneD !== laneD) leaveLine(car, plan);
     followTraffic(car, view, plan);
     blockInside(car, view, plan, diving);
   }
   if (pit.lane === null && ai.pitPhase === 'none' && !plan.oilLane) avoidSideRub(car, view, plan);
   // (any of the above that picked a lane takes the car off the racing line)
-  if (plan.line && ai.lane !== nearestLane(car.d)) plan.line = ai.onLine = false;
+  if (plan.line && ai.lane !== nearestLane(car.d)) leaveLine(car, plan);
   planSlide(car, track, plan, dt);
   paceTarget(car, view, plan, dt);
   steerAndPedals(car, track, pit.lane, plan, out);
@@ -92,8 +96,14 @@ interface Plan {
   laneD: number;
   oilLane: boolean;
   line: boolean;
-  /** On the line: how far (px) it is moved across to keep clear of a car alongside (holdOff). */
+  /** On the line: how far (px) it is moved across, to keep clear of a car alongside (holdOff) or, on the free line, to pass. */
   lineShift: number;
+  /** On the line: holdOff moved it (on the free line: a car ahead of ours did). No gas meanwhile. */
+  held: boolean;
+  /** On the free line (hard, freeLine): moved across freely, no lanes. */
+  free: boolean;
+  /** On the line: lineShift as the steering takes it (where the car is). */
+  steerShift: number;
 }
 
 /**
@@ -126,7 +136,9 @@ function takeLine(car: Car, view: AiView, plan: Plan, ok: boolean): void {
     ai.onLine = plan.line = true;
     // (the traffic checks look where the line is heading: a pursuit's aim point ahead)
     const dAhead = line.d(car.s + 40 + Math.max(0, car.speed) * CONFIG.PX_PER_MPH * 0.22, use);
-    plan.lineShift = holdOff(track, car, view.cars, dAhead) - dAhead;
+    plan.lineShift = holdOff(track, car, view.cars, dAhead).d - dAhead;
+    plan.held = plan.lineShift !== 0;
+    plan.steerShift = plan.lineShift;
     plan.laneD = dAhead + plan.lineShift;
     ai.lane = nearestLane(car.d);
   } else if (ai.onLine) {
@@ -149,21 +161,147 @@ function onTrack(track: Track, car: Car, o: Car): boolean {
   return !(track.pit.inLane(o.x, o.y) && track.pit.joiningD(o) === o.d);
 }
 
-/** The line's d, kept LINE_GAP_PX across from every car still overlapping ours along the track. */
-function holdOff(track: Track, car: Car, cars: Car[], d: number): number {
+/**
+ * The line's d, kept LINE_GAP_PX across from every car still overlapping ours along the track, and whether
+ * a car ahead of ours (more than FREE_LEVEL_PX: not one level or behind) is what moved it.
+ */
+function holdOff(track: Track, car: Car, cars: Car[], d: number): { d: number; ahead: boolean } {
   let lo = -Infinity;
   let hi = Infinity;
+  let loAhead = false;
+  let hiAhead = false;
   for (const o of cars) {
     if (!onTrack(track, car, o)) continue;
     const ds = track.deltaS(car.s, o.s);
     const dd = o.d - car.d;
     // (one in line with us, a car length or more ahead or behind, is followed or follows)
     if (Math.abs(ds) >= LINE_OVERLAP_PX || (Math.abs(dd) < LINE_INLINE_PX && Math.abs(ds) > CONFIG.CAR_LEN)) continue;
-    if (dd > 0) hi = Math.min(hi, o.d - LINE_GAP_PX);
-    else lo = Math.max(lo, o.d + LINE_GAP_PX);
+    if (dd > 0) {
+      if (o.d - LINE_GAP_PX < hi) hiAhead = ds > FREE_LEVEL_PX;
+      hi = Math.min(hi, o.d - LINE_GAP_PX);
+    } else {
+      if (o.d + LINE_GAP_PX > lo) loAhead = ds > FREE_LEVEL_PX;
+      lo = Math.max(lo, o.d + LINE_GAP_PX);
+    }
   }
-  if (lo > hi) return car.d;
-  return Math.max(lo, Math.min(hi, d));
+  if (lo > hi) return { d: car.d, ahead: loAhead || hiAhead };
+  const held = Math.max(lo, Math.min(hi, d));
+  return { d: held, ahead: (held > d && loAhead) || (held < d && hiAhead) };
+}
+
+/**
+ * Hard (level.freeLine): the racing line with no lanes. The car keeps to its own line, moved across
+ * (ai.freeShift, so a car alongside follows the line's shape side by side) only to pass a slower car on a
+ * straight (passTarget) and by holdOff to keep clear of a car alongside; it is back on the line before the
+ * bend. False when it does not apply (the pits, oil, a hazard, backing out, a block, or a lane avoidSideRub
+ * picked still cooling down): then takeLine runs.
+ */
+function freeLine(car: Car, view: AiView, plan: Plan, ok: boolean, dt: number): boolean {
+  const ai = car.ai;
+  const track = view.track;
+  const quiet =
+    ai.pitPhase === 'none' && ai.oilTime === 0 && ai.hazardTime === 0 && ai.recoverTime <= 0 && (ai.onLine || ai.laneCooldown <= 0);
+  if (!ok || !quiet) {
+    ai.passId = -1;
+    return false;
+  }
+  const line = racingLine(track);
+  const use = lineUse(car);
+  const dNow = line.d(car.s, use);
+  // (joining: from where the car is, moving onto the line at the shift rate)
+  if (!ai.onLine) {
+    ai.freeShift = car.d - dNow;
+    ai.passId = -1;
+  }
+  ai.onLine = plan.line = plan.free = true;
+  const dAhead = line.d(car.s + 40 + Math.max(0, car.speed) * CONFIG.PX_PER_MPH * 0.22, use);
+  const pass = passTarget(car, view, plan, dAhead);
+  const want = pass === null ? 0 : pass - dAhead;
+  const step = FREE_SHIFT_PX_S * dt;
+  ai.freeShift += Math.max(-step, Math.min(step, want - ai.freeShift));
+  const edge = FREE_EDGE_D;
+  const hold = holdOff(track, car, view.cars, Math.max(-edge, Math.min(edge, dAhead + ai.freeShift)));
+  plan.lineShift = hold.d - dAhead;
+  plan.steerShift = plan.lineShift;
+  // (held off by a car ahead: drop back behind it; only at speed, or a crawling car would stand behind a
+  // standing one for good)
+  plan.held = car.speed > FREE_HELD_MPH && hold.ahead;
+  plan.laneD = hold.d;
+  ai.lane = nearestLane(car.d);
+  return true;
+}
+
+/** A lane pick takes the car off the line (and off a pass on the free line): the lane pursuit takes over. */
+function leaveLine(car: Car, plan: Plan): void {
+  plan.line = plan.free = car.ai.onLine = false;
+  car.ai.passId = -1;
+}
+
+/**
+ * Free line: the d to pass a slower car ahead on, or null to keep to the line. A pass starts only with a
+ * straight ahead (the personality's passClearPx), on the side nearer to us whose way across is free; it
+ * keeps its side until the car is behind us, but is dropped before a bend while not yet alongside.
+ */
+function passTarget(car: Car, view: AiView, plan: Plan, dAhead: number): number | null {
+  const ai = car.ai;
+  const track = view.track;
+  const curves = track.curves();
+  const v = Math.max(0, car.speed) * CONFIG.PX_PER_MPH;
+  // (back on the line in time for a bend: moving across takes up to about FREE_BACK_S)
+  const bend = curves.at(car.s) !== 0 || curves.maxAbsAhead(car.s, ai.persona.passClearPx + v * FREE_BACK_S, 8) !== 0;
+  let o = ai.passId >= 0 ? view.cars.find((c) => c.id === ai.passId) : undefined;
+  if (o) {
+    const ds = track.deltaS(car.s, o.s);
+    const gone = ds < -CONFIG.CAR_LEN - FREE_PASS_DONE_PX || ds > passRange(car, o) || !onTrack(track, car, o);
+    if (gone || (bend && ds > CONFIG.CAR_LEN)) o = undefined;
+  }
+  if (!o && !bend && car.speed > 50) {
+    o = slowerAhead(car, view, plan, dAhead);
+    ai.passSide = o ? passSide(car, view, o) : 0;
+    if (ai.passSide === 0) o = undefined;
+  }
+  ai.passId = o ? o.id : -1;
+  if (!o) return null;
+  const edge = FREE_EDGE_D;
+  return Math.max(-edge, Math.min(edge, o.d + ai.passSide * FREE_PASS_GAP_PX));
+}
+
+/** How far ahead (px) a car is passed from: our braking distance to its speed, at least FREE_PASS_MIN_PX. */
+function passRange(car: Car, o: Car): number {
+  return Math.max(FREE_PASS_MIN_PX, stopRoom(car.speed, o.speed) + 40);
+}
+
+/** The nearest car ahead on our free line slower than we could go (by the personality's passMph). */
+function slowerAhead(car: Car, view: AiView, plan: Plan, dAhead: number): Car | undefined {
+  const track = view.track;
+  let best: Car | undefined;
+  let gap = Infinity;
+  for (const o of view.cars) {
+    if (!onTrack(track, car, o)) continue;
+    const ds = track.deltaS(car.s, o.s);
+    if (ds <= CONFIG.CAR_LEN * 0.5 || ds > passRange(car, o) || ds >= gap) continue;
+    const inPath = Math.abs(o.d - car.d) < 17 || Math.abs(o.d - (dAhead + car.ai.freeShift)) < FREE_PATH_PX;
+    if (inPath && o.speed < plan.target - car.ai.persona.passMph - 1) {
+      best = o;
+      gap = ds;
+    }
+  }
+  return best;
+}
+
+/** The side (-1 / 1) to pass `o` on: the nearer one inside the road whose way across is free; 0 if none. */
+function passSide(car: Car, view: AiView, o: Car): number {
+  const edge = FREE_EDGE_D;
+  let best = 0;
+  let need = Infinity;
+  for (const side of [-1, 1]) {
+    const d = Math.max(-edge, Math.min(edge, o.d + side * FREE_PASS_GAP_PX));
+    if (Math.abs(d - o.d) < LINE_GAP_PX || Math.abs(d - car.d) >= need) continue;
+    if (!laneFree(view.track, car, d, view.cars, 55, o)) continue;
+    best = side;
+    need = Math.abs(d - car.d);
+  }
+  return best;
 }
 
 function nearestLane(d: number): number {
@@ -299,7 +437,8 @@ function followTraffic(car: Car, view: AiView, plan: Plan): void {
     let changed = false;
     const blockedHard = ahead.speed < 60 && car.speed - ahead.speed > 15;
     const eager = ahead.speed < plan.target - ai.persona.passMph;
-    const canChange = ai.laneCooldown <= 0 && ai.pitPhase === 'none' && (blockedHard || (eager && laneChangeOk && car.speed > 50));
+    // (on the free line a pass moves the line across instead: passTarget)
+    const canChange = !plan.free && ai.laneCooldown <= 0 && ai.pitPhase === 'none' && (blockedHard || (eager && laneChangeOk && car.speed > 50));
     if (canChange) {
       const options = LANES.filter((l) => l !== plan.laneD && Math.abs(l - plan.laneD) < 25).sort(
         (p, q) => Math.abs(p - car.d) - Math.abs(q - car.d),
@@ -351,9 +490,12 @@ function paceTarget(car: Car, view: AiView, plan: Plan, dt: number): void {
   const ai = car.ai;
   const dPlan = ai.pitPhase === 'none' ? plan.laneD : car.d;
   const slideGrip = ai.slide === 1 || ai.slide === 2 ? SLIDE_GRIP : 1;
-  const corner = plan.line
+  const lane = () => planSpeed(view.track.curves(), car.s, car.d, dPlan, gripFrac(car), car.speed, ai.persona.brake);
+  let corner = plan.line
     ? planLineSpeed(racingLine(view.track), car.s, lineUse(car), gripFrac(car) * slideGrip, car.speed, ai.persona.brake)
-    : planSpeed(view.track.curves(), car.s, car.d, dPlan, gripFrac(car), car.speed, ai.persona.brake);
+    : lane();
+  // (the free line moved across: no faster than on a lane there either)
+  if (plan.free && Math.abs(plan.lineShift) > FREE_PLAN_PX) corner = Math.min(corner, lane());
   plan.target = Math.min(plan.target, corner);
 
   if (ai.creepTime > 0) {
@@ -382,9 +524,9 @@ function steerAndPedals(car: Car, track: Track, pitLane: number | null, plan: Pl
     ty = p.y;
   }
   const diff = wrapAngle(Math.atan2(ty - car.y, tx - car.x) - car.heading);
-  out.steer = plan.line ? lineSteer(car, track, plan.lineShift) : Math.max(-1, Math.min(1, diff * 5));
+  out.steer = plan.line ? lineSteer(car, track, plan.steerShift) : Math.max(-1, Math.min(1, diff * 5));
   // (off the line, wide or held off it by a car alongside: no gas until back on it)
-  out.gas = car.speed < plan.target - 0.5 && !(plan.line && (plan.lineShift !== 0 || runningWide(car, track)));
+  out.gas = car.speed < plan.target - 0.5 && !(plan.line && (plan.held || runningWide(car, track, plan.lineShift)));
   out.brake = car.speed > plan.target + 1.5;
   if (car.speed > 0 && !car.reverse) {
     // A smooth driver never asks the tyres for more than they have left after braking.
@@ -428,7 +570,7 @@ function planSlide(car: Car, track: Track, plan: Plan, dt: number): void {
     if (roll < ai.persona.slide * ai.level.slide && nextLineCornerMph(car, track) > SLIDE_MIN_MPH) ai.slide = 1;
     return;
   }
-  if (!plan.line || plan.lineShift !== 0) {
+  if (!plan.line || plan.held || Math.abs(plan.lineShift) > (plan.free ? FREE_PLAN_PX : 0)) {
     ai.slide = 0;
     return;
   }
@@ -501,7 +643,7 @@ function blockInside(car: Car, view: AiView, plan: Plan, diving: boolean): void 
   if (inWay) return;
   ai.lane = plan.laneD = ai.blockLane = inside;
   ai.blockIn = false;
-  plan.line = ai.onLine = false;
+  leaveLine(car, plan);
 }
 
 /** The signed curvature of the first bend within `look` px ahead of s (0 if none). */
@@ -532,11 +674,11 @@ function lineSteer(car: Car, track: Track, shift: number): number {
 }
 
 /** On the racing line in a corner, further out than the line: lift until the car is back on it. */
-function runningWide(car: Car, track: Track): boolean {
+function runningWide(car: Car, track: Track, shift: number): boolean {
   const line = racingLine(track);
   const use = lineUse(car);
   const k = line.k(car.s, use);
-  return k !== 0 && -Math.sign(k) * (car.d - line.d(car.s, use)) > LINE_WIDE_PX;
+  return k !== 0 && -Math.sign(k) * (car.d - line.d(car.s, use) - shift) > LINE_WIDE_PX;
 }
 
 /** Backing out after getting stuck (see watchStuck); true while recovering (the input is set). */
@@ -633,6 +775,25 @@ const LINE_SLOPE_PX = 6;
 const LINE_WIDE_PX = 2;
 /** rad/s: how fast the line steering pulls the car back onto the line. */
 const LINE_STEER_W = 4;
+/**
+ * Free line (hard): moves across at FREE_SHIFT_PX_S and keeps FREE_EDGE_PX off the edge of the road. A pass
+ * goes FREE_PASS_GAP_PX across from the car, of a car within FREE_PATH_PX of our line, at least
+ * FREE_PASS_MIN_PX ahead; it is over FREE_PASS_DONE_PX past it, and needs FREE_BACK_S of straight ahead to
+ * get back to the line. A car further than FREE_LEVEL_PX ahead holding us off cuts the gas; moved more than
+ * FREE_PLAN_PX across, the corner is planned as on a lane too.
+ */
+const FREE_SHIFT_PX_S = 50;
+const FREE_EDGE_PX = 3;
+const FREE_EDGE_D = HALF_W - CONFIG.CAR_WID / 2 - FREE_EDGE_PX;
+const FREE_PASS_GAP_PX = 24;
+const FREE_PATH_PX = 18;
+const FREE_PASS_MIN_PX = 110;
+const FREE_PASS_DONE_PX = 10;
+const FREE_BACK_S = 0.8;
+const FREE_LEVEL_PX = 8;
+const FREE_PLAN_PX = 3;
+/** Under this speed (mph) a car held off by one ahead of it keeps the gas on. */
+const FREE_HELD_MPH = 40;
 /** Extra lateral reach (px) of the follow logic for a car 60+ mph slower. */
 const FOLLOW_WIDE_PX = 8;
 /** A car moving to a new line (pit entry or exit) counts there for cars this far behind it or more. */

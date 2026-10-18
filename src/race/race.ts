@@ -193,6 +193,9 @@ export class Race {
         slideTime: 0,
         slideDir: 1,
         slideRun: -1,
+        freeShift: 0,
+        passId: -1,
+        passSide: 0,
       },
     };
     const st = this.track.project(car.x, car.y);
