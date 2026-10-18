@@ -26,14 +26,24 @@ export const CONFIG = {
   REVERSE_TOGGLE_MAX_MPH: 15,
 
   MAX_TURN_RATE: 2.9,
-  STEER_MIN: 0.15,
-  STEER_RAMP_S: 0.3,
+  // The player's key wheel (race/steering.ts): w, a share of the steering a held key may use. A held key
+  // turns it to its stop along a first-order curve with time constant STEER_IN_SLOW_S at 40 mph and under,
+  // STEER_IN_S from 100 mph, aimed STEER_OVERSHOOT past the stop (so it gets there); the other way or
+  // countersteering at STEER_FAST_S; released back to the centre at STEER_OUT_S, 0 under STEER_SNAP.
+  // STEER_GAMMA over 1 softens the start of a press. A countersteer starts at STEER_MIN_TURN of full lock
+  // or more; the precision key aims the wheel at STEER_FINE.
+  STEER_IN_S: 0.12,
+  STEER_IN_SLOW_S: 0.08,
+  STEER_OUT_S: 0.04,
+  STEER_FAST_S: 0.05,
+  STEER_OVERSHOOT: 0.15,
+  STEER_GAMMA: 1,
+  STEER_SNAP: 0.03,
   STEER_MIN_TURN: 0.3,
+  STEER_FINE: 0.5,
   CORNER_ASSIST: 0.3,
   CORNER_ASSIST_MIN_MPH: 40,
   CORNER_ASSIST_IN_S: 0.15,
-  STEER_RAMP_TURN_S: 0.15,
-  STEER_RELEASE_S: 0.2,
   STRAIGHT_ASSIST_RATE: 0.3,
   MIN_TURN_RADIUS: 34,
 

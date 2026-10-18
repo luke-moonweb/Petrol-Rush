@@ -30,32 +30,6 @@ export function brakeAt(mph: number): number {
   return CONFIG.BRAKE_MPH_S + (CONFIG.BRAKE_MPH_S_HIGH - CONFIG.BRAKE_MPH_S) * t;
 }
 
-export class SteerRamp {
-  private dir = 0;
-  private level = 0;
-
-  update(dir: number, dt: number, turn = false): number {
-    const C = CONFIG;
-    const min = turn ? C.STEER_MIN_TURN : C.STEER_MIN;
-    const ramp = turn ? C.STEER_RAMP_TURN_S : C.STEER_RAMP_S;
-    if (dir === 0) {
-      this.level = Math.max(0, this.level - dt / C.STEER_RELEASE_S);
-      return 0;
-    }
-    if (dir !== this.dir) {
-      this.dir = dir;
-      this.level = 0;
-    }
-    this.level = Math.min(1, Math.max(this.level, min) + ((1 - min) * dt) / ramp);
-    return dir * this.level;
-  }
-
-  reset(): void {
-    this.dir = 0;
-    this.level = 0;
-  }
-}
-
 /**
  * Corner assist: a feed-forward share of the curvature of the car's line (kLane, from the
  * track's curvature table), so it works on any track and in both directions. It fades out while the

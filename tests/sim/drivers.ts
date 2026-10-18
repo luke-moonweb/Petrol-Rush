@@ -2,10 +2,10 @@
 // speed, the road ahead); the physics under test never reads the track.
 import { CONFIG, DEFAULT_OPTIONS } from '../../src/config';
 import type { Car } from '../../src/race/car';
-import { brakeAt, curvatureAssist, type DriveInput, maxCurvature, SteerRamp, type StepTrack, stepCar } from '../../src/race/physics';
+import { brakeAt, curvatureAssist, type DriveInput, maxCurvature, type StepTrack, stepCar } from '../../src/race/physics';
 import { planSpeed } from '../../src/race/planner';
 import { Race } from '../../src/race/race';
-import { keyCap, PlayerSteering, type SteerTrack } from '../../src/race/steering';
+import { keyCap, PlayerSteering, type SteerOptions, type SteerTrack } from '../../src/race/steering';
 import type { CurvatureTable } from '../../src/track/curvature';
 import { laneCurvature } from '../../src/track/curvature';
 import { curvatureAt, pointAt, project, TRACK_LEN, trackCurves, type WallNormal, wrapAngle } from '../../src/track/oval';
@@ -51,6 +51,36 @@ export function corridor(t: DriveTrack, dMax: number, dMin: number, hint: () => 
 
 export const DT = 1 / 60;
 const PXM = CONFIG.PX_PER_MPH;
+
+/**
+ * The game's key ramp before the steering wheel (src/race/steering.ts), with its constants: the physics
+ * stress drivers (keys, keysHold, keysCatch) still steer through it. A press starts at MIN (MIN_TURN in a
+ * bend) of full lock and ramps to full lock in RAMP_S (RAMP_TURN_S); a release is 0 at once.
+ */
+export class SteerRamp {
+  static readonly MIN = 0.15;
+  static readonly RAMP_S = 0.3;
+  static readonly MIN_TURN = 0.3;
+  static readonly RAMP_TURN_S = 0.15;
+  static readonly RELEASE_S = 0.2;
+  private dir = 0;
+  private level = 0;
+
+  update(dir: number, dt: number, turn = false): number {
+    const min = turn ? SteerRamp.MIN_TURN : SteerRamp.MIN;
+    const ramp = turn ? SteerRamp.RAMP_TURN_S : SteerRamp.RAMP_S;
+    if (dir === 0) {
+      this.level = Math.max(0, this.level - dt / SteerRamp.RELEASE_S);
+      return 0;
+    }
+    if (dir !== this.dir) {
+      this.dir = dir;
+      this.level = 0;
+    }
+    this.level = Math.min(1, Math.max(this.level, min) + ((1 - min) * dt) / ramp);
+    return dir * this.level;
+  }
+}
 
 export function freshCar(): Car {
   const r = new Race({ ...DEFAULT_OPTIONS, cars: 1 }, 3);
@@ -226,6 +256,8 @@ export interface RunOpts {
   noCatch?: boolean;
   /** End the run when the car reaches finishS. */
   stopAtFinish?: boolean;
+  /** human: the player steering's options (default set B). */
+  steer?: SteerOptions;
   /** Record the time the car passes each of these s values (unwrapped). */
   splits?: number[];
 }
@@ -291,7 +323,7 @@ export function runCurve(
     cornerUse: [],
   };
   const human = new HumanKeys(o.react ?? HUMAN.REACT, o.noCatch);
-  const player = new PlayerSteering(steerTrack(t));
+  const player = new PlayerSteering(steerTrack(t), o.steer);
   let wallAgo = 99;
   let prevWallAgo = 99;
   const T = o.T ?? 5;
