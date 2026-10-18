@@ -7,7 +7,6 @@ import { laneCurvature } from '../track/curvature';
 import { OVAL } from '../track/ovalTrack';
 import type { Car } from './car';
 import { brakeAt, curvatureAssist, gripAt, maxCurvature } from './physics';
-import { OldSteering } from './steeringOld';
 
 /** What the player steering reads from a track: curvature and the road heading. */
 export type SteerTrack = Pick<Track, 'curves' | 'headingAt'>;
@@ -17,26 +16,6 @@ export interface PlayerSteer {
   /** Grip model: track heading for the straight assist (undefined in corners). */
   straightTo?: number;
 }
-
-/** The wheel's constants: B (CONFIG), E (a softer attack) or the old ramp. PLAYTEST ONLY (debug flag steer). */
-export type SteerSet = 'B' | 'E' | 'old';
-
-/** PLAYTEST ONLY (debug flags steer, assist; STEERING_PLAN B7): removed before merge. */
-export interface SteerOptions {
-  set: SteerSet;
-  /** Corner assist strength (CONFIG.CORNER_ASSIST when undefined). */
-  assist?: number;
-}
-
-/** Set E: the wheel's attack, softer at first (gamma) and quicker overall. */
-const SET_E = { inS: 0.1, overshoot: 0.2, gamma: 1.5 };
-
-function wheelConsts(set: SteerSet): { inS: number; overshoot: number; gamma: number } {
-  const C = CONFIG;
-  return set === 'E' ? SET_E : { inS: C.STEER_IN_S, overshoot: C.STEER_OVERSHOOT, gamma: C.STEER_GAMMA };
-}
-
-const assistScale = (o: SteerOptions) => (o.assist === undefined ? 1 : o.assist / CONFIG.CORNER_ASSIST);
 
 /**
  * Grip model: the largest steer (0..1) a held key asks for, so that it uses KEY_CAP of the grip the
@@ -75,19 +54,12 @@ export class PlayerSteering {
   private carried = 0;
   /** The steering limit of the last step: the key cap, opened by the overdrive. */
   private lim = 1;
-  private readonly old: OldSteering | null;
 
   /** The track raced on (the race state sets it for each race). */
-  constructor(
-    public track: SteerTrack = OVAL,
-    readonly opts: SteerOptions = { set: 'B' },
-  ) {
-    this.old = opts.set === 'old' ? new OldSteering(assistScale(opts)) : null;
-  }
+  constructor(public track: SteerTrack = OVAL) {}
 
   /** New race: the wheel, the assist blend and the overdrive start from zero, and the straight assist is on. */
   resetAssist(): void {
-    this.old?.resetAssist();
     this.assistLevel = 0;
     this.bendK = 0;
     this.w = 0;
@@ -108,36 +80,31 @@ export class PlayerSteering {
     this.carried = key;
   }
 
-  /** The wheel (-1..1); the old ramp's steer for set old. */
+  /** The wheel (-1..1). */
   get wheel(): number {
-    return this.old ? this.old.keySteer : this.w;
+    return this.w;
   }
 
   /** The steering limit of the last step (the key cap opened by the overdrive). */
   get limit(): number {
-    return this.old ? this.old.lim : this.lim;
+    return this.lim;
   }
 
-  /** 0..1, how far a key held past the cap has opened the steering towards full lock. */
+  /** 0..1, how far a key held into the bend has opened the steering towards full lock. */
   get overdrive(): number {
-    if (this.old) return this.old.overdrive;
     const G = CONFIG.GRIP;
     return Math.max(0, Math.min(1, (this.pushTime - G.OVERDRIVE_S) / G.OVERDRIVE_RAMP_S));
   }
 
-  /**
-   * key: -1 left, 0 none, 1 right. brake: the brake pedal (braking leaves less grip to steer with).
-   * fine: the precision key (PLAYTEST ONLY): the wheel aims at STEER_FINE instead of its stop.
-   */
-  update(car: Car, key: number, dt: number, brake = false, fine = false): PlayerSteer {
-    if (this.old) return this.old.update(this.track, car, key, dt, brake);
+  /** key: -1 left, 0 none, 1 right. brake: the brake pedal (braking leaves less grip to steer with). */
+  update(car: Car, key: number, dt: number, brake = false): PlayerSteer {
     const k = this.track.curves().at(car.s);
     const kLane = laneCurvature(k, car.d);
     const a = this.assist(car, kLane, dt);
     const straightTo = this.straightAssist(k !== 0, key) ? this.track.headingAt(car.x, car.y) : undefined;
     const slip = wrapAngle(car.heading - car.moveAngle);
     const catching = key !== 0 && Math.abs(slip) > CONFIG.GRIP.SLIDE_SLIP_MIN && key === -Math.sign(slip);
-    this.turnWheel(car, key, dt, fine, catching);
+    this.turnWheel(car, key, dt, catching);
     return { steer: this.capped(car, key, a, dt, brake, kLane, catching), straightTo };
   }
 
@@ -145,11 +112,11 @@ export class PlayerSteering {
   // (as for the bend's last curvature: still cut at once by a slide, a spin or reverse, never fighting a
   // countersteer). Without the fade-out the car's turn dropped in one step, with no key.
   private assist(car: Car, kLane: number, dt: number): number {
-    const assist = curvatureAssist(car, kLane) * assistScale(this.opts);
+    const assist = curvatureAssist(car, kLane);
     const step = dt / CONFIG.CORNER_ASSIST_IN_S;
     this.assistLevel = assist !== 0 ? Math.min(1, this.assistLevel + step) : Math.max(0, this.assistLevel - step);
     if (kLane !== 0) this.bendK = kLane;
-    else if (this.assistLevel > 0) return curvatureAssist(car, this.bendK) * assistScale(this.opts) * this.assistLevel;
+    else if (this.assistLevel > 0) return curvatureAssist(car, this.bendK) * this.assistLevel;
     return assist * this.assistLevel;
   }
 
@@ -171,7 +138,7 @@ export class PlayerSteering {
   // from 100 mph. Turning it the other way, or countersteering a slide, goes at STEER_FAST_S. A released
   // key lets it back to the centre at STEER_OUT_S (0 under STEER_SNAP, where the straight assist acts).
   // STEER_GAMMA over 1 softens the start of a press (only the press: the release is the same).
-  private turnWheel(car: Car, key: number, dt: number, fine: boolean, catching: boolean): void {
+  private turnWheel(car: Car, key: number, dt: number, catching: boolean): void {
     const C = CONFIG;
     if (car.spinTime > 0) {
       this.w = 0;
@@ -182,16 +149,13 @@ export class PlayerSteering {
       if (Math.abs(this.w) < C.STEER_SNAP) this.w = 0;
       return;
     }
-    const p = wheelConsts(this.opts.set);
     const against = this.w !== 0 && Math.sign(this.w) !== key;
     const fast = Math.max(0, Math.min(1, (Math.abs(car.speed) - 40) / 60));
-    const t = against || catching ? C.STEER_FAST_S : C.STEER_IN_SLOW_S + (p.inS - C.STEER_IN_SLOW_S) * fast;
-    const follow = 1 - Math.exp(-dt / t);
-    const top = fine ? C.STEER_FINE ** (1 / p.gamma) : 1;
-    let u = Math.sign(this.w) * Math.abs(this.w) ** (1 / p.gamma);
-    if (key * u > top) u += (key * top - u) * follow;
-    else u = key * Math.min(top, key * (u + (key * top * (1 + p.overshoot) - u) * follow));
-    this.w = Math.sign(u) * Math.abs(u) ** p.gamma;
+    const t = against || catching ? C.STEER_FAST_S : C.STEER_IN_SLOW_S + (C.STEER_IN_S - C.STEER_IN_SLOW_S) * fast;
+    // (gamma acts on u, the wheel before its curve; u follows the first-order curve)
+    let u = Math.sign(this.w) * Math.abs(this.w) ** (1 / C.STEER_GAMMA);
+    u = key * Math.min(1, key * (u + (key * (1 + C.STEER_OVERSHOOT) - u) * (1 - Math.exp(-dt / t))));
+    this.w = Math.sign(u) * Math.abs(u) ** C.STEER_GAMMA;
   }
 
   // The wheel spans the key cap without braking, and braking only clips it (so touching the brake mid-corner

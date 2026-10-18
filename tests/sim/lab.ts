@@ -8,7 +8,7 @@ import { aiInput } from '../../src/race/ai';
 import type { Car } from '../../src/race/car';
 import { LEVELS, PERSONAS, type PersonaKind } from '../../src/race/persona';
 import { type DriveInput, limitMph, maxCurvature, stepCar } from '../../src/race/physics';
-import { PlayerSteering, type SteerOptions } from '../../src/race/steering';
+import { PlayerSteering } from '../../src/race/steering';
 import { LANES, type PitLane, type Track, type WallNormal, wrapAngle } from '../../src/track/common';
 import { HUMAN_MARGIN, LAB_HW, type LabCorner, LINE_MARGIN, labCorner } from './curves';
 import { corridor, DT, freshCar, HUMAN, HumanKeys, placeCar, steerTrack, type TapperHabits, TapperKeys, withWalls } from './drivers';
@@ -49,8 +49,6 @@ export interface CornerSpec {
   slide?: boolean;
   /** tapper: its habits (default TAPPER). */
   habits?: TapperHabits;
-  /** human, tapper: the player steering's options (default set B). */
-  steer?: SteerOptions;
 }
 
 export interface CornerRun {
@@ -256,7 +254,7 @@ function setup(spec: CornerSpec): Ctx {
     slipSince: -1,
     human: new HumanKeys(HUMAN.REACT),
     tapper: new TapperKeys(spec.habits),
-    player: new PlayerSteering(steerTrack(c.road), spec.steer),
+    player: new PlayerSteering(steerTrack(c.road)),
     key: 0,
     given: 0,
     keyChanges: 0,

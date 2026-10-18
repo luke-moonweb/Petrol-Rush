@@ -5,7 +5,7 @@ import type { Car } from '../../src/race/car';
 import { brakeAt, curvatureAssist, type DriveInput, maxCurvature, type StepTrack, stepCar } from '../../src/race/physics';
 import { planSpeed } from '../../src/race/planner';
 import { Race } from '../../src/race/race';
-import { keyCap, PlayerSteering, type SteerOptions, type SteerTrack } from '../../src/race/steering';
+import { keyCap, PlayerSteering, type SteerTrack } from '../../src/race/steering';
 import type { CurvatureTable } from '../../src/track/curvature';
 import { laneCurvature } from '../../src/track/curvature';
 import { curvatureAt, pointAt, project, TRACK_LEN, trackCurves, type WallNormal, wrapAngle } from '../../src/track/oval';
@@ -63,6 +63,7 @@ export class SteerRamp {
   static readonly MIN_TURN = 0.3;
   static readonly RAMP_TURN_S = 0.15;
   static readonly RELEASE_S = 0.2;
+  static readonly ASSIST = 0.3;
   private dir = 0;
   private level = 0;
 
@@ -256,8 +257,6 @@ export interface RunOpts {
   noCatch?: boolean;
   /** End the run when the car reaches finishS. */
   stopAtFinish?: boolean;
-  /** human: the player steering's options (default set B). */
-  steer?: SteerOptions;
   /** Record the time the car passes each of these s values (unwrapped). */
   splits?: number[];
 }
@@ -323,7 +322,7 @@ export function runCurve(
     cornerUse: [],
   };
   const human = new HumanKeys(o.react ?? HUMAN.REACT, o.noCatch);
-  const player = new PlayerSteering(steerTrack(t), o.steer);
+  const player = new PlayerSteering(steerTrack(t));
   let wallAgo = 99;
   let prevWallAgo = 99;
   const T = o.T ?? 5;
@@ -405,7 +404,8 @@ export function runCurve(
         steer = reacting ? -Math.sign(slip) * Math.min(1, Math.abs(slip) * 4) : want;
         break;
       default: {
-        const assist = curvatureAssist(car, kLane);
+        // (the corner assist as strong as it was for the ramp, CORNER_ASSIST 0.3)
+        const assist = curvatureAssist(car, kLane) * (SteerRamp.ASSIST / CONFIG.CORNER_ASSIST);
         level = assist !== 0 ? Math.min(1, level + DT / CONFIG.CORNER_ASSIST_IN_S) : Math.max(0, level - DT / CONFIG.CORNER_ASSIST_IN_S);
         const a = assist * level;
         let key: number;

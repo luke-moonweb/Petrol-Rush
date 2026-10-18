@@ -1,18 +1,6 @@
 export type BindableAction = 'left' | 'right' | 'gas' | 'brake' | 'reverse' | 'camera' | 'pause' | 'menu' | 'help' | 'mute';
 
-export type Action =
-  | BindableAction
-  | 'up'
-  | 'down'
-  | 'navLeft'
-  | 'navRight'
-  | 'enter'
-  | 'back'
-  | 'clear'
-  | 'fit'
-  | 'debugSpeed'
-  // PLAYTEST ONLY (debug flag fine=1): the precision key
-  | 'fine';
+export type Action = BindableAction | 'up' | 'down' | 'navLeft' | 'navRight' | 'enter' | 'back' | 'clear' | 'fit' | 'debugSpeed';
 
 export type Bindings = Record<BindableAction, [string | null, string | null]>;
 
@@ -151,7 +139,6 @@ export class Input {
   private pressSeq = 0;
   private readonly codeAt = new Map<string, number>();
   private readonly virtualAt = new Map<Action, number>();
-  private readonly extra: [string, Action][] = [];
   private bindings: Bindings;
   capture = false;
   onFirstInteraction: (() => void) | null = null;
@@ -195,7 +182,6 @@ export class Input {
   private rebuild(): void {
     this.keymap.clear();
     for (const [code, actions] of Object.entries(FIXED)) this.keymap.set(code, [...actions]);
-    for (const [code, action] of this.extra) this.keymap.set(code, [...(this.keymap.get(code) ?? []), action]);
     for (const { action } of BINDABLE) {
       for (const code of this.bindings[action]) {
         if (!code) continue;
@@ -218,12 +204,6 @@ export class Input {
   tapVirtual(action: Action): void {
     this.virtualPressed.add(action);
     this.virtualAt.set(action, ++this.pressSeq);
-  }
-
-  /** PLAYTEST ONLY (debug flag fine=1): a fixed key for an extra action. */
-  addFixed(code: string, action: Action): void {
-    this.extra.push([code, action]);
-    this.rebuild();
   }
 
   private lostFocus(): void {

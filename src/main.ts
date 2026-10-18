@@ -15,8 +15,6 @@ let renderScale = 1;
 
 const params = readParams(location.search);
 const input = new Input(window, loadBindings());
-// PLAYTEST ONLY (debug flag fine=1): the precision key
-if (params.steer.fine) input.addFixed('ShiftLeft', 'fine');
 const audio = new GameAudio();
 const game = new Game(input, audio, params, (g) => new TitleState(g));
 game.touch = prefersTouch(params.touch);

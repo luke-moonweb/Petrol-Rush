@@ -3,12 +3,12 @@
 exports[`screens, headless > a race on a Grand Prix circuit, top-down and in the cockpit; fingerprints of both 1`] = `
 {
   "cockpit": {
-    "calls": 16758,
-    "hash": "f853c503",
+    "calls": 10033,
+    "hash": "fdd27383",
   },
   "topDown": {
-    "calls": 88696,
-    "hash": "7f370f67",
+    "calls": 88448,
+    "hash": "05cbb44e",
   },
 }
 `;
@@ -16,8 +16,8 @@ exports[`screens, headless > a race on a Grand Prix circuit, top-down and in the
 exports[`screens, headless > out of fuel in a Grand Prix, the player watches the cars still racing until all are home 1`] = `
 {
   "watching": {
-    "calls": 525,
-    "hash": "905b2720",
+    "calls": 722,
+    "hash": "36179ba3",
   },
 }
 `;
@@ -25,24 +25,24 @@ exports[`screens, headless > out of fuel in a Grand Prix, the player watches the
 exports[`screens, headless > title → race menu → settings → a race with the cockpit, pause and menu → results; fingerprints of each screen 1`] = `
 {
   "cockpit": {
-    "calls": 5004,
-    "hash": "5fc3eea4",
+    "calls": 5279,
+    "hash": "66fe9863",
   },
   "paused": {
-    "calls": 4710,
-    "hash": "a45c7985",
+    "calls": 4985,
+    "hash": "8a91fda6",
   },
   "raceMenu": {
     "calls": 3101,
     "hash": "147d03de",
   },
   "raceMenuLive": {
-    "calls": 4851,
-    "hash": "32d9e419",
+    "calls": 5126,
+    "hash": "56871506",
   },
   "results": {
-    "calls": 14651,
-    "hash": "3fc60a09",
+    "calls": 14446,
+    "hash": "69874acb",
   },
   "settings": {
     "calls": 2626,

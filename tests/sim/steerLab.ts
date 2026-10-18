@@ -5,21 +5,19 @@
 import { CONFIG } from '../../src/config';
 import type { Car } from '../../src/race/car';
 import { gripAt, limitMph, stepCar } from '../../src/race/physics';
-import { keyCap, PlayerSteering, type SteerOptions } from '../../src/race/steering';
+import { keyCap, PlayerSteering } from '../../src/race/steering';
 import { laneCurvature } from '../../src/track/curvature';
 import { pointAt, RC, S_TOP, S_TURN1, TRACK_LEN, wrapAngle } from '../../src/track/oval';
-import { OVAL } from '../../src/track/ovalTrack';
 import { CurveTrack } from './curves';
 import { DT, freshCar, OVAL_TRACK, placeCar, type RunOpts, runCurve, steerTrack, TAPPER, type TapperHabits, withWalls } from './drivers';
 import { bestEntry, type CornerSpec, cornerFor, runCorner } from './lab';
 
 const PXM = CONFIG.PX_PER_MPH;
-const B: SteerOptions = { set: 'B' };
 const noWalls = withWalls(() => null);
 const DEG = 180 / Math.PI;
 
 /** Tapping `on` steps down and `off` up at mph, into an arc that needs `arc` x the grip (0: a straight). */
-export function tapping(mph: number, on: number, off: number, arc: number, steer = B): { use: number; sway: number } {
+export function tapping(mph: number, on: number, off: number, arc: number): { use: number; sway: number } {
   const v0 = mph * PXM;
   const kc = -(arc * gripAt(v0)) / (v0 * v0);
   const t = new CurveTrack([
@@ -29,7 +27,7 @@ export function tapping(mph: number, on: number, off: number, arc: number, steer
   const car = freshCar();
   // (the steering reads the curve at car.s = 300 all along: an endless arc, the car stays on it)
   placeCar(car, t, arc > 0 ? 300 : 100, 0, mph);
-  const ps = new PlayerSteering(steerTrack(t), steer);
+  const ps = new PlayerSteering(steerTrack(t));
   const yaws: number[] = [];
   const dir = arc > 0 ? -1 : 1;
   for (let i = 0; i < 300; i++) {
@@ -53,11 +51,11 @@ export function tapping(mph: number, on: number, off: number, arc: number, steer
 }
 
 /** Heading (deg) 1.5 s after a tap of n steps on a straight at mph (the straight assist acting). */
-export function tapAngle(mph: number, n: number, steer = B): number {
+export function tapAngle(mph: number, n: number): number {
   const t = new CurveTrack([{ len: 3000, k: 0 }]);
   const car = freshCar();
   placeCar(car, t, 100, 0, mph);
-  const ps = new PlayerSteering(steerTrack(t), steer);
+  const ps = new PlayerSteering(steerTrack(t));
   for (let i = 0; i < 90; i++) {
     const st = ps.update(car, i < n ? 1 : 0, DT);
     stepCar(car, { steer: st.steer, straightTo: st.straightTo, gas: car.speed < mph, brake: false, toggleReverse: false }, DT, noWalls);
@@ -74,9 +72,9 @@ function ovalCar(s: number, d: number, mph: number): Car {
 }
 
 /** Milliseconds from a key press to 98 % of the key cap at mph: on the bottom straight, or in turn 1 on the centre lane. */
-export function toStop(mph: number, corner: boolean, steer = B): number {
+export function toStop(mph: number, corner: boolean): number {
   const car = corner ? ovalCar(S_TURN1 + 50, 0, mph) : ovalCar(200, 0, mph);
-  const ps = new PlayerSteering(OVAL, steer);
+  const ps = new PlayerSteering();
   for (let i = 0; i < 30; i++) ps.update(car, 0, DT);
   const cap = keyCap(car, false);
   for (let i = 1; i <= 90; i++) if (Math.abs(ps.update(car, -1, DT).steer) >= cap * 0.98) return i * DT * 1000;
@@ -87,9 +85,9 @@ export function toStop(mph: number, corner: boolean, steer = B): number {
  * Steps from the first countersteer step to 98 % of the cap against a slide (slip 0.15 rad) in turn 1 at
  * mph, after the key was held into the bend (the wheel starts on the other side).
  */
-export function catchSteps(mph: number, steer = B): number {
+export function catchSteps(mph: number): number {
   const car = ovalCar(S_TURN1 + 50, 0, mph);
-  const ps = new PlayerSteering(OVAL, steer);
+  const ps = new PlayerSteering();
   for (let i = 0; i < 30; i++) ps.update(car, -1, DT);
   // the rear steps out of the left bend: the nose turns further left than the travel direction
   car.heading = car.moveAngle - 0.15;
@@ -102,9 +100,9 @@ export function catchSteps(mph: number, steer = B): number {
  * Overdrive (0..1, the most in the last 0.4 s) after 2 s of tapping `on` / `off` steps into turn 1 on
  * the centre lane at f x its limit (speed). off 0: holding.
  */
-export function tapOverdrive(f: number, on: number, off: number, steer = B): number {
+export function tapOverdrive(f: number, on: number, off: number): number {
   const car = ovalCar(S_TURN1 + 50, 0, limitMph(laneCurvature(-1 / RC, 0)) * f);
-  const ps = new PlayerSteering(OVAL, steer);
+  const ps = new PlayerSteering();
   let most = 0;
   for (let i = 0; i < 120; i++) {
     ps.update(car, i % (on + off) < on ? -1 : 0, DT);
@@ -136,10 +134,10 @@ export interface TapperScore {
 }
 
 /** The tapper on the six corners, braking to 0.85, 0.95 and 1.0 x the line's limit. */
-export function tapperScore(habits: TapperHabits = TAPPER, steer = B): TapperScore {
+export function tapperScore(habits: TapperHabits = TAPPER): TapperScore {
   const s: TapperScore = { bad: 0, rms: 0, jitter: 0, keyChg: 0, t: 0 };
   for (const [r, deg] of TAPPER_CORNERS) {
-    const spec: CornerSpec = { r, deg, driver: 'tapper', habits, steer };
+    const spec: CornerSpec = { r, deg, driver: 'tapper', habits };
     const lim = Math.min(CONFIG.MAX_MPH, limitMph(1 / cornerFor(spec).rho));
     for (const f of TAPPER_FRACS) {
       const x = runCorner({ ...spec, mode: 'brake', vc: lim * f });
@@ -155,14 +153,14 @@ export function tapperScore(habits: TapperHabits = TAPPER, steer = B): TapperSco
 }
 
 /** The tapper's best habits for the steering under test: of 24 sets, the fewest bad runs, then the least line error. */
-export function bestTapper(steer = B): { habits: TapperHabits; score: TapperScore } {
+export function bestTapper(): { habits: TapperHabits; score: TapperScore } {
   let best: { habits: TapperHabits; score: TapperScore } | null = null;
   for (const ANT of [1, 1.5, 2])
     for (const W of [3, 4])
       for (const TH of [0.002, 0.004])
         for (const DWELL of [0.05, 0.08]) {
           const habits = { ...TAPPER, ANT, W, TH, DWELL };
-          const score = tapperScore(habits, steer);
+          const score = tapperScore(habits);
           if (!best || score.bad < best.score.bad || (score.bad === best.score.bad && score.rms < best.score.rms)) best = { habits, score };
         }
   return best!;
@@ -196,11 +194,11 @@ export function ovalEntry(d: number, f: number, opts: Partial<RunOpts> = {}, aft
 }
 
 /** The human key player's best flying lap (mean of two) on lane d of the oval, over four braking plans (as in tests/keys.test.ts). */
-export function ovalKeyLap(d: number, steer = B): number {
+export function ovalKeyLap(d: number): number {
   const lap = (planFrac: number) => {
     const r = runCurve(
       OVAL_TRACK,
-      { mph: 160, driver: 'human', d, walls: 'oval', T: 60, splits: [TRACK_LEN, 3 * TRACK_LEN], planFrac, steer },
+      { mph: 160, driver: 'human', d, walls: 'oval', T: 60, splits: [TRACK_LEN, 3 * TRACK_LEN], planFrac },
       3 * TRACK_LEN,
       200,
     );
@@ -210,33 +208,33 @@ export function ovalKeyLap(d: number, steer = B): number {
 }
 
 /** Two flying laps of the human key player on lane d of the oval, braking like the AI planner at planFrac (tests/keys.test.ts test 1). */
-export function ovalLaps(d: number, planFrac: number, steer = B) {
+export function ovalLaps(d: number, planFrac: number) {
   return runCurve(
     OVAL_TRACK,
-    { mph: 160, driver: 'human', d, walls: 'oval', T: 60, splits: [TRACK_LEN, 3 * TRACK_LEN], planFrac, steer },
+    { mph: 160, driver: 'human', d, walls: 'oval', T: 60, splits: [TRACK_LEN, 3 * TRACK_LEN], planFrac },
     3 * TRACK_LEN,
     200,
   );
 }
 
 /** The human key player's wall contacts on the oval over a grid of lanes (-9.5..14.25) and braking plans (0.88..1.06 x the limit): runs with a contact, of 60. */
-export function ovalWallGrid(steer = B): { walls: number; where: string[] } {
+export function ovalWallGrid(): { walls: number; where: string[] } {
   const where: string[] = [];
   for (const d of [-9.5, -4.75, 0, 4.75, 9.5, 14.25])
     for (let i = 0; i < 10; i++) {
       const f = 0.88 + 0.02 * i;
-      if (ovalLaps(d, f, steer).wallHits > 0) where.push(`${d}/${f.toFixed(2)}`);
+      if (ovalLaps(d, f).wallHits > 0) where.push(`${d}/${f.toFixed(2)}`);
     }
   return { walls: where.length, where };
 }
 
 /** The largest |AI - human| (s) of tests/corners.test.ts ("the AI keeps up"), and any AI wall or spin. */
-export function aiGap(steer = B): { worst: number; dirty: number } {
+export function aiGap(): { worst: number; dirty: number } {
   let worst = 0;
   let dirty = 0;
   for (const deg of [90, 135])
     for (const r of [120, 160, 200]) {
-      const human = bestEntry({ r, deg, driver: 'human', steer });
+      const human = bestEntry({ r, deg, driver: 'human' });
       for (const skill of [0, 1]) {
         const ai = runCorner({ r, deg, driver: 'ai', mode: 'flat', skill });
         if (ai.spun || ai.wallHits > 0) dirty++;

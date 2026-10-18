@@ -5,7 +5,6 @@ import { loadPrefs, type Prefs } from '../prefs';
 import type { TouchLayout } from '../touch';
 import { trackIds } from '../track/tracks';
 import type { Hit } from '../ui/hit';
-import { readSteerFlags, type SteerFlags } from './race/steerPlaytest';
 
 export interface State {
   update(dt: number): void;
@@ -27,8 +26,6 @@ export interface Params {
   laps: number | null;
   track: string | null;
   touch: boolean | null;
-  /** PLAYTEST ONLY (with debug): steer=old|B|E|ab, assist=0..0.3, fine=1. */
-  steer: SteerFlags;
 }
 
 export function readParams(search: string): Params {
@@ -48,7 +45,6 @@ export function readParams(search: string): Params {
     laps: num('laps'),
     track: p.get('track'),
     touch: p.has('touch') ? p.get('touch') !== '0' : null,
-    steer: readSteerFlags(p),
   };
 }
 
