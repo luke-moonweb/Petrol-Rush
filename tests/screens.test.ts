@@ -4,9 +4,13 @@ import { GameAudio } from '../src/audio/audio';
 import { CONFIG } from '../src/config';
 import { type Action, Input } from '../src/input';
 import { computeLayout, setLayout } from '../src/layout';
+import type { Car } from '../src/race/car';
+import { type GrandPrix, newGrandPrix } from '../src/race/grandprix';
 import type { Race } from '../src/race/race';
 import { Game, readParams } from '../src/states/game';
+import { RaceState } from '../src/states/race/state';
 import { TitleState } from '../src/states/title';
+import { GP_DEFS } from '../src/track/gp';
 import { clearHits } from '../src/ui/hit';
 import { drawing, resetDrawing, StubCanvas } from './sim/browser';
 
@@ -55,7 +59,27 @@ function frame(game: Game): { hash: string; calls: number } {
   return { hash: drawing.hash.toString(16).padStart(8, '0'), calls: drawing.calls };
 }
 
-const screen = (game: Game) => game.state as unknown as { constructor: { name: string }; phase?: string; race?: Race };
+const screen = (game: Game) =>
+  game.state as unknown as { constructor: { name: string }; phase?: string; race?: Race; watched?: Car | null };
+
+/** Round 1 of a short Grand Prix, started; the player's tank is emptied on the grid. */
+function gpRaceOutOfFuel(game: Game): { race: Race; result: () => GrandPrix | null } {
+  const gp = newGrandPrix(
+    { cars: 8, laps: 1, playerColor: 4, qualifying: 'last', difficulty: 'normal' },
+    99,
+    GP_DEFS.map((d) => d.id),
+  );
+  let after: GrandPrix | null = null;
+  const opts = { track: gp.tracks[0]!, cars: gp.cars, laps: gp.laps, playerColor: 4, qualifying: gp.qualifying, difficulty: gp.difficulty };
+  game.set(new RaceState(game, opts, 'running', { gp, done: (next) => (after = next) }));
+  const race = screen(game).race!;
+  run(game, 9);
+  expect(race.started).toBe(true);
+  game.prefs.camera = 'cockpit';
+  race.player.fuel = 0;
+  run(game, 1);
+  return { race, result: () => after };
+}
 
 describe('screens, headless', () => {
   it('title → race menu → settings → a race with the cockpit, pause and menu → results; fingerprints of each screen', () => {
@@ -148,5 +172,39 @@ describe('screens, headless', () => {
     const cockpit = frame(game);
     expect(cockpit.calls).toBeGreaterThan(200);
     expect({ topDown, cockpit }).toMatchSnapshot();
+  }, 60_000);
+
+  it('out of fuel in a Grand Prix, the player watches the cars still racing until all are home', () => {
+    const game = newGame();
+    const { race, result } = gpRaceOutOfFuel(game);
+    const first = screen(game).watched!;
+    expect(first.isPlayer).toBe(false);
+    expect(game.prefs.camera).toBe('top');
+    expect(game.state.touchLayout!()).toBe('menu');
+    press(game, 'camera');
+    expect(game.prefs.camera).toBe('top');
+    press(game, 'navRight');
+    expect(screen(game).watched).not.toBe(first);
+    const watching = frame(game);
+    expect(watching.calls).toBeGreaterThan(200);
+
+    for (let t = 0; t < 200 && screen(game).phase !== 'results'; t += 1) run(game, 1);
+    expect(screen(game).phase).toBe('results');
+    expect(race.raceOver()).toBe(true);
+    expect(race.cars.filter((c) => c.finished).length).toBe(7);
+    press(game, 'enter');
+    expect(result()!.results[0]!.dnf).toEqual([4]);
+    expect({ watching }).toMatchSnapshot();
+  }, 60_000);
+
+  it('out of fuel in a Grand Prix, ENTER skips to the results', () => {
+    const game = newGame();
+    const { race } = gpRaceOutOfFuel(game);
+    expect(screen(game).watched).toBeTruthy();
+    press(game, 'enter');
+    expect(screen(game).phase).toBe('finishing');
+    run(game, 1);
+    expect(screen(game).phase).toBe('results');
+    expect(race.cars.filter((c) => c.finished).length).toBe(7);
   }, 60_000);
 });

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { CONFIG, DEFAULT_OPTIONS } from '../src/config';
+import { isStranded } from '../src/race/car';
 import {
   GP_POINTS,
   type GpSetup,
@@ -136,6 +137,39 @@ describe('championship', () => {
     const res = raceResult(race);
     expect(res.order[3]).toBe(4);
     expect(res.dnf).toContain(4);
+  });
+
+  it('a car out of fuel stands, the race ends without it, and it keeps its place by distance but scores nothing', () => {
+    const g = gp({ ...SETUP, cars: 6, laps: 2 });
+    const id = TRACKS[0]!;
+    const race = new Race(
+      { ...DEFAULT_OPTIONS, track: id, cars: 6, laps: 2, playerColor: 4 },
+      1,
+      true,
+      undefined,
+      getTrack(id),
+      lineupFor(g),
+    );
+    race.start();
+    const dt = 1 / CONFIG.STEP_HZ;
+    // two AI cars run dry on the first lap, the second further round than the first
+    const [early, late] = race.cars.filter((c) => !c.isPlayer);
+    while (race.time < 10) race.step(dt, null);
+    early!.fuel = 0;
+    while (race.time < 20) race.step(dt, null);
+    late!.fuel = 0;
+    while (!race.raceOver() && race.time < 300) race.step(dt, null);
+    expect(race.raceOver()).toBe(true);
+    expect(race.allFinished()).toBe(false);
+    expect([early, late].map((c) => isStranded(c!))).toEqual([true, true]);
+    expect(race.cars.filter((c) => c.finished).length).toBe(4);
+    const res = raceResult(race);
+    // behind the four finishers, by the distance covered
+    expect(res.order.slice(4)).toEqual([late!.colorIdx, early!.colorIdx]);
+    expect(res.dnf.sort()).toEqual([early!.colorIdx, late!.colorIdx].sort());
+    const table = standings(withResult(g, res));
+    expect(table.find((s) => s.colorIdx === late!.colorIdx)!.points).toBe(0);
+    expect(table.find((s) => s.colorIdx === early!.colorIdx)!.points).toBe(0);
   });
 });
 
