@@ -1,26 +1,29 @@
-import { CONFIG, LAP_CHOICES, QUALIFYING_CHOICES, type RaceOptions } from '../../config';
+import { CONFIG, type RaceOptions } from '../../config';
 import { stepCabin } from '../../gfx/fpv/cabin';
 import { cockpitOverlayMs, drawCockpitView, prewarmCockpitView, prewarmScene } from '../../gfx/fpv/view';
 import { Particles } from '../../gfx/particles';
-import { type Cam, clampCamera, drawCars, drawOil, drawTrack, trackCanvas } from '../../gfx/world';
+import { drawCars, drawOil, drawTrack, trackCanvas } from '../../gfx/world';
 import { keyLabel } from '../../input';
 import { inFrame, layout } from '../../layout';
-import { type Car, lapsCompleted } from '../../race/car';
-import { type GrandPrix, gridOrder, raceResult, raceSeed, round, saveGp, standings } from '../../race/grandprix';
-import type { DriveInput } from '../../race/physics';
-import { NUM_COLORS, Race } from '../../race/race';
-import { PlayerSteering } from '../../race/steering';
+import type { Car } from '../../race/car';
+import { type GrandPrix, gridOrder, raceResult, raceSeed, round, saveGp } from '../../race/grandprix';
+import { Race } from '../../race/race';
 import { type Warn, WarnDisplay, warnings } from '../../race/warnings';
 import type { TouchLayout } from '../../touch';
 import { wrapAngle } from '../../track/common';
-import { getTrack, OVAL_ID, trackIds } from '../../track/tracks';
+import { getTrack, OVAL_ID } from '../../track/tracks';
 import type { Hit } from '../../ui/hit';
 import { drawHudPanel, drawHudTop, drawSkidLamp } from '../../ui/hud';
-import { drawPause, drawRaceMenu, drawRaceSettings, drawResults, type SettingRow, type StatField } from '../../ui/overlays';
+import { drawPause, drawRaceMenu, drawRaceSettings, drawResults } from '../../ui/overlays';
 import { ordinal } from '../../ui/text';
 import { PR } from '../../ui/theme';
 import { type Game, type State, saveOptions, tapSide } from '../game';
 import { HelpState } from '../info';
+import { RaceCamera } from './camera';
+import { PlayerControls } from './controls';
+import { menuItems, menuStats } from './menu';
+import { RaceNotices } from './notices';
+import { changeOption, OPTION_LABELS, optionRows, START_ROW } from './options';
 import { RaceSound } from './sound';
 import { drawDebug, drawRaceMessage, drawStartLights, LIGHT_INTERVAL_S, LIGHTS_COUNT, resultRows, type StartLights } from './view';
 
@@ -37,20 +40,7 @@ const FINISH_SIM_S = 40;
 /** After the winner, the field gets this long to finish before the rest are classified DNF. */
 const FINISH_LIMIT_S = 180;
 
-const CRASH_WARN_PX = 1100;
-const NOTICE_S = 4;
-const RADIO_GAP_S = 8;
-
 let overlayImg: HTMLImageElement | null = null;
-
-const OPTION_LABELS = ['TRACK', 'CARS', 'LAPS', 'YOUR CAR', 'GRID POSITION', 'START RACE'];
-
-const QUALIFYING_LABELS: Record<string, string> = {
-  last: 'BACK OF GRID',
-  middle: 'MIDDLE OF GRID',
-  pole: 'POLE POSITION',
-  random: 'RANDOM',
-};
 
 export class RaceState implements State {
   private race: Race;
@@ -59,18 +49,11 @@ export class RaceState implements State {
   private midRace = false;
   private savedRace: Race | null = null;
   private finishTimer = 0;
-  private camOffX = NaN;
-  private camOffY = 0;
-  private readonly steering = new PlayerSteering();
+  private readonly camera = new RaceCamera();
+  private readonly controls = new PlayerControls();
   // What the HUD and the cockpit show of the player's warnings (SKID blink phase, eased limit and LEDs).
   private readonly warnShown = new WarnDisplay();
-  private reverseHint = 0;
-  // Set while the hold-to-reverse key (↓ / S) put the car in reverse, so releasing it leaves reverse.
-  private reverseHeld = false;
-  private steerVis = 0;
-  private notice: { text: string; age: number } | null = null;
-  private radioCooldown = 0;
-  private penaltyMsg = 0;
+  private readonly notices = new RaceNotices();
   private sound!: RaceSound;
   private lightsShown = 0;
   private lights: StartLights | null = null;
@@ -99,17 +82,15 @@ export class RaceState implements State {
 
   private newRace(): Race {
     this.particles?.clear();
-    this.camOffX = NaN;
-    this.steering?.resetAssist();
+    this.camera?.reset();
+    this.controls?.reset();
     this.warnShown.reset();
-    this.reverseHeld = false;
     this.sound = new RaceSound(this.game.audio);
     this.lightsShown = 0;
     const prefs = this.game.prefs;
     // Every race starts with the top-down camera; the cockpit is chosen per race.
     prefs.camera = 'top';
-    this.notice = null;
-    this.penaltyMsg = 0;
+    this.notices?.reset();
     const rules = { penalties: prefs.penalties, collisions: prefs.collisions };
     const gp = this.gpc?.gp;
     if (gp) {
@@ -118,24 +99,6 @@ export class RaceState implements State {
       return new Race(this.opts, raceSeed(gp, round(gp)), false, rules, getTrack(this.opts.track), lineup);
     }
     return new Race(this.opts, this.seed++, false, rules, getTrack(this.opts.track));
-  }
-
-  // Holding ↓ / S brakes; once the car has nearly stopped it engages reverse and backs up.
-  // Releasing the key leaves reverse and the car rolls to a stop.
-  private holdReverse(drive: DriveInput, held: boolean): void {
-    const p = this.race.player;
-    if (held) {
-      if (p.reverse) drive.gas = true;
-      else if (Math.abs(p.speed) <= CONFIG.REVERSE_TOGGLE_MAX_MPH) {
-        drive.toggleReverse = true;
-        drive.gas = true;
-      } else drive.brake = true;
-      if (drive.gas) drive.brake = false;
-      this.reverseHeld = true;
-    } else if (this.reverseHeld) {
-      this.reverseHeld = false;
-      if (p.reverse) drive.toggleReverse = true;
-    }
   }
 
   touchLayout(): TouchLayout {
@@ -166,7 +129,7 @@ export class RaceState implements State {
       case 'options':
         if (!hit) return;
         this.sel = hit.id;
-        input.tapVirtual(OPTION_LABELS[hit.id] === 'START RACE' ? 'enter' : tapSide(hit, x));
+        input.tapVirtual(hit.id === START_ROW ? 'enter' : tapSide(hit, x));
         break;
       case 'results':
         input.tapVirtual('enter');
@@ -243,16 +206,9 @@ export class RaceState implements State {
     if (this.phase !== 'running') this.game.audio.silence();
   }
 
-  private chooseItems(): string[] {
-    if (this.gpc) {
-      if (this.midRace && (this.race.started || this.lights)) return ['RESUME RACE', 'RESTART RACE', 'RETIRE', 'QUIT TO MAIN MENU'];
-      return ['START RACE', 'BACK TO GRAND PRIX'];
-    }
-    if (this.midRace && (this.race.started || this.lights)) {
-      return ['RESUME RACE', 'RESTART RACE', 'RACE SETTINGS', 'QUIT TO MAIN MENU'];
-    }
-    if (this.midRace) return ['START RACE', 'RACE SETTINGS', 'QUIT TO MAIN MENU'];
-    return ['START RACE', 'RACE SETTINGS'];
+  /** A race is under way (started, or the start lights are on) and the menu was opened from it. */
+  private get live(): boolean {
+    return this.midRace && (this.race.started || !!this.lights);
   }
 
   private openMenu(): void {
@@ -263,14 +219,14 @@ export class RaceState implements State {
 
   private updateChoose(): void {
     const input = this.game.input;
-    const items = this.chooseItems();
+    const items = menuItems(this.gpc?.gp ?? null, this.midRace, this.live);
     const audio = this.game.audio;
     if (input.pressed('up') || input.pressed('down')) audio.ui('move');
     if (input.pressed('up')) this.sel = (this.sel + items.length - 1) % items.length;
     if (input.pressed('down')) this.sel = (this.sel + 1) % items.length;
     if (input.pressed('back') || input.pressed('menu')) {
       audio.ui('back');
-      if (this.midRace && (this.race.started || this.lights)) this.phase = 'running';
+      if (this.live) this.phase = 'running';
       else if (this.gpc) this.gpc.done(this.gpc.gp);
       else this.game.toTitle();
       return;
@@ -331,7 +287,7 @@ export class RaceState implements State {
     if (input.pressed('navLeft')) delta = -1;
     if (input.pressed('navRight')) delta = 1;
     if (input.pressed('enter')) {
-      if (OPTION_LABELS[this.sel] === 'START RACE') {
+      if (this.sel === START_ROW) {
         audio.ui('ok');
         this.startRace();
         return;
@@ -340,32 +296,7 @@ export class RaceState implements State {
     }
     if (delta === 0) return;
     audio.ui('move');
-    const o = { ...this.opts };
-    switch (this.sel) {
-      case 0: {
-        const ids = trackIds();
-        o.track = ids[(ids.indexOf(o.track) + delta + ids.length) % ids.length]!;
-        break;
-      }
-      case 1:
-        o.cars = ((o.cars - 1 + delta + 20) % 20) + 1;
-        break;
-      case 2: {
-        const idx = LAP_CHOICES.indexOf(o.laps);
-        const cur = idx < 0 ? LAP_CHOICES.indexOf(18) : idx;
-        o.laps = LAP_CHOICES[(cur + delta + LAP_CHOICES.length) % LAP_CHOICES.length]!;
-        break;
-      }
-      case 3:
-        o.playerColor = (o.playerColor + delta + NUM_COLORS) % NUM_COLORS;
-        break;
-      case 4: {
-        const idx = QUALIFYING_CHOICES.indexOf(o.qualifying);
-        o.qualifying = QUALIFYING_CHOICES[(idx + delta + QUALIFYING_CHOICES.length) % QUALIFYING_CHOICES.length]!;
-        break;
-      }
-    }
-    this.opts = o;
+    this.opts = changeOption(this.opts, this.sel, delta);
     this.race = this.newRace();
   }
 
@@ -398,26 +329,7 @@ export class RaceState implements State {
       this.game.set(new HelpState(this.game, this));
       return;
     }
-    const p0 = this.race.player;
-    const steerKey = (input.isDown('right') ? 1 : 0) - (input.isDown('left') ? 1 : 0);
-    this.steering.track = this.race.track;
-    const drive: DriveInput = {
-      steer: 0,
-      gas: input.isDown('gas'),
-      brake: input.isDown('brake'),
-      // A tap without a held key is the touch REV button, which toggles reverse.
-      toggleReverse: input.pressed('reverse') && !input.isDown('reverse'),
-    };
-    this.holdReverse(drive, input.isDown('reverse'));
-    const st = this.steering.update(p0, steerKey, dt, drive.brake);
-    drive.steer = this.race.pitAuto ? 0 : st.steer;
-    drive.straightTo = this.race.pitAuto ? undefined : st.straightTo;
-    const shownSteer = this.race.pitAuto ? this.race.playerDrive.steer : drive.steer;
-    this.steerVis += (shownSteer - this.steerVis) * Math.min(1, dt * 12);
-    this.reverseHint = Math.max(0, this.reverseHint - dt);
-    if (drive.toggleReverse && !this.race.pitAuto && !p0.reverse && Math.abs(p0.speed) > CONFIG.REVERSE_TOGGLE_MAX_MPH) {
-      this.reverseHint = 1.5;
-    }
+    const drive = this.controls.update(input, this.race, dt);
     if (this.lights) {
       this.lights.t += dt;
       const lit = Math.min(LIGHTS_COUNT, Math.floor(this.lights.t / LIGHT_INTERVAL_S));
@@ -439,44 +351,23 @@ export class RaceState implements State {
     stepCabin(this.race, dt);
     this.particles.emit(this.race.cars, dt);
     this.particles.update(dt);
-    this.updateCamera(dt);
+    this.camera.update(this.race.track, this.race.player, dt);
 
     const used = this.race.pitAuto ? this.race.playerDrive : drive;
-    this.sound.update(dt, this.race, used, this.camFor(this.race.player.x, this.race.player.y).x, this.cockpit);
-    this.handleEvents(dt);
+    this.sound.update(
+      dt,
+      this.race,
+      used,
+      this.camera.at(this.race.track, this.race.player, this.race.player.x, this.race.player.y).x,
+      this.cockpit,
+    );
+    this.notices.update(this.race, dt, this.game.audio);
     const p = this.race.player;
 
     if (p.finished) {
       this.finishTimer += dt;
       if (this.finishTimer > 3) this.phase = this.gpc ? 'finishing' : 'results';
     }
-  }
-
-  private cameraLead(): [number, number] {
-    const p = this.race.player;
-    const track = this.race.track;
-    const h = track.headingAt(p.x, p.y);
-    const lead = track.worldH > CONFIG.PLAY_H ? CONFIG.CAMERA_LEAD_2D : CONFIG.CAMERA_LEAD;
-    return [lead * Math.cos(h), lead * Math.sin(h)];
-  }
-
-  private updateCamera(dt: number): void {
-    const [tx, ty] = this.cameraLead();
-    if (Number.isNaN(this.camOffX)) {
-      this.camOffX = tx;
-      this.camOffY = ty;
-      return;
-    }
-    const k = Math.min(1, dt / CONFIG.CAMERA_LEAD_S);
-    this.camOffX += (tx - this.camOffX) * k;
-    this.camOffY += (ty - this.camOffY) * k;
-  }
-
-  private camFor(x: number, y: number): Cam {
-    const [ox, oy] = Number.isNaN(this.camOffX) ? this.cameraLead() : [this.camOffX, this.camOffY];
-    const v = layout.view;
-    const track = this.race.track;
-    return clampCamera(Math.round(x + ox), Math.round(y + oy), v.w, v.h, track.worldW, track.worldH);
   }
 
   render(g: CanvasRenderingContext2D, alpha = 1): void {
@@ -506,7 +397,7 @@ export class RaceState implements State {
         ix,
         iy,
         ih,
-        steer: this.steerVis,
+        steer: this.controls.steerVis,
         time: race.time,
         touch,
         warn,
@@ -520,7 +411,7 @@ export class RaceState implements State {
       if (this.cockpitTrack()) prewarmCockpitView(g, view, race.player.colorIdx, this.game.touch);
     }
 
-    drawHudTop(g, race, this.notice);
+    drawHudTop(g, race, this.notices.notice);
     drawHudPanel(g, race, !cockpit, warn.vRef);
     if (!cockpit) drawSkidLamp(g, warn, view.x + view.w - 6, view.y + 6);
     const msg = this.message();
@@ -537,7 +428,7 @@ export class RaceState implements State {
     iy: (c: Car) => number,
     ih: (c: Car) => number,
   ): void {
-    const cam = this.camFor(Math.round(ix(race.player)), Math.round(iy(race.player)));
+    const cam = this.camera.at(race.track, race.player, Math.round(ix(race.player)), Math.round(iy(race.player)));
     g.save();
     const view = layout.view;
     g.translate(view.x, view.y);
@@ -569,7 +460,7 @@ export class RaceState implements State {
         this.renderChoose(g);
         break;
       case 'options':
-        drawRaceSettings(g, this.optionItems(), this.sel, this.savedRace ? 'STARTING A NEW RACE ENDS THE CURRENT ONE' : null);
+        drawRaceSettings(g, optionRows(this.opts), this.sel, this.savedRace ? 'STARTING A NEW RACE ENDS THE CURRENT ONE' : null);
         break;
       case 'paused': {
         const b = this.game.input.getBindings();
@@ -595,99 +486,17 @@ export class RaceState implements State {
     if (this.game.params.debug) drawDebug(g, this.debugLines());
   }
 
-  private optionItems(): SettingRow[] {
-    const o = this.opts;
-    return OPTION_LABELS.map((label, i) => {
-      switch (i) {
-        case 0:
-          return { label, value: getTrack(o.track).name };
-        case 1:
-          return { label, value: String(o.cars) };
-        case 2:
-          return { label, value: String(o.laps) };
-        case 3:
-          return { label, carColor: o.playerColor };
-        case 4:
-          return { label, value: QUALIFYING_LABELS[o.qualifying] };
-        default:
-          return { label, action: true };
-      }
-    });
-  }
-
   private renderChoose(g: CanvasRenderingContext2D): void {
-    const race = this.race;
-    const items = this.chooseItems();
-    const live = this.midRace && (race.started || this.lights);
-    const p = race.player;
-    let stats: StatField[];
-    if (live) {
-      const list = race.standings();
-      const gap = list[0] === p ? null : race.gap(p, list[0]!);
-      stats = [
-        { label: 'LAP', value: `${Math.min(race.laps, lapsCompleted(p) + 1)} / ${race.laps}` },
-        { label: 'POSITION', value: `${race.position(p)} / ${race.cars.length}` },
-        { label: 'FUEL', value: `${Math.round(Math.max(0, p.fuel) * 100)}%` },
-        { label: 'TO LEADER', value: list[0] === p ? 'LEADING' : gap === null ? '—' : `+${gap.toFixed(2)}` },
-      ];
-    } else if (this.gpc) {
-      const gp = this.gpc.gp;
-      const table = standings(gp);
-      const mine = table.findIndex((s) => s.colorIdx === gp.playerColor);
-      const o = this.opts;
-      stats = [
-        { label: 'TRACK', value: getTrack(o.track).name },
-        { label: 'LAPS', value: `${o.laps}  ·  ${o.cars} CARS` },
-        { label: 'YOUR CAR', carColor: o.playerColor },
-        { label: 'POINTS', value: round(gp) === 0 ? '—' : `${table[mine]!.points}  ·  P${mine + 1}` },
-      ];
-    } else {
-      const o = this.opts;
-      stats = [
-        { label: 'TRACK', value: getTrack(o.track).name },
-        { label: 'LAPS', value: `${o.laps}  ·  ${o.cars} CARS` },
-        { label: 'YOUR CAR', carColor: o.playerColor },
-        { label: 'GRID', value: QUALIFYING_LABELS[o.qualifying]!.replace(' OF GRID', '').replace(' POSITION', '') },
-      ];
-    }
-    const gp = this.gpc?.gp;
+    const gp = this.gpc?.gp ?? null;
+    const live = this.live;
     drawRaceMenu(g, {
       tag: gp ? `GRAND PRIX  ·  ROUND ${round(gp) + 1} / ${gp.tracks.length}` : live ? 'RACE MENU' : 'PRE-RACE',
       title: live ? 'RACE PAUSED' : 'READY TO RACE?',
-      stats,
-      items,
+      stats: menuStats(this.race, gp, this.opts, live),
+      items: menuItems(gp, this.midRace, live),
       sel: this.sel,
       danger: ['QUIT TO MAIN MENU', 'RETIRE'],
     });
-  }
-
-  private handleEvents(dt: number): void {
-    const race = this.race;
-    const p = race.player;
-    this.radioCooldown = Math.max(0, this.radioCooldown - dt);
-    this.penaltyMsg = Math.max(0, this.penaltyMsg - dt);
-    if (this.notice) {
-      this.notice.age += dt;
-      if (this.notice.age > NOTICE_S) this.notice = null;
-    }
-    const audio = this.game.audio;
-    for (const e of race.events) {
-      if (e.type === 'penalty' && e.car === p) {
-        this.penaltyMsg = 3;
-        audio.radio(`Penalty! ${e.seconds} seconds.`);
-        this.radioCooldown = 4;
-        continue;
-      }
-      if (e.type !== 'spin' || e.car === p || p.finished) continue;
-      const ds = race.track.deltaS(p.s, e.car.s);
-      if (ds < -40 || ds > CRASH_WARN_PX || (e.car.pitSide && e.car.wasInPit)) continue;
-      if (this.notice) this.notice.age = Math.min(this.notice.age, 1);
-      else this.notice = { text: 'CAUTION  ·  CRASH AHEAD', age: 0 };
-      if (this.radioCooldown <= 0) {
-        audio.radio('Caution! Crash ahead!');
-        this.radioCooldown = RADIO_GAP_S;
-      }
-    }
   }
 
   private message(): string | null {
@@ -698,8 +507,8 @@ export class RaceState implements State {
     if (p.refueling) return 'REFUELING...';
     if (this.race.pitAuto) return 'PIT LANE  –  AUTO';
     if (p.fuel < CONFIG.LOW_FUEL && Math.floor(this.race.time * 2) % 2 === 0) return 'LOW FUEL';
-    if (this.penaltyMsg > 0) return `PENALTY +${CONFIG.PENALTY_S} S  –  YOU CAUSED A CRASH`;
-    if (this.reverseHint > 0) return 'STOP TO ENGAGE REVERSE';
+    if (this.notices.penaltyMsg > 0) return `PENALTY +${CONFIG.PENALTY_S} S  –  YOU CAUSED A CRASH`;
+    if (this.controls.reverseHint > 0) return 'STOP TO ENGAGE REVERSE';
     if (p.reverse) return 'REVERSE';
     return null;
   }
