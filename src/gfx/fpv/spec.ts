@@ -1,8 +1,8 @@
 import type { Track } from '../../track/common';
+import type { FpvSky } from '../track/circuit/theme';
 import type { Parts } from './kit';
 import type { PaddockAt } from './paddock3d';
 import type { PitScene } from './pitScene';
-import type { Sky } from './sky';
 
 /** What stands along a track edge: a red and cream wall, a low kerb wall, or nothing (the pit). */
 export type Barrier = 'wall' | 'curb' | 'none';
@@ -17,7 +17,7 @@ export interface SceneLook {
   lamp: string;
   /** Distance along the lap between floodlight masts. */
   mastStep: number;
-  skyline: Sky['skyline'];
+  sky: FpvSky;
 }
 
 /**

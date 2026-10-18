@@ -8,8 +8,29 @@ export type Prop3d = 'containers' | 'cactus' | 'buildings' | 'pines' | 'stands';
 export interface FpvTheme {
   /** Props standing where the top-down view draws `prop` (default: pines). */
   props?: Prop3d;
-  /** The distant skyline: tower height (1 = the oval's city), colour and the share of lit windows. */
-  skyline?: { h: number; color: string; lit: number };
+  /** The sky and the distant horizon (default: the oval's night sky over a city). */
+  sky?: FpvSky;
+}
+
+/** Silhouettes on the horizon. */
+export type SkylineKind = 'city' | 'cranes' | 'mesas' | 'pines' | 'hills';
+
+/**
+ * A night or dusk sky (always dark enough for headlights): gradient, stars, an optional low sun or moon,
+ * a haze band and a skyline. Angles in radians; `az` is a world heading (0 = east, the main straight).
+ */
+export interface FpvSky {
+  top: string;
+  horizon: string;
+  /** Share of the stars shown, 0..1. */
+  stars: number;
+  /** Glow just above the horizon all round, 'r,g,b,a'. */
+  haze?: string;
+  /** A sun low on the horizon (r = 0: only its afterglow), its colour and its glow 'r,g,b'. */
+  sun?: { az: number; e: number; r: number; color: string; glow: string };
+  moon?: { az: number; e: number };
+  /** Height 1 = the oval's city; `lit` = share of lit windows or lights. */
+  skyline: { kind: SkylineKind; h: number; color: string; lit: number };
 }
 
 /** Scenery of one circuit. Tarmac, walls and kerbs look the same everywhere, so cars always stand out. */
@@ -185,7 +206,17 @@ export const THEMES: Record<string, CircuitTheme> = {
     far: '#0B1E36',
     nearW: 230,
     farDetail: waves,
-    fpv: { props: 'containers', skyline: { h: 1.2, color: '#0E1220', lit: 0.5 } },
+    fpv: {
+      props: 'containers',
+      sky: {
+        top: '#02050E',
+        horizon: '#12304A',
+        stars: 0.6,
+        haze: '90,150,210,0.16',
+        moon: { az: -1.1, e: 0.22 },
+        skyline: { kind: 'cranes', h: 1.1, color: '#081018', lit: 0.5 },
+      },
+    },
   },
   desert: {
     outside: '#3A2A1C',
@@ -199,7 +230,17 @@ export const THEMES: Record<string, CircuitTheme> = {
     far: '#33241A',
     nearW: 260,
     farDetail: dunes,
-    fpv: { props: 'cactus', skyline: { h: 0.45, color: '#1A1210', lit: 0.05 } },
+    fpv: {
+      props: 'cactus',
+      sky: {
+        top: '#120A2A',
+        horizon: '#D0582E',
+        stars: 0.3,
+        haze: '255,140,70,0.22',
+        sun: { az: -0.3, e: 0.015, r: 0.07, color: '#FFB25A', glow: '255,110,50' },
+        skyline: { kind: 'mesas', h: 1, color: '#1E0E16', lit: 0 },
+      },
+    },
   },
   city: {
     outside: '#191823',
@@ -212,7 +253,16 @@ export const THEMES: Record<string, CircuitTheme> = {
     prop: building,
     glow: buildingGlow,
     nearW: 0,
-    fpv: { props: 'buildings', skyline: { h: 2.2, color: '#0E0C1C', lit: 0.65 } },
+    fpv: {
+      props: 'buildings',
+      sky: {
+        top: '#090316',
+        horizon: '#45164E',
+        stars: 0.08,
+        haze: '255,79,163,0.14',
+        skyline: { kind: 'city', h: 2.3, color: '#0C0818', lit: 0.7 },
+      },
+    },
   },
   forest: {
     outside: '#10281A',
@@ -224,7 +274,16 @@ export const THEMES: Record<string, CircuitTheme> = {
     propR: 18,
     prop: tree,
     nearW: 0,
-    fpv: { props: 'pines', skyline: { h: 0.6, color: '#08140E', lit: 0 } },
+    fpv: {
+      props: 'pines',
+      sky: {
+        top: '#010407',
+        horizon: '#0F2626',
+        stars: 1,
+        moon: { az: 0.9, e: 0.3 },
+        skyline: { kind: 'pines', h: 1, color: '#030D08', lit: 0 },
+      },
+    },
   },
   finale: {
     outside: '#163E26',
@@ -236,6 +295,15 @@ export const THEMES: Record<string, CircuitTheme> = {
     propR: 30,
     prop: stand,
     nearW: 0,
-    fpv: { props: 'stands', skyline: { h: 0.9, color: '#0C1410', lit: 0.3 } },
+    fpv: {
+      props: 'stands',
+      sky: {
+        top: '#080C2C',
+        horizon: '#4E3870',
+        stars: 0.45,
+        sun: { az: 2.7, e: -0.05, r: 0, color: '#FF9A5A', glow: '255,140,90' },
+        skyline: { kind: 'hills', h: 1, color: '#0A1210', lit: 0.35 },
+      },
+    },
   },
 };

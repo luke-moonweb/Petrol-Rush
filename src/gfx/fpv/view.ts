@@ -12,7 +12,7 @@ import { Camera, drawPoly, FOG_LEVELS, facesCamera, NEAR, visible } from './engi
 import { drawMinimap } from './minimap';
 import { setPylonNames } from './oval';
 import { type Scene, sceneFor } from './scene';
-import { drawSky, SKY_HORIZON } from './sky';
+import { drawSky } from './sky';
 import { drawPuff } from './smoke';
 import { floodStreaks } from './streaks';
 import { drawGlow, drawOilSlicks, drawPools } from './surface';
@@ -194,7 +194,7 @@ function drawMirror(g: CanvasRenderingContext2D, w: number, h: number, f: Cockpi
   mirrorCam.flip = -1;
   mirrorCam.far = MIRROR_FAR;
   mirrorCam.fogNear = 180;
-  g.fillStyle = SKY_HORIZON;
+  g.fillStyle = prewarmScene(f.race.track).sky.horizon;
   g.fillRect(mx, my, mw, mirrorCam.oy - my);
   g.fillStyle = prewarmScene(f.race.track).sky.ground;
   g.fillRect(mx, mirrorCam.oy, mw, mh);

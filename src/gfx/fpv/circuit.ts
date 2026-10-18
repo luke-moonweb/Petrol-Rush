@@ -11,7 +11,7 @@ import { ground, kerbWall, night, type Parts } from './kit';
 import { hazard } from './pitScene';
 import { props } from './props';
 import { band, edgeD } from './ribbon';
-import { NIGHT_CITY } from './sky';
+import { NIGHT_SKY } from './sky';
 import type { SceneSpec } from './spec';
 import { texQuad } from './texture';
 
@@ -196,7 +196,7 @@ export function circuitSpec(track: SegmentTrack): SceneSpec {
       shoulder: theme.shoulder,
       lamp: theme.lamp,
       mastStep: 100,
-      skyline: { ...NIGHT_CITY, ...theme.fpv?.skyline },
+      sky: theme.fpv?.sky ?? NIGHT_SKY,
     },
     ground(P) {
       tiles(P, track, theme);

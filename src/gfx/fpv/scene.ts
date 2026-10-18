@@ -34,7 +34,7 @@ export function buildScene(spec: SceneSpec): Scene {
   const { pit, look } = spec;
   return {
     ...P,
-    sky: { ground: look.horizon, skyline: look.skyline },
+    sky: { ...look.sky, ground: look.horizon },
     pitLine: { x0: pit.x0, x1: pit.x1, y: pit.y0 + PIT_D.DRIVE },
   };
 }
