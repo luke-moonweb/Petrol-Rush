@@ -1,13 +1,14 @@
 // biome-ignore-all lint/correctness/noPrecisionLoss: fdlibm constants are kept digit for digit
 // biome-ignore-all lint/suspicious/noApproximativeNumericConstant: fdlibm constants are kept digit for digit
 // biome-ignore-all lint/suspicious/noSelfCompare: x !== x is fdlibm's NaN test
-// Pure-JS port of fdlibm sin/cos/atan/atan2 (as in V8 base/ieee754.cc). JS has no FMA, so this
+// Pure-JS port of fdlibm sin/cos/asin/atan/atan2 (as in V8 base/ieee754.cc). JS has no FMA, so this
 // computes what a non-FMA (x64) build of V8 does. Node for macOS arm64 builds fdlibm with FMA and is
 // 1 ulp off on some inputs; the error grows over a race, so the golden masters use this port.
 // Inputs it does not cover (|x| > 2^19 * pi/2, infinities) fall back to the native functions.
 const nativeSin = Math.sin;
 const nativeCos = Math.cos;
 const nativeAtan2 = Math.atan2;
+const nativeAsin = Math.asin;
 const LARGE = 0x413921fb;
 const f = new Float64Array(1);
 const u = new Int32Array(f.buffer);
@@ -164,6 +165,44 @@ export function cos(x: number): number {
       return ksin(y[0]!, y[1]!, 1);
   }
 }
+const pio2_hi = 1.570796326794896558,
+  pio2_lo = 6.123233995736766036e-17,
+  pio4_hi = 7.85398163397448279e-1;
+const pS0 = 1.66666666666666657415e-1,
+  pS1 = -3.25565818622400915405e-1,
+  pS2 = 2.01212532134862925881e-1,
+  pS3 = -4.00555345006794114027e-2,
+  pS4 = 7.91534994289814532176e-4,
+  pS5 = 3.4793310759602116757e-5;
+const qS1 = -2.40339491173441421878,
+  qS2 = 2.02094576023350569471,
+  qS3 = -6.8828397160545329303e-1,
+  qS4 = 7.70381505559019352791e-2;
+const pAsin = (t: number) => t * (pS0 + t * (pS1 + t * (pS2 + t * (pS3 + t * (pS4 + t * pS5)))));
+const qAsin = (t: number) => 1 + t * (qS1 + t * (qS2 + t * (qS3 + t * qS4)));
+export function asin(x: number): number {
+  const hx = HI(x),
+    ix = hx & 0x7fffffff;
+  if (ix >= 0x3ff00000) return nativeAsin(x);
+  if (ix < 0x3fe00000) {
+    if (ix < 0x3e400000) return x;
+    const t = x * x;
+    return x + x * (pAsin(t) / qAsin(t));
+  }
+  let t = (1 - Math.abs(x)) * 0.5;
+  const p = pAsin(t),
+    q = qAsin(t);
+  const s = Math.sqrt(t);
+  if (ix >= 0x3fef3333) t = pio2_hi - (2 * (s + s * (p / q)) - pio2_lo);
+  else {
+    const w = fromWords(HI(s), 0);
+    const c = (t - w * w) / (s + w);
+    const pp = 2 * s * (p / q) - (pio2_lo - 2 * c);
+    const qq = pio4_hi - 2 * w;
+    t = pio4_hi - (pp - qq);
+  }
+  return hx > 0 ? t : -t;
+}
 const atanhi = [4.63647609000806093515e-1, 7.85398163397448278999e-1, 9.82793723247329054082e-1, 1.570796326794896558];
 const atanlo = [2.26987774529616870924e-17, 3.06161699786838301793e-17, 1.39033110312309984516e-17, 6.12323399573676603587e-17];
 const aT = [
@@ -254,14 +293,16 @@ export function atan2(yy: number, x: number): number {
   }
 }
 
-/** Swaps Math.sin, Math.cos and Math.atan2 for this port; returns a function that restores them. */
+/** Swaps Math.sin, Math.cos, Math.asin and Math.atan2 for this port; returns a function that restores them. */
 export function useFdlibm(): () => void {
   Math.sin = sin;
   Math.cos = cos;
   Math.atan2 = atan2;
+  Math.asin = asin;
   return () => {
     Math.sin = nativeSin;
     Math.cos = nativeCos;
     Math.atan2 = nativeAtan2;
+    Math.asin = nativeAsin;
   };
 }
