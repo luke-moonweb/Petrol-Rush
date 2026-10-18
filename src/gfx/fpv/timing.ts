@@ -5,6 +5,8 @@ const OVERLAY_SAMPLES = 60;
 export const cabinMs: number[] = [];
 export const mirrorMs: number[] = [];
 export const carsMs: number[] = [];
+// The world pass (scene, cars, signs) of the main view and the mirror together.
+export const worldMs: number[] = [];
 const sortScratch: number[] = [];
 
 export function sample(list: number[], ms: number): void {
@@ -19,6 +21,6 @@ function median(list: number[]): number {
   return sortScratch[Math.floor(sortScratch.length / 2)] ?? 0;
 }
 
-export function cockpitOverlayMs(): { cabin: number; mirror: number; cars: number } {
-  return { cabin: median(cabinMs), mirror: median(mirrorMs), cars: median(carsMs) };
+export function cockpitOverlayMs(): { world: number; cabin: number; mirror: number; cars: number } {
+  return { world: median(worldMs), cabin: median(cabinMs), mirror: median(mirrorMs), cars: median(carsMs) };
 }

@@ -8,7 +8,7 @@ import { driverName } from '../vehicles';
 import { drawCarModel, setCarPixelScale } from './cars';
 import { type CabinView, cockpitUsed, drawCockpit, prewarmCockpit, reducedMotion, wheelRadius } from './cockpit';
 import { addItem, byDepth, CAR_REACH, type Item, items, NO_ITEMS, orderCarsAgainstCars, orderCarsAgainstWalls } from './drawList';
-import { Camera, drawPoly, FOG_LEVELS, NEAR, visible } from './engine';
+import { Camera, drawPoly, FOG_LEVELS, facesCamera, NEAR, visible } from './engine';
 import { drawMinimap } from './minimap';
 import { setPylonNames } from './oval';
 import { type Scene, sceneFor } from './scene';
@@ -17,7 +17,7 @@ import { drawPuff } from './smoke';
 import { floodStreaks } from './streaks';
 import { drawGlow, drawOilSlicks, drawPools } from './surface';
 import { drawBillboard, drawTexQuad } from './texture';
-import { cabinMs, carsMs, mirrorMs, sample } from './timing';
+import { cabinMs, carsMs, mirrorMs, sample, worldMs } from './timing';
 
 export interface CockpitFrame {
   race: Race;
@@ -53,8 +53,9 @@ mirrorCam.fog = cam.fog;
 // Last LOD tier of each rival car (by colorIdx), per camera, for the LOD hysteresis.
 const lodMain = new Int8Array(64);
 const lodMirror = new Int8Array(64);
-// Time spent drawing rival cars this frame, main view and mirror together.
+// Time spent drawing rival cars, and the whole world pass, this frame (main view and mirror together).
 let carMs = 0;
+let worldTime = 0;
 
 function drawCar(g: CanvasRenderingContext2D, c: Camera, it: Item): void {
   const car = it.car!;
@@ -62,6 +63,12 @@ function drawCar(g: CanvasRenderingContext2D, c: Camera, it: Item): void {
 }
 
 function renderWorld(g: CanvasRenderingContext2D, c: Camera, f: CockpitFrame, cheap: boolean): void {
+  const t0 = performance.now();
+  drawWorld(g, c, f, cheap);
+  worldTime += performance.now() - t0;
+}
+
+function drawWorld(g: CanvasRenderingContext2D, c: Camera, f: CockpitFrame, cheap: boolean): void {
   const scene = prewarmScene(f.race.track);
   for (const p of scene.ground) {
     const d = visible(p, c);
@@ -88,7 +95,7 @@ function renderWorld(g: CanvasRenderingContext2D, c: Camera, f: CockpitFrame, ch
 
   items.length = 0;
   for (const p of scene.solids) {
-    if (visible(p, c) < 0) continue;
+    if ((p.closed && !facesCamera(p, c)) || visible(p, c) < 0) continue;
     addItem(c.depth(p.cx, p.cy)).poly = p;
   }
   for (const q of cheap ? NO_ITEMS : scene.signs) {
@@ -259,6 +266,7 @@ export function drawCockpitView(g: CanvasRenderingContext2D, f: CockpitFrame): v
   // The car LOD counts device pixels (DPR and layout scale included).
   setCarPixelScale(f.pixelScale ?? 1);
   carMs = 0;
+  worldTime = 0;
   cam.focal = Math.max(v.h * 0.62, Math.min(v.h * 0.9, v.w * 0.55)) * (1 - 0.08 * Math.min(1, speed / 180));
   cam.ox = v.w / 2;
   cam.oy = Math.round(v.h * 0.42);
@@ -287,5 +295,6 @@ export function drawCockpitView(g: CanvasRenderingContext2D, f: CockpitFrame): v
   sample(cabinMs, t1 - t0);
   sample(mirrorMs, performance.now() - t1);
   sample(carsMs, carMs);
+  sample(worldMs, worldTime);
   g.restore();
 }

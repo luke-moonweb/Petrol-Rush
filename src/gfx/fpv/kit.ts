@@ -89,7 +89,11 @@ export function box(
   front?: RGB,
 ): void {
   const face = (ax: number, ay: number, bx: number, by: number, c: RGB) =>
-    pieces(ax, ay, bx, by, (a, b, c2, d) => out.push(makePoly(wall(a, b, c2, d, z0, z1), c)));
+    pieces(ax, ay, bx, by, (a, b, c2, d) => {
+      const p = makePoly(wall(a, b, c2, d, z0, z1), c);
+      p.closed = true;
+      out.push(p);
+    });
   face(x1, y0, x0, y0, scaleRgb(side, 0.8));
   face(x1, y1, x1, y0, side);
   face(x0, y1, x1, y1, front ?? side);
