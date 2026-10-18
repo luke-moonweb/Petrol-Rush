@@ -35,3 +35,7 @@ Thumbs.db
 *.swp
 *.swo
 *~
+
+# Notes for AI agents (CLAUDE.md files, specs, review notes): kept locally only, never on GitHub
+*.md
+!/README.md
