@@ -55,6 +55,11 @@ export interface AiState {
   slideDir: number;
   /** Start (s) of the corner the slide was decided for (one decision per corner). */
   slideRun: number;
+  /** Free line (hard, ai.ts freeLine): how far (px) across its racing line the car drives. */
+  freeShift: number;
+  /** Free line: the car it is passing (-1: none) and the side (-1 / 1) it passes on. */
+  passId: number;
+  passSide: number;
 }
 
 export interface Car {

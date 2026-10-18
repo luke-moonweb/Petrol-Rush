@@ -19,13 +19,15 @@ export interface Persona {
   slide: number;
   /** Covers the inside before a corner when a car is close behind (ai.ts blockInside). */
   blocks: boolean;
+  /** On a level with a free line: factor on the share of the width its racing line uses (planner.ts lineUse). */
+  freeLineUse: number;
 }
 
 export const PERSONAS: Record<PersonaKind, Persona> = {
-  gentle: { kind: 'gentle', brake: 0.92, gapPx: 10, passClearPx: 200, passMph: 3, slide: 0.03, blocks: false },
-  neutral: { kind: 'neutral', brake: 1, gapPx: 0, passClearPx: 160, passMph: 0, slide: 0.06, blocks: false },
-  aggressive: { kind: 'aggressive', brake: 1.06, gapPx: -2, passClearPx: 140, passMph: 0, slide: 0.15, blocks: false },
-  blocker: { kind: 'blocker', brake: 1, gapPx: 0, passClearPx: 160, passMph: 0, slide: 0.06, blocks: true },
+  gentle: { kind: 'gentle', brake: 0.92, gapPx: 10, passClearPx: 200, passMph: 3, slide: 0.03, blocks: false, freeLineUse: 0.92 },
+  neutral: { kind: 'neutral', brake: 1, gapPx: 0, passClearPx: 160, passMph: 0, slide: 0.06, blocks: false, freeLineUse: 1 },
+  aggressive: { kind: 'aggressive', brake: 1.06, gapPx: -2, passClearPx: 140, passMph: 0, slide: 0.15, blocks: false, freeLineUse: 1.1 },
+  blocker: { kind: 'blocker', brake: 1, gapPx: 0, passClearPx: 160, passMph: 0, slide: 0.06, blocks: true, freeLineUse: 1 },
 };
 
 export const PERSONA_KINDS: PersonaKind[] = ['gentle', 'neutral', 'aggressive', 'blocker'];
@@ -40,14 +42,19 @@ export interface Level {
   reaction: number;
   /** Factor on the chance of a turn-in slide. */
   slide: number;
+  /**
+   * The racing line with no lanes (ai.ts freeLine): a car keeps to its line, moved across only to pass or
+   * to keep clear of a car alongside, and each personality's line uses its own share of the width.
+   */
+  freeLine: boolean;
   /** Shares of gentle, neutral, aggressive and blocker drivers (PERSONA_KINDS order). */
   mix: [number, number, number, number];
 }
 
 export const LEVELS: Record<Difficulty, Level> = {
-  easy: { grip: 0.95, line: 0.9, reaction: 1.4, slide: 1.6, mix: [0.45, 0.4, 0.1, 0.05] },
-  normal: { grip: 1, line: 1, reaction: 1, slide: 1, mix: [0.25, 0.4, 0.2, 0.15] },
-  hard: { grip: 1.02, line: 1.04, reaction: 0.75, slide: 0.6, mix: [0.1, 0.35, 0.3, 0.25] },
+  easy: { grip: 0.95, line: 0.9, reaction: 1.4, slide: 1.6, freeLine: false, mix: [0.45, 0.4, 0.1, 0.05] },
+  normal: { grip: 1, line: 1, reaction: 1, slide: 1, freeLine: false, mix: [0.25, 0.4, 0.2, 0.15] },
+  hard: { grip: 1.02, line: 1.04, reaction: 0.75, slide: 0.6, freeLine: true, mix: [0.1, 0.35, 0.3, 0.25] },
 };
 
 /** The personality of a driver whose draw is `temper` (0..1), in the level's mix. */

@@ -33,7 +33,9 @@ export function lineUse(car: Car): number {
   const drawn = car.ai.reaction / car.ai.level.reaction;
   const t = Math.max(0, Math.min(1, (drawn - r0) / (r1 - r0)));
   const [u0, u1] = PLAN.LINE_USE;
-  return Math.min(1, (u1 - (u1 - u0) * t) * car.ai.level.line);
+  // (with a free line, each personality's line uses its own share: the aggressive driver all of it)
+  const persona = car.ai.level.freeLine ? car.ai.persona.freeLineUse : 1;
+  return Math.min(1, (u1 - (u1 - u0) * t) * car.ai.level.line * persona);
 }
 
 /**

@@ -11,7 +11,15 @@ it('incident', () => {
   const id = process.env.IN_TRACK ?? 'oval';
   const seed = Number(process.env.IN_SEED ?? 6);
   const r = new Race(
-    { ...DEFAULT_OPTIONS, ...JSON.parse(process.env.CR_OPTS ?? '{}'), track: id, cars: 20, laps: 5, qualifying: 'middle' },
+    {
+      ...DEFAULT_OPTIONS,
+      ...JSON.parse(process.env.CR_OPTS ?? '{}'),
+      ...(process.env.IN_LEVEL ? { difficulty: process.env.IN_LEVEL } : {}),
+      track: id,
+      cars: 20,
+      laps: 5,
+      qualifying: 'middle',
+    },
     seed,
     true,
     undefined,
@@ -25,7 +33,7 @@ it('incident', () => {
     const hit = r.cars.find((c) => c.contactStrength > 0 || c.spinTime > 0);
     const row = r.cars.map(
       (c) =>
-        `t ${r.time.toFixed(2)} #${c.id} ${c.ai.persona.kind.padEnd(10)} s ${c.s.toFixed(0).padStart(5)} d ${c.d.toFixed(1).padStart(6)} v ${c.speed.toFixed(0)} lane ${c.ai.lane} line ${c.ai.onLine ? 1 : 0} blk ${c.ai.blockLane ?? '-'} sl ${c.ai.slide} ${c.braking ? 'B' : ''}${c.contactStrength > 0 ? ' HIT' : ''}`,
+        `t ${r.time.toFixed(2)} #${c.id} ${c.ai.persona.kind.padEnd(10)} s ${c.s.toFixed(0).padStart(5)} d ${c.d.toFixed(1).padStart(6)} v ${c.speed.toFixed(0)} lane ${c.ai.lane} line ${c.ai.onLine ? 1 : 0} sh ${c.ai.freeShift.toFixed(0)} pass ${c.ai.passId} blk ${c.ai.blockLane ?? '-'} sl ${c.ai.slide} ${c.braking ? 'B' : ''}${c.contactStrength > 0 ? ' HIT' : ''}`,
     );
     hist.push(row);
     if (hist.length > 90) hist.shift();
