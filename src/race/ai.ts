@@ -4,7 +4,7 @@ import { PIT_FUEL_MARGIN_LAPS } from '../track/pitAi';
 import { type Car, isServicing } from './car';
 import { canSaveToFinish, lapsOfFuel, lapsToFinish } from './fuel';
 import { type OilSlick, oilRadius } from './oil';
-import { brakeAt, type DriveInput, maxCurvature } from './physics';
+import { brakeAt, type DriveInput, gripAt, maxCurvature } from './physics';
 import { gripFrac, planSpeed } from './planner';
 
 export interface AiView {
@@ -293,7 +293,7 @@ function steerAndPedals(car: Car, track: Track, pitLane: number | null, plan: Pl
     const v = car.speed * pxm;
     const G = CONFIG.GRIP;
     const fLong = out.brake ? brakeAt(car.speed) / CONFIG.BRAKE_MPH_S_HIGH : 0;
-    const mu = G.GRIP * Math.sqrt(1 - (G.FC_K * fLong) ** 2);
+    const mu = gripAt(v) * Math.sqrt(1 - (G.FC_K * fLong) ** 2);
     const cap = Math.min(1, mu / (v * v * maxCurvature(v)));
     out.steer = Math.max(-cap, Math.min(cap, out.steer));
   }

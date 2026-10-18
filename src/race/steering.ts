@@ -5,7 +5,7 @@ import type { Track } from '../track/common';
 import { laneCurvature } from '../track/curvature';
 import { OVAL } from '../track/ovalTrack';
 import type { Car } from './car';
-import { brakeAt, curvatureAssist, maxCurvature, SteerRamp } from './physics';
+import { brakeAt, curvatureAssist, gripAt, maxCurvature, SteerRamp } from './physics';
 
 /** What the player steering reads from a track: curvature and the road heading. */
 export type SteerTrack = Pick<Track, 'curves' | 'headingAt'>;
@@ -34,7 +34,7 @@ function gripLeft(car: Car, brake: boolean): number {
   const C = CONFIG;
   const G = C.GRIP;
   const fLong = brake ? brakeAt(car.speed) / C.BRAKE_MPH_S_HIGH : 0;
-  return G.GRIP * Math.sqrt(1 - (G.FC_K * fLong) ** 2);
+  return gripAt(car.speed * C.PX_PER_MPH) * Math.sqrt(1 - (G.FC_K * fLong) ** 2);
 }
 
 export class PlayerSteering {

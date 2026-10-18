@@ -65,6 +65,8 @@ export interface Car {
   gripUse: number;
   /** Grip model: demand above the limit (0 when within grip). */
   gripOver: number;
+  /** Grip model: the way the driver steers (+1 = heading increasing, -1, 0 straight), for wall contacts. */
+  turnDir: number;
   /** Grip model: the rear has let go (oversteer). */
   rearLoose: boolean;
   /** Grip model: 0..1 build-up towards the rear letting go. */
