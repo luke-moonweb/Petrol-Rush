@@ -26,6 +26,8 @@ export interface AiState {
   mergeWait: number;
   /** Grip model: the car leaving the pits has committed to merging (racing cars allow for it). */
   merging: boolean;
+  /** Grip model: heading for the pit entry but held on its line by traffic (counted there, not on the pit approach line). */
+  pitHeld: boolean;
   /** Grip model: the last pit stop was skipped (the next one may not be). */
   skipped: boolean;
   /** Running estimate of the fuel one lap takes, from the laps driven (race/fuel.ts). */

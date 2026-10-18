@@ -172,6 +172,7 @@ export class Race {
         oilTime: 0,
         mergeWait: 0,
         merging: false,
+        pitHeld: false,
         skipped: false,
         fuelPerLap: nominalLapFuel(this.track) * (1 + CONFIG.FUEL.EST_MARGIN),
         lapFuel: -1,
@@ -202,7 +203,7 @@ export class Race {
       car.contactStrength = 0;
     }
     const track = this.track;
-    const view = { track, cars: this.cars, started: this.started, laps: this.laps, time: this.time, oil: this.oil };
+    const view = { track, cars: this.cars, started: this.started, laps: this.laps, time: this.time, oil: this.oil, pitAuto: this.pitAuto };
     for (const car of this.cars) car.draft = draftOf(car, this.cars, track);
     for (const car of this.cars) {
       const own = car.isPlayer && !this.playerAI && !this.pitAuto && !this.autoPlayer;
