@@ -7,8 +7,8 @@ exports[`screens, headless > a race on a Grand Prix circuit, top-down and in the
     "hash": "f853c503",
   },
   "topDown": {
-    "calls": 88906,
-    "hash": "9ecbfc08",
+    "calls": 88696,
+    "hash": "7f370f67",
   },
 }
 `;
@@ -26,11 +26,11 @@ exports[`screens, headless > title → race menu → settings → a race with th
 {
   "cockpit": {
     "calls": 5004,
-    "hash": "a9e898d2",
+    "hash": "5fc3eea4",
   },
   "paused": {
     "calls": 4710,
-    "hash": "faa0d7ab",
+    "hash": "a45c7985",
   },
   "raceMenu": {
     "calls": 3101,
@@ -38,7 +38,7 @@ exports[`screens, headless > title → race menu → settings → a race with th
   },
   "raceMenuLive": {
     "calls": 4851,
-    "hash": "99bfff73",
+    "hash": "32d9e419",
   },
   "results": {
     "calls": 14651,

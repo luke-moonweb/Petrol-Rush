@@ -3,7 +3,7 @@ import { PIT_SOON_LAPS, stepCabin } from '../../gfx/fpv/cabin';
 import { cockpitOverlayMs } from '../../gfx/fpv/timing';
 import { drawCockpitView, prewarmCockpitView, prewarmScene } from '../../gfx/fpv/view';
 import { Particles } from '../../gfx/particles';
-import { driverName } from '../../gfx/vehicles';
+import { driverName, prewarmPlayerCar } from '../../gfx/vehicles';
 import { drawCars, drawOil, drawTrack, trackCanvas } from '../../gfx/world';
 import { keyLabel } from '../../input';
 import { inFrame, layout } from '../../layout';
@@ -349,6 +349,7 @@ export class RaceState implements State {
       if (this.lights.t >= this.lights.outAt + 1.5) this.lights = null;
       if (!this.race.started) {
         prewarmScene(this.race.track);
+        prewarmPlayerCar(this.race.player.colorIdx);
         this.game.audio.setEngine(drive.gas ? 70 : 10, true, drive.gas);
         return;
       }
@@ -363,7 +364,7 @@ export class RaceState implements State {
     this.camera.update(this.race.track, focus, dt);
 
     const used = this.race.pitAuto ? this.race.playerDrive : drive;
-    this.sound.update(dt, this.race, used, this.camera.at(this.race.track, focus, focus.x, focus.y).x, this.cockpit);
+    this.sound.update(dt, this.race, used, this.camera.at(this.race.track, focus, focus.x, focus.y, 1).x, this.cockpit);
     this.notices.update(this.race, dt, this.game.audio);
 
     if (this.race.player.finished || (this.watched && this.race.raceOver())) {
@@ -412,7 +413,7 @@ export class RaceState implements State {
         ix,
         iy,
         ih,
-        steer: this.controls.steerVis,
+        steer: this.controls.steerShown(a),
         time: race.time,
         touch,
         warn,
@@ -422,7 +423,7 @@ export class RaceState implements State {
         pixelScale,
       });
     } else {
-      this.renderTopDown(g, race, ix, iy, ih);
+      this.renderTopDown(g, race, ix, iy, ih, a);
       prewarmCockpitView(g, view, race.player.colorIdx, this.game.touch);
     }
 
@@ -445,9 +446,10 @@ export class RaceState implements State {
     ix: (c: Car) => number,
     iy: (c: Car) => number,
     ih: (c: Car) => number,
+    alpha: number,
   ): void {
     const focus = this.watched ?? race.player;
-    const cam = this.camera.at(race.track, focus, Math.round(ix(focus)), Math.round(iy(focus)));
+    const cam = this.camera.at(race.track, focus, Math.round(ix(focus)), Math.round(iy(focus)), alpha);
     g.save();
     const view = layout.view;
     g.translate(view.x, view.y);
@@ -458,7 +460,7 @@ export class RaceState implements State {
     drawOil(g, race.oil, cam);
     this.particles.renderSmoke(g, cam);
 
-    drawCars(g, race.cars, cam, ix, iy, ih);
+    drawCars(g, race.cars, cam, ix, iy, ih, race.player);
     this.particles.renderSparks(g, cam);
     drawMarker(g, Math.round(ix(race.player)) - cam.x, Math.round(iy(race.player)) - cam.y - 26, PR.teal);
     if (focus !== race.player) drawMarker(g, Math.round(ix(focus)) - cam.x, Math.round(iy(focus)) - cam.y - 26, PR.amber);

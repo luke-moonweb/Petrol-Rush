@@ -11,12 +11,22 @@ export class PlayerControls {
   private reverseHeld = false;
   /** Seconds left of the STOP TO ENGAGE REVERSE hint. */
   reverseHint = 0;
-  /** The steering wheel as drawn in the cockpit, eased. */
-  steerVis = 0;
+  // The steering wheel in the cockpit after this step and the step before (see `steerShown`).
+  private steerVis = 0;
+  private prevSteerVis = 0;
 
   reset(): void {
     this.steering.resetAssist();
     this.reverseHeld = false;
+    this.steerVis = this.prevSteerVis = 0;
+  }
+
+  /**
+   * The steering wheel as drawn in the cockpit, between the last two steps like the car's heading.
+   * It follows the player's steering at once (an eased wheel would lag the turning view).
+   */
+  steerShown(alpha: number): number {
+    return this.prevSteerVis + (this.steerVis - this.prevSteerVis) * alpha;
   }
 
   update(input: Input, race: Race, dt: number): DriveInput {
@@ -34,8 +44,10 @@ export class PlayerControls {
     const st = this.steering.update(p, steerKey, dt, drive.brake);
     drive.steer = race.pitAuto ? 0 : st.steer;
     drive.straightTo = race.pitAuto ? undefined : st.straightTo;
-    const shownSteer = race.pitAuto ? race.playerDrive.steer : drive.steer;
-    this.steerVis += (shownSteer - this.steerVis) * Math.min(1, dt * 12);
+    this.prevSteerVis = this.steerVis;
+    // The pit autopilot's steering is eased: it is not the player's hands.
+    if (race.pitAuto) this.steerVis += (race.playerDrive.steer - this.steerVis) * Math.min(1, dt * 12);
+    else this.steerVis = drive.steer;
     this.reverseHint = Math.max(0, this.reverseHint - dt);
     if (drive.toggleReverse && !race.pitAuto && !p.reverse && Math.abs(p.speed) > CONFIG.REVERSE_TOGGLE_MAX_MPH) {
       this.reverseHint = 1.5;
