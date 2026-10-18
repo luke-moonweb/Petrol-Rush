@@ -1,12 +1,14 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { CONFIG, DEFAULT_OPTIONS, type DriveModel, type RaceRules } from '../src/config';
+import { CONFIG, DEFAULT_OPTIONS, type RaceRules } from '../src/config';
 import { aiInput } from '../src/race/ai';
 import type { Car } from '../src/race/car';
 import { NO_INPUT } from '../src/race/physics';
 import { Race } from '../src/race/race';
+import { useFdlibm } from './sim/fdlibm';
 
 // Golden master for the oval: bit-exact fingerprints of whole races. Refactors of the track,
 // physics or AI that must not change behaviour on the oval must keep these snapshots unchanged.
+// sin/cos/atan2 come from a JS port of fdlibm so the snapshots match on every platform.
 
 const f64 = new Float64Array(1);
 const u32 = new Uint32Array(f64.buffer);
@@ -77,13 +79,12 @@ function run(sc: Scenario) {
 }
 
 describe('oval golden master', () => {
-  let saved: DriveModel;
+  let restoreMath: () => void;
   beforeAll(() => {
-    saved = CONFIG.DRIVE_MODEL;
-    CONFIG.DRIVE_MODEL = 'classic';
+    restoreMath = useFdlibm();
   });
   afterAll(() => {
-    CONFIG.DRIVE_MODEL = saved;
+    restoreMath();
   });
 
   it('20 AI cars, 3 laps', () => {

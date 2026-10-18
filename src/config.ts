@@ -1,8 +1,5 @@
 export type ThrottleMode = 'cruise' | 'hold';
 
-/** 'grip': grip budget + slip angle (track-independent). 'classic': the old 150 mph corner rule. */
-export type DriveModel = 'grip' | 'classic';
-
 export const CONFIG = {
   SCREEN_W: 640,
   SCREEN_H: 480,
@@ -37,13 +34,10 @@ export const CONFIG = {
   CORNER_ASSIST_IN_S: 0.15,
   STEER_RAMP_TURN_S: 0.15,
   STEER_RELEASE_S: 0.2,
-  STRAIGHT_ASSIST_DEG: 7,
   STRAIGHT_ASSIST_RATE: 0.6,
   MIN_TURN_RADIUS: 34,
 
-  DRIVE_MODEL: 'grip' as DriveModel,
-
-  // Grip model (DRIVE_MODEL 'grip'). Lateral limit: v_lim(r) = sqrt(GRIP * r) / PX_PER_MPH.
+  // Grip model. Lateral limit: v_lim(r) = sqrt(GRIP * r) / PX_PER_MPH.
   GRIP: {
     /** px/s^2 of tyre force, shared by cornering and braking (friction ellipse). */
     GRIP: 500,
@@ -120,11 +114,7 @@ export const CONFIG = {
   },
 
   SPIN_MPH: 150,
-  SPIN_GRACE_S: 0.15,
   SLIDE_SPIN_OVER: 8,
-  SLIDE_GRIP: 0.65,
-  SLIDE_DECEL_MPH_S: 30,
-  SLIDE_MAX_S: 1,
   SPIN_MAX_S: 3,
   SPIN_END_MPH: 4,
   SPIN_RATE: 9,
@@ -134,7 +124,6 @@ export const CONFIG = {
   CRASH_SIDE_MPH: 40,
   CRASH_MIN_SPEED_MPH: 35,
   CRASH_RESTITUTION: 0.45,
-  WALL_CRASH_MPH: 45,
   REAR_SPIN_MPH: 22,
   REAR_SPIN_TURN_MPH: 14,
   SIDE_REAR_SPIN_MPH: 20,
@@ -153,7 +142,6 @@ export const CONFIG = {
 
   WALL_BOUNCE: 0.25,
   WALL_SCRUB: 0.04,
-  WALL_GLANCE: 0.42,
 
   FUEL_RANGE_LAPS: 12,
   LOW_FUEL: 0.12,

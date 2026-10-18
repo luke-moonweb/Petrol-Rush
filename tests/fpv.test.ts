@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CONFIG, DEFAULT_OPTIONS, type DriveModel } from '../src/config';
+import { CONFIG, DEFAULT_OPTIONS } from '../src/config';
 import { type CabinInput, cabinFor, cabinReadout, JOLT_GAP_S, joltOffset, LED_COUNT, ledMph, stepCabin } from '../src/gfx/fpv/cabin';
 import { Camera, clipProject, outX, outY } from '../src/gfx/fpv/engine';
 import { upright } from '../src/gfx/fpv/geom';
@@ -105,9 +105,7 @@ describe('cockpit readout', () => {
     lapsToGo: 5,
     started: true,
     finished: false,
-    finishAge: 0,
     warn: NO_WARN,
-    slideTime: 0,
     spinTime: 0,
     pitAuto: false,
     refueling: false,
@@ -118,38 +116,7 @@ describe('cockpit readout', () => {
   };
   const read = (s: Partial<CabinInput>) => cabinReadout({ ...base, ...s });
   const lit = (s: Partial<CabinInput>) => read(s).leds.filter(Boolean).length;
-  /** Run a check under the classic model (its LED strip is the one on main). */
-  const classic = (fn: () => void) => {
-    const saved: DriveModel = CONFIG.DRIVE_MODEL;
-    CONFIG.DRIVE_MODEL = 'classic';
-    try {
-      fn();
-    } finally {
-      CONFIG.DRIVE_MODEL = saved;
-    }
-  };
-
-  it('classic: lights the LED strip from 114 mph to 146 mph', () => {
-    classic(() => {
-      expect(lit({ speed: 113 })).toBe(0);
-      expect(lit({ speed: 130 })).toBe(5);
-      expect(lit({ speed: 147 })).toBe(LED_COUNT);
-      expect(read({ speed: 147 }).leds.slice(0, 4)).toEqual([PR.teal, PR.teal, PR.teal, PR.teal]);
-    });
-  });
-
-  it('classic: turns the strip red for a skid and blinks it in a turn in step with the HUD SKID lamp', () => {
-    classic(() => {
-      expect(read({ speed: 151, warn: { ...NO_WARN, skidHz: Infinity, skidLit: true } }).leds.every((c) => c === PR.red)).toBe(true);
-      for (const skidLit of [true, false]) {
-        const r = read({ speed: 151, warn: { ...NO_WARN, skidHz: 3, skidLit } });
-        expect(r.leds.every((c) => c === (skidLit ? PR.red : null))).toBe(true);
-        expect(r.lamps.skid).toBe(skidLit);
-      }
-    });
-  });
-
-  it('grip model: the strip only shows how close the car is to top speed: 140 to 180 mph, 5 mph per LED', () => {
+  it('the strip only shows how close the car is to top speed: 140 to 180 mph, 5 mph per LED', () => {
     expect(lit({ speed: 139 })).toBe(0);
     expect(lit({ speed: 140 })).toBe(1);
     expect(lit({ speed: 162 })).toBe(5);
@@ -164,47 +131,12 @@ describe('cockpit readout', () => {
     expect(read({ speed: 150, spinTime: CONFIG.SPIN_MAX_S - 0.01 }).leds).toEqual(plain);
     expect(read({ speed: 150, spinTime: 1 }).leds).toEqual(plain);
     expect(read({ speed: 150, pitAuto: true }).leds).toEqual(plain);
-    expect(read({ speed: 150, slideTime: 2 }).leds).toEqual(plain);
-    expect(read({ speed: 150, finished: true, finishAge: 0.35 }).leds).toEqual(plain);
+    expect(read({ speed: 150, finished: true }).leds).toEqual(plain);
   });
 
-  it('grip model: the SKID tell-tale follows the shown SKID lamp, and is lit through a spin', () => {
+  it('the SKID tell-tale follows the shown SKID lamp, and is lit through a spin', () => {
     for (const skidLit of [true, false]) expect(read({ warn: { ...NO_WARN, skidHz: 5, skidLit } }).lamps.skid).toBe(skidLit);
     expect(read({ warn: { ...NO_WARN, skidHz: Infinity, skidLit: true }, spinTime: 1 }).lamps.skid).toBe(true);
-  });
-
-  it('classic: flashes the whole strip when a spin starts, then chases three red LEDs', () => {
-    classic(() => {
-      const start = CONFIG.SPIN_MAX_S;
-      for (const time of [10, 10.1, 10.37]) expect(lit({ spinTime: start - 0.01, time })).toBe(LED_COUNT);
-      expect(lit({ spinTime: start - 0.2, time: 10 })).toBe(0);
-      for (const time of [11, 11.06, 11.5]) {
-        const leds = read({ spinTime: 1, time }).leds;
-        expect(leds.filter(Boolean).length).toBe(3);
-        const head = leds.findIndex((c, i) => c && !leds[(i + LED_COUNT - 1) % LED_COUNT]);
-        expect(leds[(head + 1) % LED_COUNT]).toBe(PR.red);
-        expect(leds[(head + 2) % LED_COUNT]).toBe(PR.red);
-      }
-      expect(read({ spinTime: 1 }).lamps.skid).toBe(true);
-    });
-  });
-
-  it('classic: alternates even and odd LEDs in the pit lane', () => {
-    classic(() => {
-      const a = read({ pitAuto: true, time: 10 }).leds;
-      const b = read({ pitAuto: true, time: 10.25 }).leds;
-      expect(a.filter(Boolean).length + b.filter(Boolean).length).toBe(LED_COUNT);
-      for (let i = 0; i < LED_COUNT; i++) expect(!!a[i]).not.toBe(!!b[i]);
-    });
-  });
-
-  it('classic: cascades the strip after the finish and then goes dark', () => {
-    classic(() => {
-      expect(lit({ finished: true, finishAge: 0.01 })).toBe(1);
-      expect(lit({ finished: true, finishAge: 0.35 })).toBe(5);
-      expect(read({ finished: true, finishAge: 0.8 }).leds[0]).toBe(PR.amber);
-      expect(lit({ finished: true, finishAge: 2.5 })).toBe(0);
-    });
   });
 
   it('mirrors the start lights and flashes green at lights out', () => {

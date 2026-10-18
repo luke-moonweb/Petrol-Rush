@@ -77,7 +77,8 @@ Open the address printed by Vite (by default http://localhost:5173).
 | `npm run dev` | Dev server with hot reload |
 | `npm run build` | Type-check and production build into `dist/` |
 | `npm run preview` | Serve the production build locally |
-| `npm test` | Run the test suite (Vitest) |
+| `npm test` | Fast tests (~5 s, skips the full-race simulations) |
+| `npm run test:all` | Every test, including full-race simulations (~20 s; CI runs this) |
 | `npm run typecheck` | TypeScript check only |
 | `npm run lint` | Lint and check formatting (Biome) |
 | `npm run lint:fix` | Apply safe lint fixes and format the code |
@@ -129,7 +130,7 @@ browser does not support it (iPhone Safari).
   quick tap is enough for a small slide) or it spins. A slide costs more time than braking would
   have. Braking or lifting off in the corner uses grip too: the nose tucks in and the tail gets
   lighter.
-- **Warnings:** the red zone on the speedometer and an optional bar above your car show the limit
+- **Warnings:** the red zone on the speedometer shows the limit
   speed of the next corner; the **SKID** lamp lights only when the car really slides, blinks faster
   the more it slides and stays lit through a spin. The cockpit LED strip shows the start lights,
   then how close you are to top speed (one LED per 5 mph from 140, all lit at 180).
@@ -153,7 +154,6 @@ browser does not support it (iPhone Safari).
 |---|---|
 | Engine sound | V8 MUSCLE · JET TURBINE · 8-BIT ARCADE · RC TOY |
 | Crash penalties | On / Off |
-| Speed warning bar | On / Off |
 | Collisions | **Realistic** – the car hit in the rear or rear side spins, the hitter does not · **Classic** – in a hard crash both cars spin |
 | Race | Track, number of cars (up to 20), laps (1–100), your car colour, starting position (last / middle / pole / random) |
 
@@ -189,10 +189,9 @@ Handy for testing and tuning:
 | `?cars=20&laps=3` | Race options |
 | `?seed=123` | Repeatable race |
 | `?track=harbour` | Track for `?quick` and QUICK RACE: `oval`, `harbour`, `desert`, `city`, `forest`, `finale` |
-| `?debug` | Debug overlay, `]` speeds up time ×4/×8, `window.__game` and `window.__race` in the console |
+| `?debug` | Debug overlay, `]` speeds up time ×4/×8, `window.__game` and `window.__race` in the console, `__ff(seconds)` fast-forwards the game at once |
 | `?overlay=URL` | Semi-transparent 640×480 image over the screen for layout comparison |
 | `?touch` / `?touch=0` | Force touch controls on / off, regardless of the device |
-| `?drive=classic` | The old driving model (150 mph corner rule) for comparison; `?drive=grip` (default) is the grip model |
 
 ## 🧱 How it's built
 
@@ -237,7 +236,8 @@ tests/             Vitest: oval golden master, track geometry, lap counting, phy
 ## 🧪 Tests
 
 ```bash
-npm test
+npm test          # fast tier, ~5 s
+npm run test:all  # everything, ~20 s – run before pushing
 ```
 
 The suite includes headless simulations of complete 20-car races on every circuit (including all

@@ -1,14 +1,13 @@
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { CONFIG, DEFAULT_OPTIONS, type DriveModel } from '../src/config';
+import { describe, expect, it } from 'vitest';
+import { CONFIG, DEFAULT_OPTIONS } from '../src/config';
 import type { Car } from '../src/race/car';
-import { collideCars, cornerAssist, limitMph, SteerRamp, skidWarning, stepCar } from '../src/race/physics';
+import { collideCars, limitMph, SteerRamp, stepCar } from '../src/race/physics';
 import { Race } from '../src/race/race';
 import { wrapAngle } from '../src/track/common';
 import { laneCurvature } from '../src/track/curvature';
 import { gpTracks } from '../src/track/gp';
-import { pointAt, project, S_BOTTOM, S_TURN1, trackHeadingAt } from '../src/track/oval';
+import { pointAt, project, S_TURN1 } from '../src/track/oval';
 import { OVAL } from '../src/track/ovalTrack';
-import type { SegmentTrack } from '../src/track/segment';
 import { CurveTrack } from './sim/curves';
 import { runCurve } from './sim/drivers';
 
@@ -41,73 +40,6 @@ function driveThroughTurn(car: Car, holdGas: boolean): boolean {
   }
   return spun;
 }
-
-// The old model ships behind ?drive=classic for A/B playtests; these pin its corner rules.
-describe('classic driving model (?drive=classic)', () => {
-  let saved: DriveModel;
-  beforeAll(() => {
-    saved = CONFIG.DRIVE_MODEL;
-    CONFIG.DRIVE_MODEL = 'classic';
-  });
-  afterAll(() => {
-    CONFIG.DRIVE_MODEL = saved;
-  });
-
-  it('slightly over 150 mph in a corner: slide (slows down, no spin)', () => {
-    const car = carAt(S_TURN1 - 150, 156);
-    let slid = false;
-    for (let i = 0; i < 60 * 3; i++) {
-      const st = project(car.x, car.y);
-      const t = pointAt(st.s + 60, 0);
-      const diff = wrapAngle(Math.atan2(t.y - car.y, t.x - car.x) - car.heading);
-      stepCar(car, { steer: Math.max(-1, Math.min(1, diff * 5)), gas: false, brake: false, toggleReverse: false }, 1 / 60, OVAL);
-      if (car.slideTime > 0) slid = true;
-      expect(car.spinTime).toBe(0);
-    }
-    expect(slid).toBe(true);
-    expect(car.speed).toBeLessThanOrEqual(CONFIG.SPIN_MPH);
-  });
-
-  it('well over 150 mph in a corner: spin', () => {
-    expect(driveThroughTurn(carAt(S_TURN1 - 150, 165), false)).toBe(true);
-  });
-
-  it('corner assist: guides the car in a corner, does nothing on a straight', () => {
-    expect(cornerAssist(carAt(S_TURN1 + 100, 145), OVAL)).toBeLessThan(0);
-    expect(cornerAssist(carAt(S_TURN1 + 100, 145), OVAL)).toBeGreaterThan(-0.5);
-    expect(cornerAssist(carAt(S_BOTTOM + 100, 145), OVAL)).toBe(0);
-    expect(cornerAssist(carAt(S_TURN1 + 100, 20), OVAL)).toBe(0);
-  });
-
-  it('skid lamp: red above 150 mph anywhere on track, blinks in a corner', () => {
-    expect(skidWarning(carAt(S_BOTTOM + 50, 150), OVAL)).toBe(0);
-    expect(skidWarning(carAt(S_BOTTOM + 50, 155), OVAL)).toBe(1);
-    expect(skidWarning(carAt(S_TURN1 + 80, 160), OVAL)).toBe(2);
-    expect(skidWarning(carAt(S_TURN1 + 80, 140), OVAL)).toBe(0);
-  });
-
-  it('on a straight a small angle straightens out when not steering', () => {
-    const car = carAt(S_BOTTOM + 100, 150);
-    car.heading = car.moveAngle = 0.08;
-    for (let i = 0; i < 60; i++) stepCar(car, { steer: 0, gas: false, brake: false, toggleReverse: false }, 1 / 60, OVAL);
-    expect(Math.abs(wrapAngle(trackHeadingAt(car.x, car.y) - car.heading))).toBeLessThan(0.005);
-  });
-
-  it('realistic mode: in a corner a weaker rear hit is enough to spin', () => {
-    const at = (s: number, mph: number, c: Car) => {
-      const p = pointAt(s, 0);
-      Object.assign(c, { x: p.x, y: p.y, heading: p.heading, moveAngle: p.heading, speed: mph, s, d: 0 });
-    };
-    const [a, b] = crashPair(0, 0);
-    at(S_TURN1 + 100, 150, a);
-    at(S_TURN1 + 133, 132, b);
-    collideCars([a, b], OVAL, 'realistic');
-    expect(b.spinTime).toBeGreaterThan(0);
-    const [c, d] = crashPair(150, 132);
-    collideCars([c, d], OVAL, 'realistic');
-    expect(d.spinTime).toBe(0);
-  });
-});
 
 describe('driving model', () => {
   it('no slide in a corner at 150 mph', () => {
@@ -265,6 +197,17 @@ describe('crashes', () => {
     expect(culprit).toBe(b);
   });
 
+  it('realistic mode: a rear hit spins a car with loaded tyres (cornering) at a lower closing speed', () => {
+    // closing at 18 mph: above REAR_SPIN_TURN_MPH, below REAR_SPIN_MPH
+    const [a, b] = crashPair(150, 132);
+    b.gripUse = CONFIG.GRIP.LOADED_USE;
+    collideCars([a, b], OVAL, 'realistic');
+    expect(b.spinTime).toBeGreaterThan(0);
+    const [c, d] = crashPair(150, 132);
+    collideCars([c, d], OVAL, 'realistic');
+    expect(d.spinTime).toBe(0);
+  });
+
   it('realistic mode: side-by-side rubbing does not cause a spin', () => {
     const race = new Race({ ...DEFAULT_OPTIONS, cars: 2 }, 5);
     const [a, b] = race.cars as [Car, Car];
@@ -281,98 +224,44 @@ describe('crashes', () => {
 describe('driving model on Grand Prix circuits', () => {
   const tracks = gpTracks();
 
-  function carOn(track: SegmentTrack, s: number, d: number, mph: number): Car {
-    const race = new Race({ ...DEFAULT_OPTIONS, cars: 1 }, 3, false, undefined, track);
-    const car = race.player;
-    const p = track.pointAt(s, d);
-    Object.assign(car, { x: p.x, y: p.y, heading: p.heading, moveAngle: p.heading, speed: mph, s, d });
-    return car;
-  }
-
-  /** Follows the inside lane through the corner with the given cruise speed; true if the car spun. */
-  function followLane(track: SegmentTrack, car: Car, lane: number): boolean {
-    let spun = false;
-    for (let i = 0; i < 60 * 3; i++) {
-      const st = track.project(car.x, car.y);
-      const t = track.pointAt(st.s + 60, lane);
-      const diff = wrapAngle(Math.atan2(t.y - car.y, t.x - car.x) - car.heading);
-      stepCar(car, { steer: Math.max(-1, Math.min(1, diff * 5)), gas: false, brake: false, toggleReverse: false }, 1 / 60, track);
-      if (car.spinTime > 0) spun = true;
-    }
-    return spun;
-  }
-
-  it('corner assist turns the way the corner turns', () => {
-    for (const track of tracks) {
-      for (const g of track.segments) {
-        if (g.kind !== 'arc') continue;
-        const car = carOn(track, g.s0 + g.len / 2, 0, 145);
-        expect(Math.sign(cornerAssist(car, track))).toBe(g.corner.dir);
-      }
-    }
-  });
-
-  it('classic model: every corner can be taken at 150 mph on its inside lane, and 165 mph spins', () => {
-    const saved = CONFIG.DRIVE_MODEL;
-    CONFIG.DRIVE_MODEL = 'classic';
-    try {
-      for (const track of tracks) {
-        for (const g of track.segments) {
-          if (g.kind !== 'arc' || g.len < 120) continue;
-          const inside = -28.5 * -g.corner.dir;
-          expect(followLane(track, carOn(track, g.s0 - 150, inside, 150), inside)).toBe(false);
-          expect(followLane(track, carOn(track, g.s0 - 150, inside, 165), inside)).toBe(true);
-        }
-      }
-    } finally {
-      CONFIG.DRIVE_MODEL = saved;
-    }
-  });
-
   // Grip model: the limit comes from the radius, so there is no single corner speed any more. Each
   // corner (its own radius and length, open plane) is driven by the realistic key driver.
   it('grip model: every corner is drivable at its lane limit on all lanes; 40 % over, insisting, runs well wide', () => {
-    const saved = CONFIG.DRIVE_MODEL;
-    CONFIG.DRIVE_MODEL = 'grip';
-    try {
-      const seen = new Set<string>();
-      for (const track of tracks) {
-        for (const g of track.segments) {
-          if (g.kind !== 'arc') continue;
-          const key = `${g.r}/${g.len.toFixed(0)}/${g.corner.dir}`;
-          if (seen.has(key)) continue;
-          seen.add(key);
-          const k = g.corner.dir / g.r;
-          const t = new CurveTrack([
-            { len: 700, k: 0 },
-            { len: g.len, k },
-            { len: 700, k: 0 },
-          ]);
-          for (const d of [-28.5, 0, 28.5]) {
-            const lim = limitMph(laneCurvature(k, d));
-            const at = runCurve(t, { d, mph: Math.min(CONFIG.MAX_MPH, lim), driver: 'human', gas: 'hold', T: 5, runUp: 300 });
-            expect(at.spun, `${track.id} ${key} d ${d}`).toBe(false);
-            // stays on the tarmac (the outer edge is HALF_W - CAR_R from the centre line)
-            expect(at.wide, `${track.id} ${key} d ${d}`).toBeLessThan(40 + 28.5 * Math.sign(d) * Math.sign(k));
-          }
-          const inside = 28.5 * Math.sign(k);
-          const lim = limitMph(laneCurvature(k, inside));
-          if (lim * 1.4 > CONFIG.MAX_MPH || g.len < 160) continue;
-          const over = runCurve(t, {
-            d: inside,
-            mph: lim * 1.4,
-            driver: 'human',
-            gas: 'hold',
-            insist: true,
-            noCatch: true,
-            T: 5,
-            runUp: 300,
-          });
-          expect(over.spun || over.wide > 20, `${track.id} ${key} x1.4`).toBe(true);
+    const seen = new Set<string>();
+    for (const track of tracks) {
+      for (const g of track.segments) {
+        if (g.kind !== 'arc') continue;
+        const key = `${g.r}/${g.len.toFixed(0)}/${g.corner.dir}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        const k = g.corner.dir / g.r;
+        const t = new CurveTrack([
+          { len: 700, k: 0 },
+          { len: g.len, k },
+          { len: 700, k: 0 },
+        ]);
+        for (const d of [-28.5, 0, 28.5]) {
+          const lim = limitMph(laneCurvature(k, d));
+          const at = runCurve(t, { d, mph: Math.min(CONFIG.MAX_MPH, lim), driver: 'human', gas: 'hold', T: 5, runUp: 300 });
+          expect(at.spun, `${track.id} ${key} d ${d}`).toBe(false);
+          // stays on the tarmac (the outer edge is HALF_W - CAR_R from the centre line)
+          expect(at.wide, `${track.id} ${key} d ${d}`).toBeLessThan(40 + 28.5 * Math.sign(d) * Math.sign(k));
         }
+        const inside = 28.5 * Math.sign(k);
+        const lim = limitMph(laneCurvature(k, inside));
+        if (lim * 1.4 > CONFIG.MAX_MPH || g.len < 160) continue;
+        const over = runCurve(t, {
+          d: inside,
+          mph: lim * 1.4,
+          driver: 'human',
+          gas: 'hold',
+          insist: true,
+          noCatch: true,
+          T: 5,
+          runUp: 300,
+        });
+        expect(over.spun || over.wide > 20, `${track.id} ${key} x1.4`).toBe(true);
       }
-    } finally {
-      CONFIG.DRIVE_MODEL = saved;
     }
   });
 });

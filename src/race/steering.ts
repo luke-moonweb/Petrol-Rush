@@ -5,10 +5,10 @@ import type { Track } from '../track/common';
 import { laneCurvature } from '../track/curvature';
 import { OVAL } from '../track/ovalTrack';
 import type { Car } from './car';
-import { brakeAt, cornerAssist, curvatureAssist, maxCurvature, SteerRamp } from './physics';
+import { brakeAt, curvatureAssist, maxCurvature, SteerRamp } from './physics';
 
-/** What the player steering reads from a track: curvature (grip), corners (classic) and the road heading. */
-export type SteerTrack = Pick<Track, 'curves' | 'cornerAt' | 'headingAt'>;
+/** What the player steering reads from a track: curvature and the road heading. */
+export type SteerTrack = Pick<Track, 'curves' | 'headingAt'>;
 
 export interface PlayerSteer {
   steer: number;
@@ -57,35 +57,24 @@ export class PlayerSteering {
     this.pushDepth = 0;
   }
 
-  /** Grip model: 0..1, how far a key held past the cap has opened the steering towards full lock. */
+  /** 0..1, how far a key held past the cap has opened the steering towards full lock. */
   get overdrive(): number {
     const G = CONFIG.GRIP;
     return Math.max(0, Math.min(1, (this.pushTime - G.OVERDRIVE_S) / G.OVERDRIVE_RAMP_S));
   }
 
-  /** key: -1 left, 0 none, 1 right. brake: the brake pedal (grip model: braking leaves less grip to steer with). */
+  /** key: -1 left, 0 none, 1 right. brake: the brake pedal (braking leaves less grip to steer with). */
   update(car: Car, key: number, dt: number, brake = false): PlayerSteer {
     const C = CONFIG;
-    const grip = C.DRIVE_MODEL === 'grip';
-    let assist: number;
-    let turn: boolean;
-    let straightTo: number | undefined;
-    let kLane = 0;
-    if (grip) {
-      const k = this.track.curves().at(car.s);
-      turn = k !== 0;
-      kLane = laneCurvature(k, car.d);
-      assist = curvatureAssist(car, kLane);
-      if (!turn) straightTo = this.track.headingAt(car.x, car.y);
-    } else {
-      assist = cornerAssist(car, this.track);
-      turn = this.track.cornerAt(car.x, car.y) !== null;
-    }
+    const k = this.track.curves().at(car.s);
+    const turn = k !== 0;
+    const kLane = laneCurvature(k, car.d);
+    const assist = curvatureAssist(car, kLane);
+    const straightTo = turn ? undefined : this.track.headingAt(car.x, car.y);
     const step = dt / C.CORNER_ASSIST_IN_S;
     this.assistLevel = assist !== 0 ? Math.min(1, this.assistLevel + step) : Math.max(0, this.assistLevel - step);
     const keySteer = this.ramp.update(key, dt, turn);
     const steer = Math.max(-1, Math.min(1, keySteer + assist * this.assistLevel));
-    if (!grip) return { steer, straightTo };
     return { steer: this.capped(car, key, steer, dt, brake, kLane), straightTo };
   }
 

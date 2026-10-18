@@ -1,15 +1,13 @@
-// What the HUD, the cockpit and the sound tell the player about grip.
-//
-// Grip model: the SKID lamp shows real slip (blinking faster as the slip angle grows, steady in a
-// spin), and the speedo red arc show the limit speed of the next corner. (The cockpit
-// LED strip only shows the start lights and how close the car is to top speed, see cabin.ts.)
-// Classic model: today's 150 mph rule (SKID above 150, blinking in a turn; LEDs ramp up to 150).
+// What the HUD, the cockpit and the sound tell the player about grip: the SKID lamp shows real slip
+// (blinking faster as the slip angle grows, steady in a spin), and the speedo red arc shows the
+// limit speed of the next corner. (The cockpit LED strip only shows the start lights and how close
+// the car is to top speed, see cabin.ts.)
 import { CONFIG } from '../config';
 import { CAR_R, HALF_W, type Track, wrapAngle } from '../track/common';
 import { laneCurvature } from '../track/curvature';
 import { OVAL } from '../track/ovalTrack';
 import type { Car } from './car';
-import { limitMph, skidWarning } from './physics';
+import { limitMph } from './physics';
 
 export interface Warn {
   /** SKID lamp blink rate in Hz: 0 = off, Infinity = steady. */
@@ -38,12 +36,11 @@ export const WARN = {
 
 /**
  * What the HUD and the cockpit show, smoothed over frames: the SKID blink keeps its phase while
- * its rate changes (no flicker), and the red arc uses one eased limit. The
- * classic model keeps its old time-locked blink (floor(time x hz x 2), as on main).
+ * its rate changes (no flicker), and the red arc uses one eased limit.
  */
 export class WarnDisplay {
   private phase = 0;
-  arcFrom: number = CONFIG.SPIN_MPH;
+  arcFrom: number = CONFIG.MAX_MPH;
 
   constructor() {
     this.reset();
@@ -51,24 +48,19 @@ export class WarnDisplay {
 
   reset(): void {
     this.phase = 0;
-    this.arcFrom = CONFIG.DRIVE_MODEL === 'grip' ? CONFIG.MAX_MPH : CONFIG.SPIN_MPH;
+    this.arcFrom = CONFIG.MAX_MPH;
   }
 
   /** Advance by dt with the player's warning this step. */
   update(w: Warn, dt: number): void {
     // the phase (in cycles) restarts lit at each onset
     this.phase = w.skidHz > 0 && w.skidHz !== Infinity ? (this.phase + w.skidHz * dt) % 1 : 0;
-    if (CONFIG.DRIVE_MODEL !== 'grip') return;
     this.arcFrom += (w.vRef - this.arcFrom) * Math.min(1, dt / WARN.ARC_EASE_S);
   }
 
-  /** The warning as shown for the player's warning w, or with the race not running (null), at race time. */
-  shown(w: Warn | null, time: number): Warn {
+  /** The warning as shown for the player's warning w, or with the race not running (null). */
+  shown(w: Warn | null): Warn {
     const base = w ?? NO_WARN;
-    if (CONFIG.DRIVE_MODEL !== 'grip') {
-      const hz = base.skidHz;
-      return { ...base, vRef: this.arcFrom, skidLit: hz === Infinity || (hz > 0 && Math.floor(time * hz * 2) % 2 === 0) };
-    }
     const skidLit = base.skidHz === Infinity || (base.skidHz > 0 && this.phase < 0.5);
     return { ...base, skidLit, vRef: this.arcFrom, band: WARN.BAND * this.arcFrom };
   }
@@ -113,11 +105,6 @@ export function slideAmount(car: Car): number {
 }
 
 export function warnings(car: Car, track: Track = OVAL): Warn {
-  if (CONFIG.DRIVE_MODEL !== 'grip') {
-    const level = skidWarning(car, track);
-    const skidHz = level === 1 ? Infinity : level === 2 ? 3 : 0;
-    return { ...NO_WARN, skidHz, skidLit: skidHz > 0 };
-  }
   const slip = Math.abs(wrapAngle(car.heading - car.moveAngle));
   // spinning: steady, as the cockpit tell-tale
   let skidHz = car.spinTime > 0 ? Infinity : 0;
