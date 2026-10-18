@@ -11,9 +11,10 @@ parameters. This file covers only what saves time when making changes.
 | `npx vitest run tests/<file>.test.ts` | 0.1–2 s | while iterating: run only the tests for the area you change |
 | `npm test` | ~5 s | after a change: the fast tier, which skips the full-race simulations |
 | `npx tsc --noEmit` / `npx biome check --write .` | ~2 s each | before committing |
-| `npm run test:all` | ~35–45 s | **once**, before a commit that touches `src/race`, `src/track` or the AI; CI runs it too |
+| `npm run test:all` | ~20 s | **once**, before a commit that touches `src/race`, `src/track` or the AI; CI runs it too |
 
-- The slow tier (`vite.config.ts` → `SLOW`): `gripGate` (40 seeds, ~33 s in a single test), `gripRace`, `gp-races`, `grandprix`.
+- The slow tier (`vite.config.ts` → `SLOW`): `gate/*` (the 40-seed grip gate split into 8 files of 5 seeds, so they run in parallel; logic in `tests/sim/gate.ts`), `gripRace`, `gp-races`, `grandprix`.
+- To run one gate seed quickly while debugging, call `runGateSeed(seed)` from `tests/sim/gate.ts`.
 - Don't loop full-suite runs to "check determinism": the simulation is deterministic per seed.
 - `vitest related` doesn't help much here, because nearly every test imports `Race` and so pulls in the slow tier.
 - The golden masters (`golden.test.ts`, `oval-golden.test.ts`) pin the **classic** model bit for bit.
