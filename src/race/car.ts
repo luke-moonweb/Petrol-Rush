@@ -10,7 +10,12 @@ export interface AiState {
   pitPhase: PitPhase;
   /** Index of the car's own pit box. */
   box: number;
+  /** The driver stops once the tank is down to this many laps of the oval (if it cannot finish). */
   pitFuelLaps: number;
+  /** 0..1: how readily the driver lifts to stretch the fuel to the finish (race/fuel.ts). */
+  fuelSave: number;
+  /** Saving fuel this step: a lower top speed. */
+  economy: boolean;
   stuckTime: number;
   reaction: number;
   hazardTime: number;
@@ -23,6 +28,11 @@ export interface AiState {
   merging: boolean;
   /** Grip model: the last pit stop was skipped (the next one may not be). */
   skipped: boolean;
+  /** Running estimate of the fuel one lap takes, from the laps driven (race/fuel.ts). */
+  fuelPerLap: number;
+  /** Fuel at the last start/finish crossing; -1 before the first. */
+  lapFuel: number;
+  refuelledThisLap: boolean;
 }
 
 export interface Car {
@@ -40,6 +50,8 @@ export interface Car {
   speed: number;
   reverse: boolean;
   fuel: number;
+  /** 0..1: how far into another car's slipstream (less fuel on the gas). */
+  draft: number;
 
   spinTime: number;
   spinDir: number;

@@ -2,32 +2,32 @@
 
 exports[`screens, headless > a race on a Grand Prix circuit draws top-down and offers no cockpit 1`] = `
 {
-  "calls": 91203,
-  "hash": "4d9eba45",
+  "calls": 91105,
+  "hash": "9778ee8a",
 }
 `;
 
 exports[`screens, headless > title → race menu → settings → a race with the cockpit, pause and menu → results; fingerprints of each screen 1`] = `
 {
   "cockpit": {
-    "calls": 5595,
-    "hash": "949359b4",
+    "calls": 5345,
+    "hash": "d09811e1",
   },
   "paused": {
-    "calls": 5301,
-    "hash": "e836d9c4",
+    "calls": 5053,
+    "hash": "7de9b791",
   },
   "raceMenu": {
     "calls": 3093,
     "hash": "32a5cb50",
   },
   "raceMenuLive": {
-    "calls": 5442,
-    "hash": "27878634",
+    "calls": 5194,
+    "hash": "d9198db0",
   },
   "results": {
-    "calls": 16074,
-    "hash": "035047fa",
+    "calls": 17737,
+    "hash": "82802b29",
   },
   "settings": {
     "calls": 2592,
@@ -39,11 +39,11 @@ exports[`screens, headless > title → race menu → settings → a race with th
   },
   "title": {
     "calls": 53494,
-    "hash": "1f9bbd3e",
+    "hash": "17aa5366",
   },
   "topDown": {
-    "calls": 2652,
-    "hash": "36abee53",
+    "calls": 2853,
+    "hash": "f394e2ec",
   },
 }
 `;

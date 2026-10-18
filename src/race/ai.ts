@@ -1,7 +1,8 @@
 import { CONFIG } from '../config';
 import { LANES, type Track, wrapAngle } from '../track/common';
 import { PIT_FUEL_MARGIN_LAPS } from '../track/pitAi';
-import { type Car, isServicing, lapsCompleted } from './car';
+import { type Car, isServicing } from './car';
+import { canSaveToFinish, lapsOfFuel, lapsToFinish } from './fuel';
 import { type OilSlick, oilRadius } from './oil';
 import { brakeAt, type DriveInput, maxCurvature } from './physics';
 import { gripFrac, planSpeed } from './planner';
@@ -73,13 +74,16 @@ interface Plan {
 function decidePitStop(car: Car, view: AiView): void {
   const ai = car.ai;
   const track = view.track;
+  // Short of the finish by no more than lifting makes up: ease off instead of stopping.
+  ai.economy = ai.pitPhase === 'none' && !car.finished && canSaveToFinish(car, track, view.laps);
   if (ai.pitPhase === 'none' && track.pit.decideAt(car.s)) {
-    const fuelLaps = car.fuel * CONFIG.FUEL_RANGE_LAPS;
-    const lapsLeft = view.laps - lapsCompleted(car);
+    const fuelLaps = lapsOfFuel(car);
+    const lapsLeft = lapsToFinish(car, track, view.laps);
     // The decision comes up to PIT_DECIDE_FROM before turn 2, so also stop when the fuel would not
     // reach the box from the next decision point a lap later.
-    const low = fuelLaps < ai.pitFuelLaps || fuelLaps < 1 + track.pit.reachLaps + PIT_FUEL_MARGIN_LAPS;
-    if (car.finished || (low && fuelLaps < lapsLeft + 0.3)) ai.pitPhase = 'entering';
+    // (pitFuelLaps are laps of the oval: on a longer circuit the same share of the tank)
+    const low = car.fuel < ai.pitFuelLaps / CONFIG.FUEL_RANGE_LAPS || fuelLaps < 1 + track.pit.reachLaps + PIT_FUEL_MARGIN_LAPS;
+    if (car.finished || (low && fuelLaps < lapsLeft + 0.3 && !ai.economy)) ai.pitPhase = 'entering';
   }
 }
 
@@ -246,6 +250,7 @@ function paceTarget(car: Car, view: AiView, plan: Plan, dt: number): void {
     plan.target = Math.max(plan.target, 12);
   }
 
+  if (ai.economy) plan.target = Math.min(plan.target, ai.topMph - CONFIG.AI_ECO.MPH);
   if (!view.started || view.time < ai.reaction) plan.target = 0;
   if (car.finished) plan.target = Math.min(plan.target, CONFIG.AI_FINISHED_MPH);
 }

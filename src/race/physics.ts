@@ -1,6 +1,7 @@
 import { CONFIG, type CollisionMode } from '../config';
 import { CAR_R, type Track, type WallNormal, wrapAngle } from '../track/common';
 import type { Car } from './car';
+import { burnFuel } from './fuel';
 
 export interface DriveInput {
   steer: number;
@@ -162,6 +163,8 @@ export function stepCar(car: Car, input: DriveInput, dt: number, track: StepTrac
   }
 
   const hasFuel = car.fuel > 0;
+  const v0 = car.speed;
+  const pulling = input.gas && hasFuel && car.spinTime <= 0 && !input.brake;
 
   if (car.spinTime > 0) {
     const k = 0.25 + 0.75 * Math.min(1, car.speed / 120);
@@ -193,7 +196,7 @@ export function stepCar(car: Car, input: DriveInput, dt: number, track: StepTrac
   const dist = car.speed * pxm * dt;
   car.x += Math.cos(car.moveAngle) * dist;
   car.y += Math.sin(car.moveAngle) * dist;
-  if (!car.finished) car.fuel = Math.max(0, car.fuel - Math.abs(dist) / (C.FUEL_RANGE_LAPS * track.len));
+  burnFuel(car, dist, v0, pulling);
 
   const hit = track.constrain(car);
   if (hit) applyWallGrip(car, hit, dt);

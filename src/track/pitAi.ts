@@ -4,7 +4,7 @@ import { isServicing } from '../race/car';
 import type { PitPlan, Track } from './common';
 
 /** Grip model: fuel margin (laps) on top of the reach to the pit lane before a stop may be skipped. */
-export const PIT_FUEL_MARGIN_LAPS = 0.15;
+export const PIT_FUEL_MARGIN_LAPS = 0.35;
 
 /** An east-bound pit road: boxes along x, a box row and a drive row at fixed y. */
 export interface PitRoad {

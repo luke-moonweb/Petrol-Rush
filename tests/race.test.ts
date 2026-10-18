@@ -190,6 +190,40 @@ describe('player pit lane autopilot', () => {
   }, 30_000);
 });
 
+describe('cutting a refuel short', () => {
+  function pitWith(gasAt: number | null, holdGasIn = false) {
+    const race = new Race({ ...DEFAULT_OPTIONS, cars: 20, laps: 5 }, 5);
+    race.start();
+    const p = race.player;
+    p.fuel = 0.3;
+    const dt = 1 / CONFIG.STEP_HZ;
+    let left = -1;
+    let back = false;
+    while (race.time < 120 && !back) {
+      if (p.ai.pitPhase === 'none' && !race.pitAuto && p.s > S_TURN2 && race.time > 5 && left < 0) p.ai.pitPhase = 'entering';
+      const view = { track: OVAL, cars: race.cars, started: true, laps: 5, time: race.time };
+      let input = race.pitAuto ? NO_INPUT : aiInput(p, view, dt);
+      if (race.pitAuto && (holdGasIn || (gasAt !== null && p.fuel >= gasAt))) input = { ...NO_INPUT, gas: true };
+      race.step(dt, input);
+      if (left < 0 && p.ai.pitPhase === 'exiting' && race.pitAuto) left = p.fuel;
+      if (left >= 0 && !race.pitAuto) back = true;
+    }
+    return { left, back };
+  }
+
+  it('pressing the gas in the box ends the refuel and the autopilot drives out', () => {
+    const r = pitWith(0.55);
+    expect(r.back).toBe(true);
+    expect(r.left).toBeGreaterThan(0.54);
+    expect(r.left).toBeLessThan(0.6);
+  }, 30_000);
+
+  it('a gas key held all the way into the box does not cut the refuel', () => {
+    const r = pitWith(null, true);
+    expect(r.left).toBeGreaterThan(0.99);
+  }, 30_000);
+});
+
 describe('oil and crash penalties', () => {
   function twoCars(rules?: { penalties: boolean; collisions: 'realistic' | 'classic' }) {
     const race = new Race({ ...DEFAULT_OPTIONS, cars: 2 }, 5, true, rules);

@@ -143,7 +143,26 @@ export const CONFIG = {
   WALL_BOUNCE: 0.25,
   WALL_SCRUB: 0.04,
 
+  /** Laps of the oval a full tank lasts at the normal pace; the same distance on every track (race/fuel.ts). */
   FUEL_RANGE_LAPS: 12,
+  /** The fuel model (race/fuel.ts). */
+  FUEL: {
+    /** FUEL_RANGE_LAPS times the oval's length (tests/fuel.test.ts checks it). */
+    RANGE_PX: 54_860,
+    /** Work (mph^2) one lap of the oval takes at the normal pace. */
+    LAP_WORK: 76700,
+    /** On the gas: work per mph*s driven (at least COAST_MPH_S, so coasting is never free). */
+    DRAG: 25,
+    /** Right behind another car: the share of the drag saved. */
+    DRAFT_CUT: 0.12,
+    DRAFT_PX: 160,
+    DRAFT_HALF_W: 12,
+    DRAFT_MIN_MPH: 80,
+    /** Weight of the last lap in a car's running fuel-per-lap estimate. */
+    LAP_LOG_GAIN: 0.5,
+    /** Safety share on top of the estimate when an AI driver fills up. */
+    EST_MARGIN: 0.05,
+  },
   LOW_FUEL: 0.12,
   REFUEL_TIME_S: 5,
   OUT_OF_FUEL_CRAWL_MPH: 0,
@@ -152,6 +171,12 @@ export const CONFIG = {
   AI_TOP_MPH: [171, 180] as [number, number],
   AI_TURN_MPH: [141, 149] as [number, number],
   AI_PIT_FUEL_LAPS: [1.3, 6] as [number, number],
+  /** 0 = never lifts to save fuel, 1 = saves whenever lifting can make the finish. */
+  AI_FUEL_SAVE: [0, 1] as [number, number],
+  /** Laps of fuel on top of the finish an AI driver fills up to. */
+  AI_FILL_MARGIN_LAPS: 0.6,
+  /** Saving fuel: what lifting is counted on to gain (at fuelSave 1), the top speed given up, the margin. */
+  AI_ECO: { GAIN: 0.06, MPH: 15, MARGIN_LAPS: 0.5 },
   AI_PIT_MPH: 70,
   AI_FINISHED_MPH: 90,
   AI_REACTION_S: [0.25, 0.7] as [number, number],

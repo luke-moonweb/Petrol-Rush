@@ -6,7 +6,8 @@ import { darkPanel, footerHints, keycap, screenHeader, skewBox, stripesBg, wrapT
 const TIPS = [
   'Tight corner, lower speed. Too fast: the car runs wide; keep steering and the tail slides – steer against it.',
   'Oil on the track spins you out – steer around it. Hit a rival from behind and you get a time penalty.',
-  'A full tank lasts about 12 laps. Low on fuel? Pull into PIT ROAD and stop in a box.',
+  'A full tank lasts about 12 laps of the oval (fewer on longer tracks). Braking, spins and the long way round burn more; lifting early and the slipstream save some.',
+  'Low on fuel? Pull into PIT ROAD: the car refuels in its box. Press GAS to leave before the tank is full.',
   'Spun out? Hold the reverse key: the car stops, backs up, and you can turn.',
 ];
 

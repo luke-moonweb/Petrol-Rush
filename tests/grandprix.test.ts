@@ -147,6 +147,15 @@ describe('saved championship', () => {
     expect(parseGp(serializeGp(g), ids)).toEqual(g);
   });
 
+  it('reads a championship saved before the fuel-saving skill, with the middle of the range', () => {
+    const g = gp();
+    const old = { ...g, entries: g.entries.map((e) => (e.skill ? { ...e, skill: { ...e.skill, fuelSave: undefined } } : e)) };
+    const read = parseGp(JSON.stringify(old), ids)!;
+    expect(read.entries[1]!.skill!.fuelSave).toBe(0.5);
+    const silly = { ...g, entries: g.entries.map((e) => (e.skill ? { ...e, skill: { ...e.skill, fuelSave: 7 } } : e)) };
+    expect(parseGp(JSON.stringify(silly), ids)).toBeNull();
+  });
+
   it('rejects missing, corrupt, foreign and inconsistent data', () => {
     const g = gp();
     const bad = (patch: Partial<GrandPrix> | Record<string, unknown>) => parseGp(JSON.stringify({ ...g, ...patch }), ids);

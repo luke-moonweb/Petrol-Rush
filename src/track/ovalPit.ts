@@ -1,6 +1,7 @@
 import { CONFIG } from '../config';
 import { type AiView, sideBlockers } from '../race/ai';
 import type { Car } from '../race/car';
+import { fillTarget, lapsOfFuel } from '../race/fuel';
 import { PLAN } from '../race/planner';
 import { type Constrainable, HALF_W, LANES, type PitLane, type PitPlan } from './common';
 import {
@@ -131,7 +132,7 @@ export const OVAL_PIT: PitLane = {
           if (Math.abs(car.d - laneD) > 6) {
             // A car may skip the stop for a lap only if its fuel surely lasts another lap to the box,
             // and never twice running.
-            const fuelLaps = car.fuel * CONFIG.FUEL_RANGE_LAPS;
+            const fuelLaps = lapsOfFuel(car);
             const canSkip = !ai.skipped && fuelLaps > 1 + this.reachLaps + PIT_FUEL_MARGIN_LAPS;
             // Someone alongside on the inside: drop in behind a car that is level or ahead (one coming
             // from behind is let by), holding the line meanwhile if the stop could still be skipped;
@@ -165,7 +166,7 @@ export const OVAL_PIT: PitLane = {
         pitY = PIT_BOX_Y;
         target = 0;
         if (!inPitLane(car.x, car.y)) ai.pitPhase = car.fuel > 0.6 ? 'exiting' : 'none';
-        else if (car.fuel >= 0.999) ai.pitPhase = 'exiting';
+        else if (car.fuel >= (car.isPlayer ? 0.999 : fillTarget(car, view.track, view.laps))) ai.pitPhase = 'exiting';
         break;
       case 'parked':
         pitY = PIT_BOX_Y;

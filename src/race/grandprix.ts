@@ -13,6 +13,7 @@ export interface DriverSkill {
   turnMph: number;
   pitFuelLaps: number;
   reaction: number;
+  fuelSave: number;
 }
 
 export interface GpEntry {
@@ -65,6 +66,7 @@ export function newGrandPrix(setup: GpSetup, seed: number, tracks: string[]): Gr
         turnMph: lerp(CONFIG.AI_TURN_MPH[0], CONFIG.AI_TURN_MPH[1], rng()),
         pitFuelLaps: lerp(CONFIG.AI_PIT_FUEL_LAPS[0], CONFIG.AI_PIT_FUEL_LAPS[1], rng()),
         reaction: lerp(CONFIG.AI_REACTION_S[0], CONFIG.AI_REACTION_S[1], rng()),
+        fuelSave: lerp(CONFIG.AI_FUEL_SAVE[0], CONFIG.AI_FUEL_SAVE[1], rng()),
       },
     });
   }
@@ -158,7 +160,10 @@ function parseSkill(v: unknown): DriverSkill | null {
   if (!v || typeof v !== 'object') return null;
   const s = v as Record<string, unknown>;
   if (!isNum(s.topMph, 50, 300) || !isNum(s.turnMph, 50, 300) || !isNum(s.pitFuelLaps, 0, 20) || !isNum(s.reaction, 0, 5)) return null;
-  return { topMph: s.topMph, turnMph: s.turnMph, pitFuelLaps: s.pitFuelLaps, reaction: s.reaction };
+  // fuelSave came later: a championship saved before it gets the middle of the range
+  const fuelSave = s.fuelSave === undefined ? 0.5 : s.fuelSave;
+  if (!isNum(fuelSave, 0, 1)) return null;
+  return { topMph: s.topMph, turnMph: s.turnMph, pitFuelLaps: s.pitFuelLaps, reaction: s.reaction, fuelSave };
 }
 
 /** Reads a saved championship; anything unexpected (old format, edited, corrupt) gives null. */

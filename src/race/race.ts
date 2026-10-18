@@ -4,6 +4,7 @@ import { NUM_SECTORS, type Track } from '../track/common';
 import { OVAL } from '../track/ovalTrack';
 import { aiInput } from './ai';
 import { type Car, initProgress, lapsCompleted, progress, updateProgress } from './car';
+import { draftOf, logLapFuel, nominalLapFuel } from './fuel';
 import type { DriverSkill } from './grandprix';
 import { type OilSlick, oilRadius } from './oil';
 import { collideCars, type DriveInput, NO_INPUT, startSpin, stepCar } from './physics';
@@ -31,6 +32,8 @@ export class Race {
   time = 0;
   leaderFinished = false;
   pitAuto = false;
+  /** The gas was released since the refuel began: pressing it now ends the refuel (race/race.ts). */
+  private refuelGasArmed = false;
   /** The AI drives the player's car (finishing a Grand Prix race in the background). */
   autoPlayer = false;
   /** The player retired: classified last and scores nothing. */
@@ -81,6 +84,7 @@ export class Race {
       turnMph: lerp(CONFIG.AI_TURN_MPH[0], CONFIG.AI_TURN_MPH[1], this.rng()),
       pitFuelLaps: lerp(CONFIG.AI_PIT_FUEL_LAPS[0], CONFIG.AI_PIT_FUEL_LAPS[1], this.rng()),
       reaction: lerp(CONFIG.AI_REACTION_S[0], CONFIG.AI_REACTION_S[1], this.rng()),
+      fuelSave: lerp(CONFIG.AI_FUEL_SAVE[0], CONFIG.AI_FUEL_SAVE[1], this.rng()),
     };
   }
 
@@ -114,6 +118,7 @@ export class Race {
       speed: 0,
       reverse: false,
       fuel: 1,
+      draft: 0,
       spinTime: 0,
       spinDir: 1,
       spinRate: 0,
@@ -157,6 +162,8 @@ export class Race {
         pitPhase: 'none',
         box: slot,
         pitFuelLaps: skill.pitFuelLaps,
+        fuelSave: skill.fuelSave,
+        economy: false,
         stuckTime: 0,
         reaction: skill.reaction,
         hazardTime: 0,
@@ -166,6 +173,9 @@ export class Race {
         mergeWait: 0,
         merging: false,
         skipped: false,
+        fuelPerLap: nominalLapFuel(this.track) * (1 + CONFIG.FUEL.EST_MARGIN),
+        lapFuel: -1,
+        refuelledThisLap: false,
       },
     };
     const st = this.track.project(car.x, car.y);
@@ -193,6 +203,7 @@ export class Race {
     }
     const track = this.track;
     const view = { track, cars: this.cars, started: this.started, laps: this.laps, time: this.time, oil: this.oil };
+    for (const car of this.cars) car.draft = draftOf(car, this.cars, track);
     for (const car of this.cars) {
       const own = car.isPlayer && !this.playerAI && !this.pitAuto && !this.autoPlayer;
       const input = own ? (playerInput ?? NO_INPUT) : aiInput(car, view, dt);
@@ -216,16 +227,17 @@ export class Race {
       car.d = st.d;
       const before = car.sectorsPassed;
       const crossed = updateProgress(car, track);
+      if (crossed) logLapFuel(car);
       if (car.sectorsPassed !== before && !car.finished) this.logSector(car);
       if (crossed && !car.finished && (car.sectorsPassed >= this.laps * NUM_SECTORS || this.leaderFinished)) {
         this.finish(car);
       }
       updatePit(car, dt, track);
     }
-    if (!this.playerAI) this.updatePitAuto(this.player);
+    if (!this.playerAI) this.updatePitAuto(this.player, playerInput);
   }
 
-  private updatePitAuto(car: Car): void {
+  private updatePitAuto(car: Car, input: DriveInput | null): void {
     const ai = car.ai;
     if (!this.pitAuto) {
       if (this.track.pit.autoIn(car)) {
@@ -238,6 +250,7 @@ export class Race {
       return;
     }
     if (ai.pitPhase === 'parked') ai.pitPhase = 'fueling';
+    this.cutRefuel(car, input);
     const out = this.track.pit.autoOut(car);
     if (out || ai.pitPhase === 'none') {
       this.pitAuto = false;
@@ -245,6 +258,20 @@ export class Race {
       ai.recoverTime = 0;
       if (car.reverse && Math.abs(car.speed) <= CONFIG.REVERSE_TOGGLE_MAX_MPH) car.reverse = false;
     }
+  }
+
+  /**
+   * Pressing the gas while refuelling ends the refuel: the autopilot drives out with what is in the
+   * tank. A gas key still held from the way in does not count until it is released.
+   */
+  private cutRefuel(car: Car, input: DriveInput | null): void {
+    if (car.ai.pitPhase !== 'fueling') {
+      this.refuelGasArmed = false;
+      return;
+    }
+    const gas = input?.gas ?? false;
+    if (!gas) this.refuelGasArmed = true;
+    else if (this.refuelGasArmed && car.refueling) car.ai.pitPhase = 'exiting';
   }
 
   private penalize(culprit: Car | null): void {
