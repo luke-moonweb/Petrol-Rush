@@ -1,6 +1,7 @@
 import { CONFIG } from '../config';
 import type { AiView } from '../race/ai';
 import type { Car } from '../race/car';
+import { fillTarget } from '../race/fuel';
 import { CAR_R, type Constrainable, HALF_W, LANES, type PitLane, type PitPlan, type WallNormal } from './common';
 import { driveToBox, followInPits, mergeClear, type PitRoad, pitDriveLaneBusy } from './pitAi';
 
@@ -253,7 +254,7 @@ export class StraightPit implements PitLane {
         lane = road.boxY;
         target = 0;
         if (!this.inLane(car.x, car.y)) ai.pitPhase = car.fuel > 0.6 ? 'exiting' : 'none';
-        else if (car.fuel >= 0.999) ai.pitPhase = 'exiting';
+        else if (car.fuel >= (car.isPlayer ? 0.999 : fillTarget(car, view.track, view.laps))) ai.pitPhase = 'exiting';
         break;
       case 'parked':
         lane = road.boxY;

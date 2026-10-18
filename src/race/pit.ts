@@ -7,6 +7,7 @@ export function updatePit(car: Car, dt: number, track: Track): void {
   if (stopped && car.pitSide && track.pit.inBox(car.x, car.y) && car.fuel < 1) {
     car.fuel = Math.min(1, car.fuel + dt / CONFIG.REFUEL_TIME_S);
     car.refueling = true;
+    car.ai.refuelledThisLap = true;
   } else {
     car.refueling = false;
   }

@@ -29,8 +29,11 @@ are no image, audio or font files in the project.
   scenery: a harbour triangle, a desert heart with a hairpin dip, an L-shaped street circuit with a
   chicane, twisty forest esses and a grand finale. F1 points (25-18-15-12-10-8-6-4-2-1), standings
   after every round, progress saved in the browser. Every circuit is also available in QUICK RACE.
-- ⛽ **Fuel & pit stops** – a full tank lasts about 12 laps. Cross the yellow PIT LANE line and the
-  game drives you to your box, refuels and takes you back out.
+- ⛽ **Fuel & pit stops** – a full tank lasts about 12 laps of the oval, the same distance on every
+  circuit. Braking, spins and the long way round burn more; lifting early and the slipstream save some.
+  Cross the yellow PIT LANE line and the game drives you to your box, refuels and takes you back out –
+  press gas in the box to leave before the tank is full. Rivals stop at different times, fill only what
+  they need, and some ease off to make the finish without a stop.
 - 💥 **Crashes that matter** – hit someone in the rear and *they* spin; spinning cars spill
   oil slicks; the culprit gets a **+2 s time penalty**.
 - 🛢️ **Oil on track** – any car that drives into a slick spins. AI drivers avoid oil even more than

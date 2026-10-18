@@ -43,7 +43,9 @@ export function runGateSeed(seed: number): GateResult {
         waits.push(wait[i]!);
         wait[i] = 0;
       }
-      if (c.ai.pitPhase === 'exiting' && Math.abs(c.speed) < 1) wait[i]! += 1 / 60;
+      // (a car held up by oil on the pit exit, which it rightly waits out, is not a merge wait)
+      const oilNear = r.oil.some((o) => Math.hypot(o.x - c.x, o.y - c.y) < 200);
+      if (c.ai.pitPhase === 'exiting' && Math.abs(c.speed) < 1 && !oilNear) wait[i]! += 1 / 60;
       phase[i] = c.ai.pitPhase;
       if (c.fuel <= 0 && !c.finished) problems.push(`seed ${seed}: car ${c.id} ran dry at ${r.time.toFixed(0)} s`);
       // a racing car standing still on the track, with no crash or oil anywhere near in the last 20 s
