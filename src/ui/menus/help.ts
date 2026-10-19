@@ -29,7 +29,7 @@ export function drawHelp(g: CanvasRenderingContext2D, b: Bindings, touch = false
   const px = 40;
   const py = 84;
   const pw = 272;
-  const ph = 300;
+  const ph = 332;
   darkPanel(g, px, py, pw, ph);
   text(g, touch ? 'TOUCH CONTROLS' : 'YOUR KEYS', px + 17, py + 24, { font: `12px ${FONT_BLACK}`, color: PR.mango, shadow: null });
   const k = (a: keyof Bindings) => keyLabel(b[a][0] ?? b[a][1]);
@@ -61,7 +61,9 @@ export function drawHelp(g: CanvasRenderingContext2D, b: Bindings, touch = false
   const qx = px + pw + 16;
   darkPanel(g, qx, py, pw, ph);
   text(g, 'RACING TIPS', qx + 17, py + 24, { font: `12px ${FONT_BLACK}`, color: PR.mango, shadow: null });
-  let ty = py + 46;
+  // five tips of up to five lines each: they fill the panel, so the line height stays tight
+  const lineH = 14;
+  let ty = py + 44;
   TIPS.forEach((tip, i) => {
     skewBox(g, qx + 28, ty + 10, 22, 22, 12, () => {
       g.fillStyle = PR.red;
@@ -71,9 +73,9 @@ export function drawHelp(g: CanvasRenderingContext2D, b: Bindings, touch = false
     g.font = `bold 11px ${FONT_UI}`;
     const lines = wrapText(g, tip, pw - 70);
     lines.forEach((ln, j) => {
-      text(g, ln, qx + 50, ty + 10 + j * 15, { font: `bold 11px ${FONT_UI}`, color: PR.cream, shadow: null });
+      text(g, ln, qx + 50, ty + 10 + j * lineH, { font: `bold 11px ${FONT_UI}`, color: PR.cream, shadow: null });
     });
-    ty += Math.max(34, lines.length * 15 + 16);
+    ty += Math.max(34, lines.length * lineH + 13);
   });
 
   footerHints(g, [['ENTER / ESC', 'BACK']], 457);

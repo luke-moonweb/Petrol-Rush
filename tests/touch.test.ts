@@ -52,6 +52,7 @@ describe('touch hints', () => {
   it('renames keys to on-screen buttons and drops keyboard-only hints', () => {
     const list: [string, string][] = [
       ['↑ ↓', 'SELECT'],
+      ['← →', 'CHANGE'],
       ['ENTER', 'CONFIRM'],
       ['ESC', 'BACK'],
       ['M', 'SOUND'],
@@ -60,6 +61,7 @@ describe('touch hints', () => {
     setTouchHints(true);
     expect(hintList(list)).toEqual([
       ['▲ ▼', 'SELECT'],
+      ['◀ ▶', 'CHANGE'],
       ['OK', 'CONFIRM'],
     ]);
   });

@@ -205,9 +205,10 @@ export class GrandPrixState implements State {
       const res = gp && this.mode !== 'setup' ? gp.results[i] : undefined;
       if (res && gp) {
         const pos = res.order.indexOf(gp.playerColor) + 1;
-        result = res.dnf.includes(gp.playerColor) ? 'DNF' : `${ordinal(pos).toUpperCase()}  ·  ${pointsFor(pos)} PTS`;
+        // single spaces: "20TH · 0 PTS · WIN: BRANNIGAN" just fits the calendar row
+        result = res.dnf.includes(gp.playerColor) ? 'DNF' : `${ordinal(pos).toUpperCase()} · ${pointsFor(pos)} PTS`;
         const winner = res.order[0]!;
-        if (winner !== gp.playerColor) result += `  ·  WIN: ${driverName(winner)}`;
+        if (winner !== gp.playerColor) result += ` · WIN: ${driverName(winner)}`;
       }
       return { track, result, next: i === r };
     });

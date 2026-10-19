@@ -505,8 +505,10 @@ export class RaceState implements State {
       }
       case 'finishing':
       case 'results':
+        // the race view twice as dark as the HUD, across the whole screen (inside the frame only, it showed a seam)
         g.fillStyle = 'rgba(8,6,18,0.55)';
         g.fillRect(0, 0, layout.w, layout.h);
+        g.fillRect(0, layout.view.y, layout.w, layout.view.h);
         inFrame(g, () => drawResults(g, resultRows(race), race.player.finished ? race.classification().indexOf(race.player) + 1 : 0));
         break;
       default:

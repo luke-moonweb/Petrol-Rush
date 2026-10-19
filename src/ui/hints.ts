@@ -6,6 +6,8 @@ const TOUCH_KEYS: Record<string, string> = {
   '↑↓': '▲▼',
   '↑ ↓': '▲ ▼',
   '←→': '◀▶',
+  '← →': '◀ ▶',
+  '↓': '▼',
   'ENTER / ESC': 'OK / BACK',
 };
 

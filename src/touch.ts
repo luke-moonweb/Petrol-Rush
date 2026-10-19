@@ -96,6 +96,15 @@ export function prefersTouch(override: boolean | null): boolean {
   return /Android|iPhone|iPod|Mobile/i.test(navigator.userAgent);
 }
 
+/**
+ * The font of the big buttons' labels for a right-hand zone `zoneW` wide: the widest, BRAKE (about 3.9 em
+ * plus 1 px a letter), stays 4 px clear of its pedal's border, half the zone less its padding and the gap.
+ */
+function pedalFont(zoneW: number): number {
+  const pedal = (zoneW - 30) / 2;
+  return Math.max(10, Math.min(15, Math.floor((pedal - 17) / 3.9)));
+}
+
 function fullscreenSupported(): boolean {
   const d = document as Document & { webkitFullscreenEnabled?: boolean };
   return !!(d.fullscreenEnabled || d.webkitFullscreenEnabled);
@@ -321,6 +330,7 @@ export class TouchControls {
     const pad = Math.round(Math.max(120, Math.min(200, left.w - 20, left.h - 70)));
     this.root.style.setProperty('--tc-big-h', `${bigH}px`);
     this.root.style.setProperty('--tc-pad', `${pad}px`);
+    this.root.style.setProperty('--tc-text', `${pedalFont(right.w)}px`);
     for (const z of Object.values(this.zones)) {
       for (const [el, r] of [
         [z.left, left],
