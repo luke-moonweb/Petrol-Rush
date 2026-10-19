@@ -10,6 +10,7 @@ import {
   ovalKeyLap,
   ovalLaps,
   ovalWallGrid,
+  tapAcross,
   tapAngle,
   tapOverdrive,
   tapperScore,
@@ -58,7 +59,7 @@ function taps(): string[] {
   }
   for (const mph of [140, 180])
     out.push(
-      `tap of 1 / 2 / 3 / 4 steps at ${mph} mph, heading after 1.5 s (deg): ${[1, 2, 3, 4].map((k) => n(tapAngle(mph, k))).join(' / ')}`,
+      `tap of 1 / 2 / 3 / 4 / 6 steps at ${mph} mph, after 1.5 s heading (deg) ${[1, 2, 3, 4, 6].map((k) => n(tapAngle(mph, k))).join(' / ')}, across (px) ${[1, 2, 3, 4, 6].map((k) => n(tapAcross(mph, k), 1)).join(' / ')}`,
     );
   out.push(
     `to 98 % of the cap (ms), straight / turn 1: 100 mph ${n(toStop(100, false), 0)} / ${n(toStop(100, true), 0)}, 140 mph ${n(toStop(140, false), 0)} / ${n(toStop(140, true), 0)}`,

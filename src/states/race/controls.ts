@@ -62,10 +62,8 @@ export class PlayerControls {
       toggleReverse: input.pressed('reverse') && !input.isDown('reverse'),
     };
     this.holdReverse(race, drive, input.isDown('reverse'));
-    // Under the pit autopilot the player's keys do not steer: the wheel centres, and a key still held when
-    // it hands back is not a fresh press (the straight assist stays on).
+    // Under the pit autopilot the player's keys do not steer: the wheel centres.
     const st = this.steering.update(p, race.pitAuto ? 0 : steerKey, dt, drive.brake);
-    if (race.pitAuto) this.steering.rearm(steerKey);
     drive.steer = race.pitAuto ? 0 : st.steer;
     drive.straightTo = race.pitAuto ? undefined : st.straightTo;
     this.prevSteerVis = this.steerVis;

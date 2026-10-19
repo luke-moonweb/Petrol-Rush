@@ -49,16 +49,13 @@ export class PlayerSteering {
   private pushDir = 0;
   /** 0..1: how far towards full lock this push may open (from the largest excess seen). */
   private pushDepth = 0;
-  /** The straight assist acts until a fresh key press on a straight; `carried` is a key held since the bend. */
-  private straightOn = true;
-  private carried = 0;
   /** The steering limit of the last step: the key cap, opened by the overdrive. */
   private lim = 1;
 
   /** The track raced on (the race state sets it for each race). */
   constructor(public track: SteerTrack = OVAL) {}
 
-  /** New race: the wheel, the assist blend and the overdrive start from zero, and the straight assist is on. */
+  /** New race: the wheel, the assist blend and the overdrive start from zero. */
   resetAssist(): void {
     this.assistLevel = 0;
     this.bendK = 0;
@@ -66,18 +63,11 @@ export class PlayerSteering {
     this.pushTime = 0;
     this.pushDir = 0;
     this.pushDepth = 0;
-    this.rearm(0);
   }
 
   /** The keys let go without a release (pause, lost focus): the wheel is centred, the assist blend kept. */
   release(): void {
     this.w = 0;
-  }
-
-  /** The straight assist is back on (a bend, a new race, the pit autopilot handing back); `key` is held now and does not count as fresh. */
-  rearm(key: number): void {
-    this.straightOn = true;
-    this.carried = key;
   }
 
   /** The wheel (-1..1). */
@@ -101,7 +91,8 @@ export class PlayerSteering {
     const k = this.track.curves().at(car.s);
     const kLane = laneCurvature(k, car.d);
     const a = this.assist(car, kLane, dt);
-    const straightTo = this.straightAssist(k !== 0, key) ? this.track.headingAt(car.x, car.y) : undefined;
+    // the straight assist acts on any straight once the steering is let go (the physics checks the steer)
+    const straightTo = k === 0 ? this.track.headingAt(car.x, car.y) : undefined;
     const slip = wrapAngle(car.heading - car.moveAngle);
     const catching = key !== 0 && Math.abs(slip) > CONFIG.GRIP.SLIDE_SLIP_MIN && key === -Math.sign(slip);
     this.turnWheel(car, key, dt, catching);
@@ -118,19 +109,6 @@ export class PlayerSteering {
     if (kLane !== 0) this.bendK = kLane;
     else if (this.assistLevel > 0) return curvatureAssist(car, this.bendK) * this.assistLevel;
     return assist * this.assistLevel;
-  }
-
-  // The straight assist only straightens after a bend: a fresh key press on the straight (also a switch
-  // from the key held out of the bend to the other one) turns it off until the next bend, so a heading
-  // the player set stays. A key still held from the bend is not fresh: the car straightens once it is let go.
-  private straightAssist(turn: boolean, key: number): boolean {
-    if (turn) {
-      this.rearm(key);
-      return false;
-    }
-    if (key !== this.carried) this.carried = 0;
-    if (key !== 0 && this.carried === 0) this.straightOn = false;
-    return this.straightOn;
   }
 
   // The wheel. A held key turns it towards its stop (±1) along a first-order curve aimed STEER_OVERSHOOT

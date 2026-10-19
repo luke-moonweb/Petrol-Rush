@@ -7,7 +7,7 @@ import { CAR_R, HALF_W, pointAt, project, RC, S_BOTTOM, S_TURN1, S_TURN2, trackH
 import { OVAL } from '../src/track/ovalTrack';
 import { CurveTrack } from './sim/curves';
 import { freshCar, placeCar, steerTrack, withWalls } from './sim/drivers';
-import { catchSteps, tapAngle, tapOverdrive, tapping, toStop } from './sim/steerLab';
+import { catchSteps, tapAcross, tapAngle, tapOverdrive, tapping, toStop } from './sim/steerLab';
 
 const OVAL_NO_WALLS = withWalls(() => null);
 
@@ -85,32 +85,37 @@ describe('grip model: straight assist', () => {
     expect(Math.abs(rates[6]!)).toBeLessThan(1e-9);
   });
 
-  it('a 100 ms tap at 180 mph is a correction that stays, not undone', () => {
-    const car = carAt(S_BOTTOM + 50, 0, 180);
-    const ps = new PlayerSteering();
-    for (let t = 0; t < 2; t += 1 / 60) {
-      const st = ps.update(car, t < 0.1 ? 1 : 0, 1 / 60);
-      stepCar(car, { steer: st.steer, straightTo: st.straightTo, gas: true, brake: false, toggleReverse: false }, 1 / 60, OVAL);
-      Object.assign(car, project(car.x, car.y));
-    }
-    // (the straight assist only takes out micro-drift, so the heading the tap set stays and the car keeps going that way)
-    expect(car.d).toBeGreaterThan(2);
-    expect(car.d).toBeLessThan(HALF_W - CAR_R);
-  });
-
-  it('a 200 ms press at 180 mph from the centre line is kept: the assist does not undo it', () => {
-    const car = carAt(S_BOTTOM + 50, 0, 180);
+  /** A press of `press` s on the bottom straight from the centre line, 2.5 s on: px across, the most of it, heading off the road (deg). */
+  const pressOn = (mph: number, press: number) => {
+    const car = carAt(S_BOTTOM + 50, 0, mph);
     const ps = new PlayerSteering();
     let maxD = 0;
     for (let t = 0; t < 2.5; t += 1 / 60) {
-      const st = ps.update(car, t < 0.2 ? 1 : 0, 1 / 60);
+      const st = ps.update(car, t < press ? 1 : 0, 1 / 60);
       stepCar(car, { steer: st.steer, straightTo: st.straightTo, gas: true, brake: false, toggleReverse: false }, 1 / 60, OVAL);
       Object.assign(car, project(car.x, car.y));
       maxD = Math.max(maxD, car.d);
     }
-    // (no longer caught: the straight assist only takes out micro-drift; the car runs on to the wall without spinning)
-    expect(maxD).toBeGreaterThan(15);
-    expect(car.spinTime).toBe(0);
+    const deg = (wrapAngle(car.heading - trackHeadingAt(car.x, car.y)) * 180) / Math.PI;
+    return { d: car.d, maxD, deg, spin: car.spinTime > 0 };
+  };
+
+  it('a 100 or 200 ms press at 180 mph moves the car across, the longer one further, then the assist straightens it', () => {
+    const short = pressOn(180, 0.1);
+    const long = pressOn(180, 0.2);
+    expect(short.d).toBeGreaterThan(1);
+    expect(long.d).toBeGreaterThan(short.d * 2);
+    expect(long.maxD).toBeLessThan(HALF_W - CAR_R);
+    for (const r of [short, long]) {
+      expect(Math.abs(r.deg)).toBeLessThan(0.01);
+      expect(r.spin).toBe(false);
+    }
+  });
+
+  it('a press that turns the car past STRAIGHT_OFF_DEG is left alone: at 120 mph 150 ms runs on to the wall without a spin', () => {
+    const r = pressOn(120, 0.15);
+    expect(r.maxD).toBeGreaterThan(HALF_W - CAR_R - 1);
+    expect(r.spin).toBe(false);
   });
 });
 
@@ -213,11 +218,12 @@ describe('key wheel (STEERING_PLAN B1, B2, B6)', () => {
     return st.steer;
   };
 
-  it('a longer tap turns further, and even a one-step tap on a straight stays (no all or nothing)', () => {
+  it('a longer tap moves the car further across (no all or nothing), and the straight assist straightens it after', () => {
     for (const mph of [140, 180]) {
-      const turned = [1, 2, 3, 4].map((n) => tapAngle(mph, n));
-      expect(turned[0], `${mph} mph`).toBeGreaterThan(0.05);
-      for (let i = 1; i < turned.length; i++) expect(turned[i]!, `${mph} mph`).toBeGreaterThan(turned[i - 1]! * 1.3);
+      const across = [1, 2, 3, 4, 6].map((n) => tapAcross(mph, n));
+      expect(across[0], `${mph} mph`).toBeGreaterThan(0);
+      for (let i = 1; i < across.length; i++) expect(across[i]!, `${mph} mph`).toBeGreaterThan(across[i - 1]! * 1.3);
+      expect(Math.abs(tapAngle(mph, 6)), `${mph} mph`).toBeLessThan(0.01);
     }
   });
 
@@ -314,7 +320,7 @@ describe('key wheel (STEERING_PLAN B1, B2, B6)', () => {
   });
 });
 
-describe('straight assist latch (STEERING_PLAN B4)', () => {
+describe('straight assist after a key (no latch since 2026-10-19)', () => {
   /**
    * A left bend onto a long straight at 120 mph. The key is held into the bend; on the straight it is still
    * held for 6 steps (carried) or let go there and tapped once 15 steps later (fresh). 40 steps after the
@@ -356,21 +362,12 @@ describe('straight assist latch (STEERING_PLAN B4)', () => {
     return Number.NaN;
   }
 
-  it('a key held out of the bend is not a fresh press: once let go, the car straightens', () => {
+  it('a key held out of the bend: once let go, the car straightens', () => {
     expect(Math.abs(errorAfter(false))).toBeLessThan(0.1);
   });
 
-  it('a fresh tap on the straight turns the assist off until the next bend: a 1 degree heading stays', () => {
-    expect(errorAfter(true)).toBeGreaterThan(0.9);
-  });
-
-  it('a new race turns it back on', () => {
-    const car = carAt(S_BOTTOM + 100, 0, 150);
-    const ps = new PlayerSteering();
-    for (let i = 0; i < 30; i++) ps.update(car, i < 3 ? 1 : 0, 1 / 60);
-    expect(ps.update(car, 0, 1 / 60).straightTo).toBeUndefined();
-    ps.resetAssist();
-    expect(ps.update(car, 0, 1 / 60).straightTo).toBeDefined();
+  it('a fresh tap on the straight does not turn the assist off: once let go, the car straightens', () => {
+    expect(Math.abs(errorAfter(true))).toBeLessThan(0.1);
   });
 });
 

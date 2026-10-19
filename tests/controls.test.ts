@@ -62,7 +62,7 @@ describe('player controls: keys (STEERING_PLAN B5)', () => {
 });
 
 describe('player controls: the wheel let go (STEERING_PLAN B6)', () => {
-  it('under the pit autopilot the keys do not turn the wheel; a key held as it hands back is not a fresh press', () => {
+  it('under the pit autopilot the keys do not turn the wheel; once it hands back, a key steers and the straight assist acts after it', () => {
     const { target, race, controls, step } = setup();
     race.pitAuto = true;
     key(target, 'keydown', 'ArrowRight');
@@ -71,13 +71,9 @@ describe('player controls: the wheel let go (STEERING_PLAN B6)', () => {
     race.pitAuto = false;
     expect(step().steer).toBeGreaterThan(0);
     key(target, 'keyup', 'ArrowRight');
-    // the held key was carried: once let go, the straight assist is still on
-    expect(step(15).straightTo).toBeDefined();
-    // a fresh press on the straight turns it off
-    key(target, 'keydown', 'ArrowRight');
-    step(2);
-    key(target, 'keyup', 'ArrowRight');
-    expect(step(15).straightTo).toBeUndefined();
+    const out = step(15);
+    expect(out.steer).toBe(0);
+    expect(out.straightTo).toBeDefined();
   });
 
   it('a pause or a lost focus centres the wheel', () => {
