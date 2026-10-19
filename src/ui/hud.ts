@@ -140,7 +140,7 @@ function drawPenalty(g: CanvasRenderingContext2D, race: Race, right: number): nu
   return px;
 }
 
-/** LAP, and BEHIND where it fits before `limit`; returns where they end. */
+/** LAP, and the laps the player is down on the leader ("BEHIND LEADER 1 LAP") where it fits before `limit`; returns where they end. */
 function drawLapCounters(g: CanvasRenderingContext2D, race: Race, limit: number): number {
   const p = race.player;
   const lap = p.finished ? race.laps : Math.min(race.laps, lapsCompleted(p) + 1);
@@ -149,13 +149,15 @@ function drawLapCounters(g: CanvasRenderingContext2D, race: Race, limit: number)
   let x = 84;
   x += label(g, 'LAP', x, BAR_Y) + 5;
   x += glowText(g, `${lap} / ${race.laps}`, x, BAR_Y, font, PR.tealLight, glow);
-  const behind = String(race.lapsBehind(p));
-  const wLabel = labelWidth(g, 'BEHIND');
+  const down = race.lapsBehind(p);
+  const unit = down === 1 ? 'LAP' : 'LAPS';
+  const wLabels = labelWidth(g, 'BEHIND LEADER') + labelWidth(g, unit);
   g.font = font;
-  if (x + 18 + wLabel + 5 + g.measureText(behind).width > limit) return x;
+  if (x + 18 + wLabels + 5 + g.measureText(String(down)).width + 4 > limit) return x;
   x += 18;
-  x += label(g, 'BEHIND', x, BAR_Y) + 5;
-  return x + glowText(g, behind, x, BAR_Y, font, PR.tealLight, glow);
+  x += label(g, 'BEHIND LEADER', x, BAR_Y) + 5;
+  x += glowText(g, String(down), x, BAR_Y, font, PR.tealLight, glow) + 4;
+  return x + label(g, unit, x, BAR_Y);
 }
 
 /** Where the notice banner goes: in the bar between x0 and x1, in a smaller font if need be, or under the bar when even that won't fit. */
