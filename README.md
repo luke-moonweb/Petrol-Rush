@@ -52,8 +52,8 @@ are no image, audio or font files in the project.
   blocks, pines, grandstands), rivals with working tail and brake lights, a live rear-view mirror and
   a steering wheel that follows your inputs. The switch into the cockpit flickers through for a moment
   like a worn VHS tape losing its tracking: torn lines, snow, smeared colour and a rolling picture.
-  The cockpit picture never quite settles: a light band of tape noise hangs at the bottom, hiccups now
-  and then, and climbs up the screen when you hit something or spin.
+  Hit a wall or a car in the cockpit and the lower part of the picture breaks up for a moment, by how
+  hard the hit was, and stays broken while the hit spins you round.
 - 📺 **Live-on-air title screen** – a silent 20-car demo race plays behind the menu, filmed like a
   TV broadcast.
 - ⌨️ **Fully rebindable keys** (primary + alternate per action), saved in the browser.

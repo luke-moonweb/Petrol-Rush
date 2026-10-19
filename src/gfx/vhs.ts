@@ -5,9 +5,9 @@
 // bar while the sync is lost, and the soft 240-line picture of a field. Two uses:
 // - the glitch that covers the switch from the top-down view into the cockpit: the whole picture, a
 //   moment long;
-// - the cockpit's own unrest while it is on screen: a light head-switching band at the bottom with a
-//   hiccup now and then, reaching higher when the car hits something or spins (never as strong as the
-//   switch), so the picture always seems about to break up.
+// - the cockpit's unrest when the car hits something: the lower part of the picture breaks up for a
+//   moment, by the hit's strength (never as strong as the switch), and stays broken through a spin
+//   the hit set off.
 import type { Box } from '../layout';
 import type { Car } from '../race/car';
 import { makeCanvas } from './sprites';
@@ -16,7 +16,7 @@ import { makeCanvas } from './sprites';
 export const VHS_S = 0.6;
 /** The cockpit replaces the top-down view at the peak of the noise, which hides the cut. */
 export const VHS_CUT_S = 0.14;
-/** Full noise this long after the cut; then the picture settles into the cockpit's unrest. */
+/** Full noise this long after the cut; then the picture settles. */
 const HOLD_S = 0.04;
 /** The vertical roll: the picture slides down from ROLL_FROM_S until the sync locks at ROLL_TO_S. */
 const ROLL_FROM_S = 0.07;
@@ -26,15 +26,13 @@ const ROLL_SPEED = 2.4;
 /** The black blanking bar between two pictures in a roll, as a share of the picture height. */
 const BAR = 0.06;
 
-/** The cockpit's unrest (the switch peaks at 1): steady, and the most a hit or a spin brings. */
-export const UNREST_BASE = 0.24;
+/** The most a hit brings to the cockpit picture (the switch peaks at 1). */
 export const UNREST_MAX = 0.5;
-/** A spin keeps the unrest here; a hit adds to it by its strength. */
+/** A spin that a hit set off holds the unrest at least here. */
 const SPIN_UNREST = 0.42;
-/** How fast the unrest of a hit or spin fades back, per second. */
+/** How fast the unrest of a hit fades, per second. */
 const SHAKE_FADE = 0.8;
-/** The share of the picture, from the bottom, the unrest reaches: at the base and at the most. */
-const REACH_BASE = 0.09;
+/** The share of the picture, from the bottom, the unrest reaches at the most. */
 const REACH_MAX = 0.42;
 
 /** The picture at VHS resolution: about 240 TV lines across (320 samples), one field of 240 lines. */
@@ -94,12 +92,8 @@ export class VhsGlitch {
   private runs = 0;
   /** Seconds of unrest so far (moves its noise fields). */
   private clock = 0;
-  /** The unrest left of the last hit or spin. */
+  /** The unrest left of the last hit. */
   private shake = 0;
-  private hiccups = 0;
-  private hiccupIn = 1.5;
-  private hiccupLeft = 0;
-  private hiccupLevel = 0;
 
   start(): void {
     this.t = 0;
@@ -116,17 +110,17 @@ export class VhsGlitch {
     if (this.t < VHS_S) this.t = Math.min(VHS_S, this.t + dt);
     this.clock += dt;
     this.shake = Math.max(0, this.shake - SHAKE_FADE * dt);
-    this.stepHiccups(dt);
   }
 
-  /** Shakes the cockpit picture to at least `level` (0..UNREST_MAX), which then fades back. */
-  jolt(level: number): void {
+  /** Shakes the cockpit picture on a hit (`level` 0..UNREST_MAX, `joltOf`), which then fades; a spin the hit set off holds it up. */
+  jolt(level: number, spinning: boolean): void {
+    if (spinning && this.shake > 0) level = Math.max(level, SPIN_UNREST);
     this.shake = Math.max(this.shake, Math.min(UNREST_MAX, level));
   }
 
-  /** The cockpit picture's unrest now: the base with its hiccups, or a hit or spin above it. */
+  /** The cockpit picture's unrest now (0 unless a hit shook it). */
   get unrest(): number {
-    return Math.max(UNREST_BASE + (this.hiccupLeft > 0 ? this.hiccupLevel : 0), this.shake);
+    return this.shake;
   }
 
   /** Whether the switch glitch runs. */
@@ -141,40 +135,25 @@ export class VhsGlitch {
 
   /**
    * Distorts the picture already drawn in `box` (layout units, `pixelScale` canvas pixels each): the
-   * switch glitch, or the cockpit's unrest when `cockpit` (the cockpit is on screen).
+   * switch glitch, or the unrest of a hit when `cockpit` (the cockpit is on screen).
    */
   draw(g: CanvasRenderingContext2D, box: Box, pixelScale: number, cockpit: boolean): void {
     if (this.active) {
-      switchLook(this.t, cockpit ? this.unrest : null);
+      switchLook(this.t, cockpit && this.shake > 0 ? this.shake : null);
       // new noise every field (60 a second), the same for the same moment of the same glitch
       seed = this.runs * 7919 + Math.floor(this.t * 60);
-    } else if (cockpit) {
-      unrestLook(this.unrest, this.clock);
+    } else if (cockpit && this.shake > 0) {
+      unrestLook(this.shake, this.clock);
       seed = 0x5eed + Math.floor(this.clock * 60);
     } else return;
     drawVhs(g, box, pixelScale);
   }
-
-  /** A hiccup every 1.2-6 s: the band at the bottom reaches higher for a moment. */
-  private stepHiccups(dt: number): void {
-    if (this.hiccupLeft > 0) {
-      this.hiccupLeft -= dt;
-      return;
-    }
-    this.hiccupIn -= dt;
-    if (this.hiccupIn > 0) return;
-    const n = ++this.hiccups * 3;
-    this.hiccupLeft = 0.06 + 0.16 * hash(n);
-    this.hiccupLevel = 0.05 + 0.1 * hash(n + 1);
-    this.hiccupIn = 1.2 + 4.8 * hash(n + 2);
-  }
 }
 
-/** How hard a car is shaken this step, for the cockpit picture: a spin, or a wall or car hit by its strength. */
-export function joltOf(car: Pick<Car, 'spinTime' | 'wallImpact' | 'contactStrength'>): number {
+/** How hard a car is hit this step, for the cockpit picture: a wall or car hit by its strength (0 for a scrape). */
+export function joltOf(car: Pick<Car, 'wallImpact' | 'contactStrength'>): number {
   const hit = Math.max(car.wallImpact, car.contactStrength);
-  const fromHit = hit < 4 ? 0 : 0.3 + 0.2 * Math.min(1, hit / 80);
-  return Math.min(UNREST_MAX, Math.max(car.spinTime > 0 ? SPIN_UNREST : 0, fromHit));
+  return hit < 4 ? 0 : 0.3 + 0.2 * Math.min(1, hit / 80);
 }
 
 /** How strong the switch glitch is `t` seconds in, 0..1: a sudden onset, the peak at the cut, then it settles. */
@@ -192,8 +171,7 @@ export function vhsRoll(t: number): number {
 
 /** The share of the picture, from the top, the cockpit's unrest leaves alone. */
 export function unrestTop(unrest: number): number {
-  const k = Math.min(1, Math.max(0, (unrest - UNREST_BASE) / (UNREST_MAX - UNREST_BASE)));
-  return 1 - REACH_BASE - (REACH_MAX - REACH_BASE) * k;
+  return 1 - REACH_MAX * Math.min(1, Math.max(0, unrest / UNREST_MAX));
 }
 
 function unrestLook(unrest: number, clock: number): void {
@@ -231,13 +209,6 @@ function rand(): number {
   let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
   t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
   return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-}
-
-/** 0..1 from an integer, without touching the noise's generator. */
-function hash(n: number): number {
-  let t = Math.imul(n ^ 0x2c1b3c6d, 0x297a2d39);
-  t = Math.imul(t ^ (t >>> 15), 0x85ebca6b);
-  return ((t ^ (t >>> 13)) >>> 0) / 4294967296;
 }
 
 /** Places a tracking band inside the reach of the look: `phase` spreads the two bands apart. */
@@ -364,7 +335,7 @@ function drawSnow(g: CanvasRenderingContext2D, x: number, y: number, w: number, 
     g.globalAlpha = s * 0.8 * look.bands;
     for (const b of BANDS) snowField(g, x, y, w, h, b.y - b.half, b.y + b.half);
   }
-  g.globalAlpha = Math.min(0.85, 0.12 + s * 0.7);
+  g.globalAlpha = s * 0.7;
   snowField(g, x, y, w, h, 1 - HEAD, 1);
   g.fillStyle = '#fff';
   const lineH = Math.max(1, Math.round(h / SRC_H));
