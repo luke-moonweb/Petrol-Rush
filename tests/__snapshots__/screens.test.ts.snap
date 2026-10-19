@@ -25,20 +25,20 @@ exports[`screens, headless > out of fuel in a Grand Prix, the player watches the
 exports[`screens, headless > title → race menu → settings → a race with the cockpit, pause and menu → results; fingerprints of each screen 1`] = `
 {
   "cockpit": {
-    "calls": 5279,
-    "hash": "66fe9863",
+    "calls": 5394,
+    "hash": "d185f166",
   },
   "paused": {
-    "calls": 4985,
-    "hash": "8a91fda6",
+    "calls": 5092,
+    "hash": "03ab76fe",
   },
   "raceMenu": {
     "calls": 3101,
     "hash": "147d03de",
   },
   "raceMenuLive": {
-    "calls": 5126,
-    "hash": "56871506",
+    "calls": 5228,
+    "hash": "a7fbf87e",
   },
   "results": {
     "calls": 14446,

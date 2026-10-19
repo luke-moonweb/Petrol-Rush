@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { GameAudio } from '../src/audio/audio';
 import { CONFIG, DEFAULT_OPTIONS } from '../src/config';
-import { VHS_CUT_S, VHS_S, VhsGlitch, vhsRoll, vhsStrength } from '../src/gfx/vhs';
+import { joltOf, UNREST_MAX, unrestTop, VHS_CUT_S, VHS_S, VhsGlitch, vhsRoll, vhsStrength } from '../src/gfx/vhs';
 import { Input } from '../src/input';
 import { computeLayout, setLayout } from '../src/layout';
 import type { Race } from '../src/race/race';
@@ -10,8 +10,9 @@ import { RaceState } from '../src/states/race/state';
 import { TitleState } from '../src/states/title';
 import { drawing, resetDrawing, StubCanvas } from './sim/browser';
 
-// The tape glitch that covers the switch from the top-down view to the cockpit (src/gfx/vhs.ts): its
-// timeline, its drawing, and the race screen holding the top-down view until the cut.
+// The VHS look of the cockpit (src/gfx/vhs.ts): the glitch that covers the switch from the top-down
+// view (its timeline, its drawing, the race screen holding the top-down view until the cut) and the
+// cockpit picture's unrest on a hit (by its strength, held through a spin it set off, never as strong).
 
 const STEP = 1 / CONFIG.STEP_HZ;
 
@@ -59,24 +60,89 @@ describe('the VHS glitch timeline', () => {
   });
 });
 
-describe('drawing the glitch', () => {
-  it('draws while active, the same field the same way, and nothing once over', () => {
+describe('the cockpit unrest', () => {
+  it('is calm while driving and comes only with a hit, by its strength, never as strong as the switch', () => {
+    const glitch = new VhsGlitch();
+    for (let t = 0; t < 30; t += STEP) glitch.update(STEP);
+    expect(glitch.unrest).toBe(0);
+    expect(joltOf({ wallImpact: 0, contactStrength: 0 })).toBe(0);
+    expect(joltOf({ wallImpact: 2, contactStrength: 0 })).toBe(0); // a scrape
+    const bump = joltOf({ wallImpact: 0, contactStrength: 12 });
+    const crash = joltOf({ wallImpact: 90, contactStrength: 0 });
+    expect(bump).toBeGreaterThan(0.25);
+    expect(crash).toBeGreaterThan(bump);
+    expect(crash).toBe(UNREST_MAX);
+    expect(UNREST_MAX).toBeLessThan(vhsStrength(VHS_CUT_S));
+  });
+
+  it('fades within a second of the hit; a spin alone does nothing, a spin the hit set off holds it up', () => {
+    const glitch = new VhsGlitch();
+    glitch.jolt(0, true);
+    expect(glitch.unrest).toBe(0);
+    glitch.jolt(UNREST_MAX, false);
+    expect(glitch.unrest).toBe(UNREST_MAX);
+    glitch.update(0.2);
+    expect(glitch.unrest).toBeLessThan(UNREST_MAX);
+    glitch.update(1);
+    expect(glitch.unrest).toBe(0);
+
+    glitch.jolt(0.3, false);
+    for (let t = 0; t < 1.5; t += STEP) {
+      glitch.update(STEP);
+      glitch.jolt(0, true);
+    }
+    expect(glitch.unrest).toBeGreaterThan(0.4);
+    for (let t = 0; t < 1; t += STEP) {
+      glitch.update(STEP);
+      glitch.jolt(0, false);
+    }
+    expect(glitch.unrest).toBe(0);
+    glitch.jolt(UNREST_MAX, false);
+    glitch.reset();
+    expect(glitch.unrest).toBe(0);
+  });
+
+  it('reaches up from the bottom, under half the picture at the most', () => {
+    expect(unrestTop(0)).toBe(1);
+    expect(1 - unrestTop(UNREST_MAX)).toBeCloseTo(0.42);
+    expect(unrestTop(0.4)).toBeLessThan(unrestTop(0.3));
+  });
+});
+
+describe('drawing', () => {
+  const box = { x: 160, y: 30, w: 480, h: 360 };
+
+  it('the switch glitch: the same field the same way, and nothing once over', () => {
     const g = stubCanvas();
-    const box = { x: 160, y: 30, w: 480, h: 360 };
     const glitch = new VhsGlitch();
     glitch.start();
     glitch.update(VHS_CUT_S);
-    glitch.draw(g, box, 2); // the first one also makes the snow
+    glitch.draw(g, box, 2, true); // the first one also makes the snow
     resetDrawing();
-    glitch.draw(g, box, 2);
+    glitch.draw(g, box, 2, true);
     const peak = { ...drawing };
     expect(peak.calls).toBeGreaterThan(200);
     resetDrawing();
-    glitch.draw(g, box, 2);
+    glitch.draw(g, box, 2, true);
     expect(drawing.hash).toBe(peak.hash);
     glitch.update(VHS_S);
     resetDrawing();
-    glitch.draw(g, box, 2);
+    glitch.draw(g, box, 2, true);
+    expect(drawing.calls).toBe(0);
+  });
+
+  it('a hit: the lower picture in the cockpit until it fades, nothing over the top-down view', () => {
+    const g = stubCanvas();
+    const glitch = new VhsGlitch();
+    glitch.jolt(UNREST_MAX, false);
+    resetDrawing();
+    glitch.draw(g, box, 2, false);
+    expect(drawing.calls).toBe(0);
+    glitch.draw(g, box, 2, true);
+    expect(drawing.calls).toBeGreaterThan(60);
+    glitch.update(1);
+    resetDrawing();
+    glitch.draw(g, box, 2, true);
     expect(drawing.calls).toBe(0);
   });
 });

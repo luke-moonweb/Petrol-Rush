@@ -4,7 +4,7 @@ import { cockpitOverlayMs } from '../../gfx/fpv/timing';
 import { drawCockpitView, prewarmCockpitView, prewarmScene } from '../../gfx/fpv/view';
 import { Particles } from '../../gfx/particles';
 import { driverName, prewarmPlayerCar } from '../../gfx/vehicles';
-import { VHS_CUT_S, VHS_S, VhsGlitch } from '../../gfx/vhs';
+import { joltOf, VHS_CUT_S, VHS_S, VhsGlitch } from '../../gfx/vhs';
 import { drawCars, drawOil, drawTrack, trackCanvas } from '../../gfx/world';
 import { keyLabel } from '../../input';
 import { inFrame, layout } from '../../layout';
@@ -57,7 +57,7 @@ export class RaceState implements State {
   /** Out of fuel in a Grand Prix: the car the camera follows while the rest race on (watch.ts). */
   private watched: Car | null = null;
   private readonly camera = new RaceCamera();
-  /** The tape glitch that covers the switch to the cockpit (vhs.ts). */
+  /** The tape glitch that covers the switch to the cockpit, and the cockpit picture's unrest on a hit (vhs.ts). */
   private readonly glitch = new VhsGlitch();
   private readonly controls = new PlayerControls();
   // What the HUD and the cockpit show of the player's warnings (SKID blink phase, eased limit and LEDs).
@@ -370,6 +370,7 @@ export class RaceState implements State {
       }
     }
     this.race.step(dt, drive);
+    this.glitch.jolt(joltOf(this.race.player), this.race.player.spinTime > 0);
     this.warnShown.update(warnings(this.race.player, this.race.track), dt);
     stepCabin(this.race, dt);
     this.particles.emit(this.race.cars, dt);
@@ -445,7 +446,7 @@ export class RaceState implements State {
       this.renderTopDown(g, race, ix, iy, ih, a);
       prewarmCockpitView(g, view, race.player.colorIdx, this.game.touch);
     }
-    this.glitch.draw(g, view, pixelScale);
+    this.glitch.draw(g, view, pixelScale, cockpit);
 
     drawHudTop(g, race, this.notices.notice);
     drawHudPanel(g, race, !cockpit, warn.vRef);
