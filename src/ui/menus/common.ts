@@ -161,16 +161,26 @@ export function footerHints(g: CanvasRenderingContext2D, hints: [string, string]
   }
 }
 
+/** The menu background, drawn in the 640×480 frame but out to the screen's edges (a wider or taller screen than the frame). */
 export function stripesBg(g: CanvasRenderingContext2D): void {
+  const f = frameRect();
+  const x0 = -f.x / f.s;
+  const x1 = (layout.w - f.x) / f.s;
+  const y0 = -f.y / f.s;
+  const y1 = (layout.h - f.y) / f.s;
   g.fillStyle = PR.mango;
-  g.fillRect(0, 0, W, H);
-  for (const x of [-40, 60, 560, 660]) poly(g, [x, 0, x + 60, 0, x - 80, H, x - 140, H], PR.mangoLight);
-  poly(g, [470, 0, 640, 0, 640, 70], PR.ultra);
-  poly(g, [530, 0, 556, 0, 640, 50, 640, 66], PR.red);
+  g.fillRect(x0, y0, x1 - x0, 430 - y0);
+  // the stripes lean 140 px left over the frame's height; the light pairs stay at the screen's sides
+  const lean = (y: number) => (140 * y) / H;
+  for (const x of [x0 - 40, x0 + 60, x1 - 80, x1 + 20]) {
+    poly(g, [x - lean(y0), y0, x + 60 - lean(y0), y0, x - 80, H, x - 140, H], PR.mangoLight);
+  }
+  poly(g, [x1 - 170, y0, x1, y0, x1, y0 + 70], PR.ultra);
+  poly(g, [x1 - 110, y0, x1 - 84, y0, x1, y0 + 50, x1, y0 + 66], PR.red);
   g.fillStyle = PR.red;
-  g.fillRect(0, 430, W, 5);
+  g.fillRect(x0, 430, x1 - x0, 5);
   g.fillStyle = PR.ink;
-  g.fillRect(0, 435, W, 45);
+  g.fillRect(x0, 435, x1 - x0, y1 - 435);
 }
 
 export function menuScreen(g: CanvasRenderingContext2D, draw: () => void): void {

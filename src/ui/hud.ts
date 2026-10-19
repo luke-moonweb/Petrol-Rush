@@ -11,6 +11,12 @@ import { FONT_BLACK, PR } from './theme';
 const HUD_EDGE = '#2A2740';
 
 const TOP_H = CONFIG.HUD_TOP_H;
+/** The baseline of the top bar's text. */
+const BAR_Y = 17;
+// the notice banner: its flag and margins around the text, its font size and the smallest it may shrink to
+const NOTICE_PAD = 34;
+const NOTICE_PX = 11;
+const NOTICE_MIN_PX = 8;
 
 function label(g: CanvasRenderingContext2D, str: string, x: number, y: number, color: string = PR.muted): number {
   g.font = `bold 9px ${FONT_UI}`;
@@ -48,13 +54,28 @@ function glowText(
   return g.measureText(str).width;
 }
 
+function labelWidth(g: CanvasRenderingContext2D, str: string): number {
+  g.font = `bold 9px ${FONT_UI}`;
+  let w = 0;
+  for (const ch of str) w += g.measureText(ch).width + 2;
+  return w;
+}
+
 export function drawHudTop(g: CanvasRenderingContext2D, race: Race, notice: { text: string; age: number } | null = null): void {
-  const p = race.player;
   g.fillStyle = PR.night;
   g.fillRect(0, 0, layout.w, TOP_H);
   g.fillStyle = HUD_EDGE;
   g.fillRect(0, TOP_H - 1, layout.w, 1);
+  drawLiveBadge(g);
+  // right to left, so nothing overlaps on a narrow screen: the position, a penalty, the lap counters in
+  // what is left, and a notice in the gap between
+  const bx = drawPosition(g, race);
+  const px = drawPenalty(g, race, bx);
+  const x = drawLapCounters(g, race, px - 12);
+  if (notice) drawNotice(g, notice, x + 16, px - 12);
+}
 
+function drawLiveBadge(g: CanvasRenderingContext2D): void {
   g.fillStyle = PR.red;
   g.fillRect(0, 0, 66, TOP_H - 1);
   g.fillStyle = PR.cream;
@@ -69,16 +90,11 @@ export function drawHudTop(g: CanvasRenderingContext2D, race: Race, notice: { te
     g.fillText(ch, lx, 12);
     lx += g.measureText(ch).width + 2;
   }
+}
 
-  const y = 17;
-  let x = 84;
-  const lap = p.finished ? race.laps : Math.min(race.laps, lapsCompleted(p) + 1);
-  x += label(g, 'LAP', x, y) + 5;
-  x += glowText(g, `${lap} / ${race.laps}`, x, y, `13px ${FONT_BLACK}`, PR.tealLight, 'rgba(18,181,166,0.9)') + 18;
-  x += label(g, 'BEHIND', x, y) + 5;
-  x += glowText(g, String(race.lapsBehind(p)), x, y, `13px ${FONT_BLACK}`, PR.tealLight, 'rgba(18,181,166,0.9)');
-
-  const pos = String(race.shownPosition(p));
+/** The POS block at the bar's right end; returns its left edge. */
+function drawPosition(g: CanvasRenderingContext2D, race: Race): number {
+  const pos = String(race.shownPosition(race.player));
   const of = `/${race.cars.length}`;
   g.font = `16px ${FONT_BLACK}`;
   const wPos = g.measureText(pos).width;
@@ -86,51 +102,86 @@ export function drawHudTop(g: CanvasRenderingContext2D, race: Race, notice: { te
   const wOf = g.measureText(of).width;
   const blockW = 12 + 22 + 4 + wPos + 4 + wOf + 12;
   const bx = layout.w - blockW;
-  let noticeEnd = bx - 12;
-  if (p.penalty > 0 && !p.finished) {
-    const proj = `→ P${race.projectedPosition(p)}`;
-    const pen = `PEN +${p.penalty}s`;
-    g.font = `bold 9px ${FONT_UI}`;
-    const wPen = g.measureText(pen).width;
-    g.font = `12px ${FONT_BLACK}`;
-    const wProj = g.measureText(proj).width;
-    const pw = 10 + wPen + 6 + wProj + 10;
-    const px = bx - pw;
-    g.fillStyle = PR.red;
-    g.fillRect(px, 0, pw, TOP_H - 1);
-    g.fillStyle = PR.cream;
-    g.font = `bold 9px ${FONT_UI}`;
-    g.textAlign = 'left';
-    g.textBaseline = 'alphabetic';
-    g.fillText(pen, px + 10, y);
-    g.font = `12px ${FONT_BLACK}`;
-    g.fillText(proj, px + 10 + wPen + 6, y);
-    noticeEnd = px - 12;
-  }
-  if (notice) drawNotice(g, notice, x + 16, noticeEnd);
   g.fillStyle = PR.amber;
   g.fillRect(bx, 0, blockW, TOP_H - 1);
   g.fillStyle = PR.ink;
   g.font = `bold 9px ${FONT_UI}`;
+  g.textAlign = 'left';
   g.textBaseline = 'alphabetic';
-  g.fillText('POS', bx + 12, y);
+  g.fillText('POS', bx + 12, BAR_Y);
   g.font = `16px ${FONT_BLACK}`;
-  g.fillText(pos, bx + 38, y + 1);
+  g.fillText(pos, bx + 38, BAR_Y + 1);
   g.font = `10px ${FONT_BLACK}`;
-  g.fillText(of, bx + 42 + wPos, y);
+  g.fillText(of, bx + 42 + wPos, BAR_Y);
+  return bx;
+}
+
+/** The red PEN block left of `right` while the player carries a penalty; returns its left edge (`right` without one). */
+function drawPenalty(g: CanvasRenderingContext2D, race: Race, right: number): number {
+  const p = race.player;
+  if (p.penalty <= 0 || p.finished) return right;
+  const proj = `→ P${race.projectedPosition(p)}`;
+  const pen = `PEN +${p.penalty}s`;
+  g.font = `bold 9px ${FONT_UI}`;
+  const wPen = g.measureText(pen).width;
+  g.font = `12px ${FONT_BLACK}`;
+  const wProj = g.measureText(proj).width;
+  const pw = 10 + wPen + 6 + wProj + 10;
+  const px = right - pw;
+  g.fillStyle = PR.red;
+  g.fillRect(px, 0, pw, TOP_H - 1);
+  g.fillStyle = PR.cream;
+  g.font = `bold 9px ${FONT_UI}`;
+  g.textAlign = 'left';
+  g.textBaseline = 'alphabetic';
+  g.fillText(pen, px + 10, BAR_Y);
+  g.font = `12px ${FONT_BLACK}`;
+  g.fillText(proj, px + 10 + wPen + 6, BAR_Y);
+  return px;
+}
+
+/** LAP, and the laps the player is down on the leader ("BEHIND LEADER 1 LAP") where it fits before `limit`; returns where they end. */
+function drawLapCounters(g: CanvasRenderingContext2D, race: Race, limit: number): number {
+  const p = race.player;
+  const lap = p.finished ? race.laps : Math.min(race.laps, lapsCompleted(p) + 1);
+  const font = `13px ${FONT_BLACK}`;
+  const glow = 'rgba(18,181,166,0.9)';
+  let x = 84;
+  x += label(g, 'LAP', x, BAR_Y) + 5;
+  x += glowText(g, `${lap} / ${race.laps}`, x, BAR_Y, font, PR.tealLight, glow);
+  const down = race.lapsBehind(p);
+  const unit = down === 1 ? 'LAP' : 'LAPS';
+  const wLabels = labelWidth(g, 'BEHIND LEADER') + labelWidth(g, unit);
+  g.font = font;
+  if (x + 18 + wLabels + 5 + g.measureText(String(down)).width + 4 > limit) return x;
+  x += 18;
+  x += label(g, 'BEHIND LEADER', x, BAR_Y) + 5;
+  x += glowText(g, String(down), x, BAR_Y, font, PR.tealLight, glow) + 4;
+  return x + label(g, unit, x, BAR_Y);
+}
+
+/** Where the notice banner goes: in the bar between x0 and x1, in a smaller font if need be, or under the bar when even that won't fit. */
+function noticeFit(g: CanvasRenderingContext2D, text: string, x0: number, x1: number): { size: number; cx: number; top: number } {
+  g.font = `${NOTICE_PX}px ${FONT_BLACK}`;
+  const tw = g.measureText(text).width;
+  const room = x1 - x0 - NOTICE_PAD;
+  if (tw <= room) return { size: NOTICE_PX, cx: (x0 + x1) / 2, top: 0 };
+  const size = Math.floor((NOTICE_PX * room) / tw);
+  if (size >= NOTICE_MIN_PX) return { size, cx: (x0 + x1) / 2, top: 0 };
+  return { size: NOTICE_PX, cx: layout.view.x + layout.view.w / 2, top: TOP_H };
 }
 
 function drawNotice(g: CanvasRenderingContext2D, n: { text: string; age: number }, x0: number, x1: number): void {
   if (n.age < 1 && Math.floor(n.age * 6) % 2 === 1) return;
   const alpha = Math.min(1, (4 - n.age) / 0.5);
   if (alpha <= 0) return;
+  const fit = noticeFit(g, n.text, x0, x1);
   g.save();
   g.globalAlpha = alpha;
-  g.font = `11px ${FONT_BLACK}`;
-  const tw = g.measureText(n.text).width;
-  const w = 14 + 8 + tw + 12;
-  const cx = (x0 + x1) / 2;
-  const bx = Math.round(cx - w / 2);
+  g.translate(0, fit.top);
+  g.font = `${fit.size}px ${FONT_BLACK}`;
+  const w = NOTICE_PAD + g.measureText(n.text).width;
+  const bx = Math.round(fit.cx - w / 2);
   g.fillStyle = '#FFD21A';
   g.fillRect(bx, 3, w, TOP_H - 7);
   g.fillStyle = PR.ink;

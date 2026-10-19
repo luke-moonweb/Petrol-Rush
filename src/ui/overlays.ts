@@ -124,7 +124,8 @@ function hints(g: CanvasRenderingContext2D, list: [string, string][], x: number,
 function sidePanel(g: CanvasRenderingContext2D, tag: string, title: string): number {
   g.fillStyle = 'rgba(8,6,18,0.35)';
   g.fillRect(PANEL_W, TOP, layout.w - PANEL_W, PLAY_H);
-  g.fillStyle = 'rgba(14,12,28,0.94)';
+  // opaque: the timing tower and the track under it would show through as ghosts
+  g.fillStyle = PR.night;
   g.fillRect(0, TOP, PANEL_W, PLAY_H);
   g.save();
   g.shadowColor = PR.teal;
@@ -341,9 +342,8 @@ function ord(n: number): string {
   return `${n}${['TH', 'ST', 'ND', 'RD'][n % 10] ?? 'TH'}`;
 }
 
+/** Drawn in the 640×480 frame, over a race the caller has dimmed out to the screen's edges. */
 export function drawResults(g: CanvasRenderingContext2D, rows: ResultRow[], playerPos: number): void {
-  g.fillStyle = 'rgba(8,6,18,0.55)';
-  g.fillRect(0, TOP, W, PLAY_H);
   const x0 = 34;
   const y0 = TOP + 10;
   const pw = W - 68;
