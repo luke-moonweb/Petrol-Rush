@@ -26,6 +26,8 @@ export class GameAudio {
   private screechFilter: BiquadFilterNode | null = null;
   private scrapeGain: GainNode | null = null;
   private scrapeFilter: BiquadFilterNode | null = null;
+  private tyreGain: GainNode | null = null;
+  private tyreFilter: BiquadFilterNode | null = null;
   private refuelGain: GainNode | null = null;
   muted = false;
   private speechPrimed = false;
@@ -107,6 +109,17 @@ export class GameAudio {
     this.loopNoise().connect(this.scrapeFilter);
     this.scrapeFilter.connect(this.scrapeGain);
     this.scrapeGain.connect(this.master);
+
+    // Tyre load: a broad hiss (low Q, unlike the whistling screech) that rises as the tyres near their limit.
+    this.tyreFilter = ctx.createBiquadFilter();
+    this.tyreFilter.type = 'bandpass';
+    this.tyreFilter.frequency.value = 1800;
+    this.tyreFilter.Q.value = 1.8;
+    this.tyreGain = ctx.createGain();
+    this.tyreGain.gain.value = 0;
+    this.loopNoise().connect(this.tyreFilter);
+    this.tyreFilter.connect(this.tyreGain);
+    this.tyreGain.connect(this.master);
 
     const fuelFilter = ctx.createBiquadFilter();
     fuelFilter.type = 'lowpass';
@@ -253,6 +266,15 @@ export class GameAudio {
     const l = Math.max(0, Math.min(1, level));
     this.scrapeGain.gain.setTargetAtTime(l * 0.2, t, l > 0 ? 0.015 : 0.06);
     this.scrapeFilter.frequency.setTargetAtTime(1100 + l * 900, t, 0.05);
+  }
+
+  /** level 0..1: how close the tyres are to their limit. The hiss also brightens as it rises. */
+  setTyreLoad(level: number): void {
+    if (!this.ctx || !this.tyreGain || !this.tyreFilter) return;
+    const t = this.ctx.currentTime;
+    const l = Math.max(0, Math.min(1, level));
+    this.tyreGain.gain.setTargetAtTime(l * 0.035, t, 0.06);
+    this.tyreFilter.frequency.setTargetAtTime(1800 + l * 800, t, 0.06);
   }
 
   setRefuel(on: boolean): void {
@@ -435,6 +457,7 @@ export class GameAudio {
     this.setRivals([]);
     this.setScreech(0);
     this.setScrape(0);
+    this.setTyreLoad(0);
     this.setPack(0);
     this.setRefuel(false);
   }
