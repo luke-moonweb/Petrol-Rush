@@ -50,8 +50,8 @@ export function tapping(mph: number, on: number, off: number, arc: number): { us
   return { use: (mean * v) / gripAt(v), sway: (hi - lo) * DEG };
 }
 
-/** Heading (deg) 1.5 s after a tap of n steps on a straight at mph (the straight assist acting). */
-export function tapAngle(mph: number, n: number): number {
+/** A tap of n steps on a straight at mph, 1.5 s later (the straight assist acting): heading (deg), px across. */
+function tapRun(mph: number, n: number): { deg: number; across: number } {
   const t = new CurveTrack([{ len: 3000, k: 0 }]);
   const car = freshCar();
   placeCar(car, t, 100, 0, mph);
@@ -60,7 +60,17 @@ export function tapAngle(mph: number, n: number): number {
     const st = ps.update(car, i < n ? 1 : 0, DT);
     stepCar(car, { steer: st.steer, straightTo: st.straightTo, gas: car.speed < mph, brake: false, toggleReverse: false }, DT, noWalls);
   }
-  return car.heading * DEG;
+  return { deg: car.heading * DEG, across: t.project(car.x, car.y, 100).d };
+}
+
+/** Heading (deg) 1.5 s after a tap of n steps on a straight at mph. */
+export function tapAngle(mph: number, n: number): number {
+  return tapRun(mph, n).deg;
+}
+
+/** How far across (px) a tap of n steps on a straight at mph has moved the car 1.5 s later. */
+export function tapAcross(mph: number, n: number): number {
+  return tapRun(mph, n).across;
 }
 
 /** A standing car on the oval at s, d, mph (the probes below step only the steering, not the car). */
