@@ -52,6 +52,8 @@ are no image, audio or font files in the project.
   blocks, pines, grandstands), rivals with working tail and brake lights, a live rear-view mirror and
   a steering wheel that follows your inputs. The switch into the cockpit flickers through for a moment
   like a worn VHS tape losing its tracking: torn lines, snow, smeared colour and a rolling picture.
+  The cockpit picture never quite settles: a light band of tape noise hangs at the bottom, hiccups now
+  and then, and climbs up the screen when you hit something or spin.
 - 📺 **Live-on-air title screen** – a silent 20-car demo race plays behind the menu, filmed like a
   TV broadcast.
 - ⌨️ **Fully rebindable keys** (primary + alternate per action), saved in the browser.
@@ -232,7 +234,7 @@ src/
                    race logic & classification, Grand Prix championship (points, standings, save)
   ui/              HUD, race overlays, text, palette
     menus/         title, controls, settings and credits screens
-  gfx/             3D-to-sprite renderer, liveries, particles, world drawing, the VHS glitch of the cockpit switch
+  gfx/             3D-to-sprite renderer, liveries, particles, world drawing, the VHS look of the cockpit
     fpv/           cockpit view: tiny Canvas 2D polygon renderer, 3D night scene of any track, mirror, dashboard
     track/         pre-rendered tracks: oval/ (tarmac, pit road, paddock, infield), circuit/ (themes)
   audio/           Web Audio effects and four engine voices
