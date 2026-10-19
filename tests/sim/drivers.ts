@@ -2,7 +2,7 @@
 // speed, the road ahead); the physics under test never reads the track.
 import { CONFIG, DEFAULT_OPTIONS } from '../../src/config';
 import type { Car } from '../../src/race/car';
-import { brakeAt, curvatureAssist, type DriveInput, maxCurvature, SteerRamp, type StepTrack, stepCar } from '../../src/race/physics';
+import { brakeAt, curvatureAssist, type DriveInput, maxCurvature, type StepTrack, stepCar } from '../../src/race/physics';
 import { planSpeed } from '../../src/race/planner';
 import { Race } from '../../src/race/race';
 import { keyCap, PlayerSteering, type SteerTrack } from '../../src/race/steering';
@@ -51,6 +51,37 @@ export function corridor(t: DriveTrack, dMax: number, dMin: number, hint: () => 
 
 export const DT = 1 / 60;
 const PXM = CONFIG.PX_PER_MPH;
+
+/**
+ * The game's key ramp before the steering wheel (src/race/steering.ts), with its constants: the physics
+ * stress drivers (keys, keysHold, keysCatch) still steer through it. A press starts at MIN (MIN_TURN in a
+ * bend) of full lock and ramps to full lock in RAMP_S (RAMP_TURN_S); a release is 0 at once.
+ */
+export class SteerRamp {
+  static readonly MIN = 0.15;
+  static readonly RAMP_S = 0.3;
+  static readonly MIN_TURN = 0.3;
+  static readonly RAMP_TURN_S = 0.15;
+  static readonly RELEASE_S = 0.2;
+  static readonly ASSIST = 0.3;
+  private dir = 0;
+  private level = 0;
+
+  update(dir: number, dt: number, turn = false): number {
+    const min = turn ? SteerRamp.MIN_TURN : SteerRamp.MIN;
+    const ramp = turn ? SteerRamp.RAMP_TURN_S : SteerRamp.RAMP_S;
+    if (dir === 0) {
+      this.level = Math.max(0, this.level - dt / SteerRamp.RELEASE_S);
+      return 0;
+    }
+    if (dir !== this.dir) {
+      this.dir = dir;
+      this.level = 0;
+    }
+    this.level = Math.min(1, Math.max(this.level, min) + ((1 - min) * dt) / ramp);
+    return dir * this.level;
+  }
+}
 
 export function freshCar(): Car {
   const r = new Race({ ...DEFAULT_OPTIONS, cars: 1 }, 3);
@@ -129,6 +160,54 @@ export class HumanKeys {
     this.queue.push({ t: time + this.react, key: this.want });
     while (this.queue.length > 0 && this.queue[0]!.t <= time + 1e-9) this.out = this.queue.shift()!.key;
     return this.out;
+  }
+}
+
+/** The tapper's habits (the defaults; tests/sim/steerLab.ts searches around them). */
+export const TAPPER = {
+  /** Reaction delay (s) between the line's need and the key. */
+  REACT: 0.18,
+  /** Share of the reaction delay anticipated from how fast the need changes. */
+  ANT: 1,
+  /** Shortest time a key stays down or up (s): the human tapping limit. */
+  DWELL: 0.08,
+  /** Owed steer (share of full lock x s) that presses a key. */
+  TH: 0.004,
+  /** Line-tracking gain (1/s) of the steer the tapper wants. */
+  W: 4,
+};
+
+export type TapperHabits = typeof TAPPER;
+
+/**
+ * A skilled key player for comparing input layers: it knows the steer the line needs (seen REACT s late,
+ * extrapolated) and taps the key like a delta-sigma modulator with a minimum dwell, so on average the
+ * game's steer follows the need. Unlike HumanKeys it modulates as finely as a fast human can.
+ */
+export class TapperKeys {
+  private readonly hist: number[] = [];
+  private owed = 0;
+  private key = 0;
+  private since = -1;
+
+  constructor(readonly habits: TapperHabits = TAPPER) {}
+
+  /** want: the steer (share of full lock) the line needs now; given: the steer the game gave last step. */
+  step(time: number, want: number, given: number): number {
+    const h = this.habits;
+    this.hist.push(want);
+    const i = Math.max(0, this.hist.length - 1 - Math.round(h.REACT / DT));
+    const rate = i > 0 ? (this.hist[i]! - this.hist[i - 1]!) / DT : 0;
+    const target = this.hist[i]! + rate * h.REACT * h.ANT;
+    this.owed = Math.max(-0.05, Math.min(0.05, this.owed + (target - given) * DT));
+    if (this.since < 0 || time - this.since >= h.DWELL) {
+      const key = this.owed > h.TH ? 1 : this.owed < -h.TH ? -1 : 0;
+      if (key !== this.key) {
+        this.key = key;
+        this.since = time;
+      }
+    }
+    return this.key;
   }
 }
 
@@ -325,7 +404,8 @@ export function runCurve(
         steer = reacting ? -Math.sign(slip) * Math.min(1, Math.abs(slip) * 4) : want;
         break;
       default: {
-        const assist = curvatureAssist(car, kLane);
+        // (the corner assist as strong as it was for the ramp, CORNER_ASSIST 0.3)
+        const assist = curvatureAssist(car, kLane) * (SteerRamp.ASSIST / CONFIG.CORNER_ASSIST);
         level = assist !== 0 ? Math.min(1, level + DT / CONFIG.CORNER_ASSIST_IN_S) : Math.max(0, level - DT / CONFIG.CORNER_ASSIST_IN_S);
         const a = assist * level;
         let key: number;

@@ -11,17 +11,48 @@ export class PlayerControls {
   private reverseHeld = false;
   /** Seconds left of the STOP TO ENGAGE REVERSE hint. */
   reverseHint = 0;
-  /** The steering wheel as drawn in the cockpit, eased. */
-  steerVis = 0;
+  // The steering wheel in the cockpit after this step and the step before (see `steerShown`).
+  private steerVis = 0;
+  private prevSteerVis = 0;
 
+  /** A new race. */
   reset(): void {
     this.steering.resetAssist();
     this.reverseHeld = false;
+    this.steerVis = this.prevSteerVis = 0;
+  }
+
+  /**
+   * The steering wheel as drawn in the cockpit, between the last two steps like the car's heading.
+   * It follows the player's steering at once (an eased wheel would lag the turning view).
+   */
+  steerShown(alpha: number): number {
+    return this.prevSteerVis + (this.steerVis - this.prevSteerVis) * alpha;
+  }
+
+  /** The steering wheel (-1..1, the share of the key cap). */
+  get wheel(): number {
+    return this.steering.wheel;
+  }
+
+  /** The race is paused or lost focus: the keys are let go, the wheel centres (the assist blend stays). */
+  release(): void {
+    this.steering.release();
+  }
+
+  /** The debug overlay's line: the wheel, its limit and the overdrive. */
+  debugLine(): string {
+    const st = this.steering;
+    return `wheel ${st.wheel.toFixed(2)}  limit ${st.limit.toFixed(2)}  overdrive ${st.overdrive.toFixed(2)}`;
   }
 
   update(input: Input, race: Race, dt: number): DriveInput {
     const p = race.player;
-    const steerKey = (input.isDown('right') ? 1 : 0) - (input.isDown('left') ? 1 : 0);
+    // With both arrows held the one pressed last steers (a fast change of direction never lets go of the
+    // wheel), and a tap shorter than a step still counts for one step.
+    const left = input.lastPress('left');
+    const right = input.lastPress('right');
+    const steerKey = right > left ? 1 : left > right ? -1 : 0;
     this.steering.track = race.track;
     const drive: DriveInput = {
       steer: 0,
@@ -31,11 +62,16 @@ export class PlayerControls {
       toggleReverse: input.pressed('reverse') && !input.isDown('reverse'),
     };
     this.holdReverse(race, drive, input.isDown('reverse'));
-    const st = this.steering.update(p, steerKey, dt, drive.brake);
+    // Under the pit autopilot the player's keys do not steer: the wheel centres, and a key still held when
+    // it hands back is not a fresh press (the straight assist stays on).
+    const st = this.steering.update(p, race.pitAuto ? 0 : steerKey, dt, drive.brake);
+    if (race.pitAuto) this.steering.rearm(steerKey);
     drive.steer = race.pitAuto ? 0 : st.steer;
     drive.straightTo = race.pitAuto ? undefined : st.straightTo;
-    const shownSteer = race.pitAuto ? race.playerDrive.steer : drive.steer;
-    this.steerVis += (shownSteer - this.steerVis) * Math.min(1, dt * 12);
+    this.prevSteerVis = this.steerVis;
+    // The pit autopilot's steering is eased: it is not the player's hands.
+    if (race.pitAuto) this.steerVis += (race.playerDrive.steer - this.steerVis) * Math.min(1, dt * 12);
+    else this.steerVis = drive.steer;
     this.reverseHint = Math.max(0, this.reverseHint - dt);
     if (drive.toggleReverse && !race.pitAuto && !p.reverse && Math.abs(p.speed) > CONFIG.REVERSE_TOGGLE_MAX_MPH) {
       this.reverseHint = 1.5;

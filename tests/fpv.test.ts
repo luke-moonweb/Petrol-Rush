@@ -11,6 +11,7 @@ import { Race } from '../src/race/race';
 import { NO_WARN } from '../src/race/warnings';
 import { HALF_W } from '../src/track/common';
 import { allTracks } from '../src/track/tracks';
+import { fuelCall, fuelOutlook } from '../src/ui/hud';
 import { PR } from '../src/ui/theme';
 
 function camera(): Camera {
@@ -167,6 +168,7 @@ describe('cockpit readout', () => {
     speed: 0,
     reverse: false,
     fuel: 1,
+    fuelOut: fuelCall(12, 5),
     lapsToGo: 5,
     started: true,
     finished: false,
@@ -220,20 +222,18 @@ describe('cockpit readout', () => {
     expect(lit({ lights: { lit: 0, out: true, since: 0.5 } })).toBe(0);
   });
 
-  it('warns about fuel only when a stop is close', () => {
-    const full = read({ fuel: 1, lapsToGo: 18 });
+  it("warns about fuel only when a stop is close, by the laps the tank lasts at the car's own rate", () => {
+    const full = read({ fuel: 1, fuelOut: fuelCall(12, 18) });
     expect(full.lamps.fuel).toBe(false);
     expect(full.podBottom).toBe('+0.42');
-    const half = read({ fuel: 0.5, lapsToGo: 8 });
-    expect(half.fuelLaps).toBeCloseTo(6);
-    const soon = read({ fuel: 0.2, lapsToGo: 8 });
+    const soon = read({ fuel: 0.2, fuelOut: fuelCall(2.4, 8) });
     expect(soon.lamps.fuel).toBe(false);
     expect(soon).toMatchObject({ podBottom: 'PIT 2', podColor: PR.amber });
-    expect(read({ fuel: 0.2, lapsToGo: 2 }).podBottom).toBe('+0.42');
-    expect(read({ fuel: 0.13, lapsToGo: 8 })).toMatchObject({ podBottom: 'PIT 1', podColor: PR.amber });
-    expect(read({ fuel: 0.07, lapsToGo: 8 })).toMatchObject({ podBottom: 'PIT NOW', podColor: PR.red });
-    expect(read({ fuel: 0.121, lapsToGo: 8 }).lamps.fuel).toBe(true);
-    expect(read({ fuel: 0.15, lapsToGo: 8 }).podColor).toBe(PR.amber);
+    expect(read({ fuel: 0.2, fuelOut: fuelCall(2.4, 1.9) }).podBottom).toBe('+0.42');
+    expect(read({ fuel: 0.13, fuelOut: fuelCall(1.56, 8) })).toMatchObject({ podBottom: 'PIT 1', podColor: PR.amber });
+    expect(read({ fuel: 0.07, fuelOut: fuelCall(0.84, 8) })).toMatchObject({ podBottom: 'PIT NOW', podColor: PR.red });
+    expect(read({ fuel: 0.121, fuelOut: fuelCall(1.45, 8) }).lamps.fuel).toBe(true);
+    expect(read({ fuel: 0.15, fuelOut: fuelCall(1.8, 8) }).podColor).toBe(PR.amber);
     const low = read({ fuel: CONFIG.LOW_FUEL - 0.01, time: 0.1 });
     expect(low.lamps.fuel).toBe(true);
     expect(read({ fuel: CONFIG.LOW_FUEL - 0.01, time: 0.4 }).lamps.fuel).toBe(false);
@@ -317,5 +317,31 @@ describe('floodlight streaks', () => {
     expect(out[0]!.x).toBeCloseTo(c.ox + (c.focal * 30) / 40);
     expect(out[0]!.k).toBeGreaterThan(0);
     expect(out[0]!.k).toBeLessThanOrEqual(1);
+  });
+});
+
+describe('fuel outlook (HUD readout, cockpit pod, FUEL SHORT message)', () => {
+  it("calls the fuel against the finish with the AI drivers' margin and saving gain", () => {
+    const { GAIN, MARGIN_LAPS } = CONFIG.AI_ECO;
+    expect(fuelCall(2 + MARGIN_LAPS, 2).call).toBe('ok');
+    expect(fuelCall(2 + MARGIN_LAPS - 0.01, 2).call).toBe('tight');
+    expect(fuelCall(2, 2).call).toBe('tight');
+    expect(fuelCall(1.99, 2)).toMatchObject({ call: 'short', canSave: true });
+    expect(fuelCall(2 / (1 + GAIN) - 0.01, 2)).toMatchObject({ call: 'short', canSave: false });
+  });
+
+  it("reads the player's own estimate, and only the current lap once the leader is home", () => {
+    const race = new Race({ ...DEFAULT_OPTIONS, track: 'harbour', laps: 10 }, 1);
+    const p = race.player;
+    p.ai.fuelPerLap = 0.1;
+    p.fuel = 0.5;
+    const out = fuelOutlook(race);
+    expect(out.laps).toBeCloseTo(5);
+    expect(out.toGo).toBeGreaterThan(9.5);
+    expect(out.call).toBe('short');
+    race.leaderFinished = true;
+    // on the grid, a little behind the line: to the end of the first lap
+    expect(fuelOutlook(race).toGo).toBeLessThan(1.5);
+    expect(fuelOutlook(race).call).toBe('ok');
   });
 });

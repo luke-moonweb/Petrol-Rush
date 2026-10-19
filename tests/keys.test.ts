@@ -37,8 +37,10 @@ describe('keys: driving at the limit (designer H2)', () => {
         expect(r.spun, `d ${d} f ${f}`).toBe(false);
         expect(r.maxUse, `d ${d} f ${f}`).toBeLessThanOrEqual(1.1);
         expect(r.looseAt, `d ${d} f ${f}`).toBe(-1);
-        // (the outside lane is 11 px from the wall: the driver's weave brushes it)
-        if (d < 28.5) expect(r.wallHits, `d ${d} f ${f}`).toBe(0);
+        // (the outer lanes are 11 and 30 px from the outer wall: this bang-bang driver's weave brushes it,
+        // more with the key wheel, which turns on a little after a key is let go; the playtest counts the
+        // contacts of a real player, and the steering lab's grid of lanes shows this driver's)
+        if (d < 9.5) expect(r.wallHits, `d ${d} f ${f}`).toBe(0);
       }
   });
 
@@ -114,6 +116,17 @@ describe('keys: braking matters (designer H1, M3)', () => {
       for (const r of t.slice(0, 3)) expect(r.spun, `d ${d}`).toBe(false);
       expect(t[1]!.time - t[0]!.time, `d ${d} x1.1`).toBeLessThan(0.6);
       expect(t[3]!.spun, `d ${d} flat out`).toBe(true);
+    }
+  });
+
+  it('a small excess does not pay: 10 % too fast into turn 1 is no faster to the end of the top straight than braking to the limit', () => {
+    // (the key wheel reaches the cap later than the old ramp did; the overdrive counts the key held into the
+    // bend, so insisting a little too fast still slides wide and costs time)
+    for (const d of [-9.5, 0]) {
+      const braked = entry(d, 1, {}, 1600);
+      const over = entry(d, 1.1, {}, 1600);
+      expect(over.spun, `d ${d}`).toBe(false);
+      expect(over.time - braked.time, `d ${d}`).toBeGreaterThanOrEqual(0);
     }
   });
 

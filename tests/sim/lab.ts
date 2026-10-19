@@ -11,13 +11,14 @@ import { type DriveInput, limitMph, maxCurvature, stepCar } from '../../src/race
 import { PlayerSteering } from '../../src/race/steering';
 import { LANES, type PitLane, type Track, type WallNormal, wrapAngle } from '../../src/track/common';
 import { HUMAN_MARGIN, LAB_HW, type LabCorner, LINE_MARGIN, labCorner } from './curves';
-import { corridor, DT, freshCar, HUMAN, HumanKeys, placeCar, steerTrack, withWalls } from './drivers';
+import { corridor, DT, freshCar, HUMAN, HumanKeys, placeCar, steerTrack, type TapperHabits, TapperKeys, withWalls } from './drivers';
 
 /**
  * line: analog, tracks the line exactly (insists at full lock when over the limit). human: keys through the game's PlayerSteering.
+ * tapper: a skilled key player (TapperKeys: taps as finely as a fast human) through PlayerSteering.
  * ai: the game's aiInput, alone on the corner (it plans its own speed and line: mode, v and use only set the start).
  */
-export type LabDriver = 'line' | 'human' | 'ai';
+export type LabDriver = 'line' | 'human' | 'tapper' | 'ai';
 /** flat: full throttle. brake: brake late to vc for the turn-in, hold it to the apex, then full throttle. hold: start just before the turn-in at v and hold it to the apex. */
 export type LabMode = 'flat' | 'brake' | 'hold';
 
@@ -46,6 +47,8 @@ export interface CornerSpec {
   level?: Difficulty;
   /** ai: always slides in at the turn-in (turnInSlide). */
   slide?: boolean;
+  /** tapper: its habits (default TAPPER). */
+  habits?: TapperHabits;
 }
 
 export interface CornerRun {
@@ -62,6 +65,24 @@ export interface CornerRun {
   /** The rear let go (Car.rearLoose) at some point. */
   loose: boolean;
   maxSlipDeg: number;
+  /** On the line's arc: rms distance from the line (px), and the yaw rate's jitter (rad/s, see yawJitter). */
+  rms: number;
+  jitter: number;
+  /** Key drivers: key changes per second on the line's arc. */
+  keyChg: number;
+}
+
+/** Override CONFIG numbers from "GRIP.TOP=80 STEER_IN_S=0.1" (the labs' LAB_SET: tuning without edits). */
+export function applySet(src: string): void {
+  for (const tok of src.split(/\s+/).filter(Boolean)) {
+    const [path, val] = tok.split('=');
+    const keys = path!.split('.');
+    let obj = CONFIG as unknown as Record<string, unknown>;
+    for (const k of keys.slice(0, -1)) obj = obj[k] as Record<string, unknown>;
+    const last = keys[keys.length - 1]!;
+    if (typeof obj?.[last] !== 'number') throw new Error(`LAB_SET: ${path} is not a number in CONFIG`);
+    obj[last] = Number(val);
+  }
 }
 
 const FINISH_AFTER = 400;
@@ -79,28 +100,39 @@ interface Ctx {
   lineS: number;
   slipSince: number;
   human: HumanKeys;
+  tapper: TapperKeys;
   player: PlayerSteering;
+  /** Key drivers: the key held last step, the steer the game gave, and key changes on the line's arc. */
+  key: number;
+  given: number;
+  keyChanges: number;
   /** ai: the road as a game track (no pits), built on the first step. */
   track?: Track;
 }
 
 const clamp1 = (x: number) => Math.max(-1, Math.min(1, x));
 
-/** Frenet tracking of the line (feed-forward curvature, lateral and course-angle feedback), plus the optional catch. */
-function lineSteer(x: Ctx): number {
+/** Frenet tracking of the line (feed-forward curvature, lateral and course-angle feedback, gain w 1/s): the steer it needs. */
+function lineWant(x: Ctx, w = 4): number {
   const { car, c } = x;
   const st = c.line.project(car.x, car.y, x.lineS);
   const v = Math.max(1, car.speed * CONFIG.PX_PER_MPH);
-  const w = 4;
   const psi = wrapAngle(car.moveAngle - c.line.pointAt(st.s, 0).heading);
   const kWant = c.line.table.at(st.s + v * 0.03) - (w / v) ** 2 * st.d - ((2 * 0.8 * w) / v) * psi;
+  return clamp1(kWant / maxCurvature(v));
+}
+
+/** The line's need, plus the optional catch. */
+function lineSteer(x: Ctx): number {
+  const { car } = x;
+  const want = lineWant(x);
   const slip = wrapAngle(car.heading - car.moveAngle);
   if (Math.abs(slip) > 0.1) {
     if (x.slipSince < 0) x.slipSince = x.time;
   } else x.slipSince = -1;
   const react = x.spec.react;
   if (react !== undefined && x.slipSince >= 0 && x.time - x.slipSince >= react) return -Math.sign(slip) * Math.min(1, Math.abs(slip) * 4);
-  return clamp1(kWant / maxCurvature(v));
+  return want;
 }
 
 /** The realistic key player (tests/sim/drivers.ts HumanKeys) aiming at a point ahead on the line. */
@@ -175,10 +207,15 @@ function aiDrive(x: Ctx, constrain: (c: Car) => WallNormal | null): DriveInput {
 }
 
 function drive(x: Ctx, constrain: (c: Car) => WallNormal | null): DriveInput {
-  if (x.spec.driver === 'ai') return aiDrive(x, constrain);
+  const driver = x.spec.driver;
+  if (driver === 'ai') return aiDrive(x, constrain);
   const p = pedals(x);
-  if (x.spec.driver === 'human') {
-    const ps = x.player.update(x.car, humanKey(x), DT, p.brake);
+  if (driver === 'human' || driver === 'tapper') {
+    const key = driver === 'human' ? humanKey(x) : x.tapper.step(x.time, lineWant(x, x.tapper.habits.W), x.given);
+    if (key !== x.key && x.lineS >= x.c.lineArc0 && x.lineS <= x.c.lineArc1) x.keyChanges++;
+    x.key = key;
+    const ps = x.player.update(x.car, key, DT, p.brake);
+    x.given = ps.steer;
     return { steer: ps.steer, gas: p.gas, brake: p.brake, toggleReverse: false, straightTo: ps.straightTo };
   }
   return { steer: lineSteer(x), gas: p.gas, brake: p.brake, toggleReverse: false };
@@ -186,7 +223,8 @@ function drive(x: Ctx, constrain: (c: Car) => WallNormal | null): DriveInput {
 
 /** The corner as a driver sees it (a key player keeps further off the walls). */
 export function cornerFor(spec: CornerSpec): LabCorner {
-  return labCorner(spec.r, spec.deg, spec.dir, spec.use ?? 1, spec.driver === 'human' ? HUMAN_MARGIN : LINE_MARGIN);
+  const keys = spec.driver === 'human' || spec.driver === 'tapper';
+  return labCorner(spec.r, spec.deg, spec.dir, spec.use ?? 1, keys ? HUMAN_MARGIN : LINE_MARGIN);
 }
 
 function setup(spec: CornerSpec): Ctx {
@@ -216,7 +254,11 @@ function setup(spec: CornerSpec): Ctx {
     lineS: s0,
     slipSince: -1,
     human: new HumanKeys(HUMAN.REACT),
+    tapper: new TapperKeys(spec.habits),
     player: new PlayerSteering(steerTrack(c.road)),
+    key: 0,
+    given: 0,
+    keyChanges: 0,
   };
 }
 
@@ -240,9 +282,24 @@ export function runCorner(spec: CornerSpec, trace?: (row: TraceRow) => void): Co
   const { car, c } = x;
   const constrain = corridor(c.road, LAB_HW, -LAB_HW, () => x.roadS);
   const walls = withWalls(constrain);
-  const res: CornerRun = { t: Infinity, vMin: Infinity, vExit: 0, wide: 0, wallHits: 0, spun: false, loose: false, maxSlipDeg: 0 };
+  const res: CornerRun = {
+    t: Infinity,
+    vMin: Infinity,
+    vExit: 0,
+    wide: 0,
+    wallHits: 0,
+    spun: false,
+    loose: false,
+    maxSlipDeg: 0,
+    rms: 0,
+    jitter: 0,
+    keyChg: 0,
+  };
   const finish = c.arc1 + FINISH_AFTER;
   let wallAgo = 99;
+  let se = 0;
+  // the yaw rate less the line's (curvature x speed), every step on the line's arc
+  const yawErr: number[] = [];
   for (x.time = 0; x.time < T_MAX; x.time += DT) {
     const st = c.road.project(car.x, car.y, x.roadS);
     x.roadS = car.s = st.s;
@@ -257,8 +314,15 @@ export function runCorner(spec: CornerSpec, trace?: (row: TraceRow) => void): Co
       res.vMin = Math.min(res.vMin, car.speed);
       res.wide = Math.max(res.wide, -c.sign * ln.d);
     }
+    const onArc = x.lineS >= c.lineArc0 && x.lineS <= c.lineArc1;
+    const v = car.speed * CONFIG.PX_PER_MPH;
+    const h0 = car.heading;
     const input = drive(x, constrain);
     stepCar(car, input, DT, walls);
+    if (onArc) {
+      se += ln.d * ln.d;
+      yawErr.push(wrapAngle(car.heading - h0) / DT - c.line.table.at(ln.s) * v);
+    }
     const slipDeg = (wrapAngle(car.heading - car.moveAngle) * 180) / Math.PI;
     trace?.({ t: x.time, s: st.s, d: st.d, dLine: ln.d, mph: car.speed, input, slipDeg, wall: car.wallImpact, loose: car.rearLoose });
     if (car.wallImpact > WALL_HIT_MPH && wallAgo > 0.3) res.wallHits++;
@@ -271,7 +335,25 @@ export function runCorner(spec: CornerSpec, trace?: (row: TraceRow) => void): Co
     }
   }
   res.vExit = car.speed;
+  const arcT = yawErr.length * DT;
+  res.rms = Math.sqrt(se / Math.max(1, yawErr.length));
+  res.jitter = yawJitter(yawErr);
+  res.keyChg = arcT > 0 ? x.keyChanges / arcT : 0;
   return res;
+}
+
+/** Jitter of a yaw-rate series: rms deviation from its own centred 0.25 s mean (the jerky part, not the slow corrections). */
+export function yawJitter(yaw: number[], half = 7): number {
+  let sum = 0;
+  let n = 0;
+  for (let k = half; k < yaw.length - half; k++) {
+    let avg = 0;
+    for (let j = -half; j <= half; j++) avg += yaw[k + j]!;
+    avg /= 2 * half + 1;
+    sum += (yaw[k]! - avg) ** 2;
+    n++;
+  }
+  return Math.sqrt(sum / Math.max(1, n));
 }
 
 export interface CornerBest {
