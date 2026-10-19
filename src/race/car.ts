@@ -27,6 +27,11 @@ export interface AiState {
   mergeWait: number;
   /** Grip model: the car leaving the pits has committed to merging (racing cars allow for it). */
   merging: boolean;
+  /**
+   * Leaving its pit box (track/pitAi.ts leaveBox): 1 waiting in it with right of way (cars coming down the pit
+   * lane that can still stop do so), 2 crossing over to the drive row; 0 otherwise.
+   */
+  pullOut: 0 | 1 | 2;
   /** Grip model: heading for the pit entry but held on its line by traffic (counted there, not on the pit approach line). */
   pitHeld: boolean;
   /** Grip model: the last pit stop was skipped (the next one may not be). */

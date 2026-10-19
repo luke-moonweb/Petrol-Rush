@@ -20,8 +20,8 @@ describe('driving model golden master', () => {
 
   it('full 18-lap races, seeds 1234 and 7', () => {
     const a = runRace(1234);
-    expect([a.time.toFixed(4), a.cars.reduce((s, c) => s + c.crashes, 0), hashState(a)]).toEqual(['332.2833', 0, '8bd9f7b2']);
+    expect([a.time.toFixed(4), a.cars.reduce((s, c) => s + c.crashes, 0), hashState(a)]).toEqual(['325.9833', 0, '51055dc4']);
     const b = runRace(7);
-    expect([b.time.toFixed(4), b.cars.reduce((s, c) => s + c.crashes, 0), hashState(b)]).toEqual(['328.9500', 0, '4420090e']);
+    expect([b.time.toFixed(4), b.cars.reduce((s, c) => s + c.crashes, 0), hashState(b)]).toEqual(['329.4833', 0, 'f86a863c']);
   }, 60_000);
 });

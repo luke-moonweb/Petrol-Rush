@@ -178,6 +178,7 @@ export class Race {
         oilTime: 0,
         mergeWait: 0,
         merging: false,
+        pullOut: 0,
         pitHeld: false,
         skipped: false,
         fuelPerLap: nominalLapFuel(this.track) * (1 + CONFIG.FUEL.EST_MARGIN),
