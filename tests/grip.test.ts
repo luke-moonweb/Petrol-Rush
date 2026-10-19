@@ -221,11 +221,12 @@ describe('grip model: collisions and spins', () => {
   }
 
   it('a loaded car (grip use >= 0.7) spins from a weaker rear hit, an unloaded one does not', () => {
-    const [a, b] = pair(150, 132);
+    // (square on the middle: both rear spin speeds x REAR_CENTRE_X)
+    const [a, b] = pair(150, 126);
     b.gripUse = 0.9;
     collideCars([a, b], OVAL, 'realistic');
     expect(b.spinTime).toBeGreaterThan(0);
-    const [c, d] = pair(150, 132);
+    const [c, d] = pair(150, 126);
     d.gripUse = 0.2;
     collideCars([c, d], OVAL, 'realistic');
     expect(d.spinTime).toBe(0);
