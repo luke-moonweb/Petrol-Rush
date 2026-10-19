@@ -1,7 +1,7 @@
 import type { GameAudio } from '../../audio/audio';
 import { CONFIG } from '../../config';
 import { layout } from '../../layout';
-import { lapsCompleted } from '../../race/car';
+import { type Car, lapsCompleted } from '../../race/car';
 import type { DriveInput } from '../../race/physics';
 import type { Race } from '../../race/race';
 import { slideAmount } from '../../race/warnings';
@@ -9,6 +9,20 @@ import { slideAmount } from '../../race/warnings';
 const SOUND_C = 700;
 
 const COCKPIT_HEAR = 450;
+
+/** Grip use where the tyre hiss starts; it is full at the key cap, where a held key steers. */
+const TYRE_HISS_FROM = 0.85;
+
+/**
+ * 0..1: the tyre hiss for the player's car, rising smoothly from TYRE_HISS_FROM of the grip to the key
+ * cap, so a key player hears how much margin is left before the limit (the screech takes over in a slide).
+ * Silent in a spin (the screech is full there), in reverse and while refuelling.
+ */
+export function tyreLoad(car: Car): number {
+  if (car.spinTime > 0 || car.reverse || car.refueling) return 0;
+  const t = Math.max(0, Math.min(1, (car.gripUse - TYRE_HISS_FROM) / (CONFIG.GRIP.KEY_CAP - TYRE_HISS_FROM)));
+  return t * t * (3 - 2 * t);
+}
 
 export class RaceSound {
   private readonly crashes = new Map<number, number>();
@@ -31,6 +45,7 @@ export class RaceSound {
     const braking = drive.brake && Math.abs(p.speed) > 90 && p.spinTime <= 0;
     const slide = slideAmount(p) * 0.8;
     audio.setScreech(p.spinTime > 0 ? 1 : Math.max(slide, braking ? 0.35 : 0));
+    audio.setTyreLoad(tyreLoad(p));
     audio.setRefuel(p.refueling);
 
     const pc = Math.cos(p.heading);
