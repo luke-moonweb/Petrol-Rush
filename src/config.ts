@@ -129,9 +129,9 @@ export const CONFIG = {
     SLIDE_SLIP_MIN: 0.08,
     /** Grip use above which a rear hit spins at REAR_SPIN_TURN_MPH. */
     LOADED_USE: 0.7,
-    /** Straight assist: full strength up to FULL_DEG of heading error, fading out by OFF_DEG (micro-drift only: a heading the player set stays). */
-    STRAIGHT_FULL_DEG: 1,
-    STRAIGHT_OFF_DEG: 2,
+    /** Straight assist: full strength up to FULL_DEG of heading error, fading out by OFF_DEG (a car more askew than that stays so). */
+    STRAIGHT_FULL_DEG: 4,
+    STRAIGHT_OFF_DEG: 8,
     /** Walls: glancing below GLANCE_DEG (straightened, friction only), spin above SPIN_DEG and SPIN_MPH. */
     WALL_GLANCE_DEG: 15,
     WALL_SPIN_DEG: 30,
@@ -157,6 +157,15 @@ export const CONFIG = {
   CRASH_RESTITUTION: 0.45,
   REAR_SPIN_MPH: 22,
   REAR_SPIN_TURN_MPH: 14,
+  /**
+   * A rear hit square on the middle pushes more than it turns: it spins only at REAR_CENTRE_X x the rear
+   * spin speeds. The contact's angle off the struck car's axis (as a sine) picks it: up to
+   * REAR_CENTRE_FULL (the cars about a quarter of a car's width apart sideways) all of it, none from
+   * REAR_CENTRE_OFF (half a car's width: a hit on the bumper's corner spins as before).
+   */
+  REAR_CENTRE_X: 1.5,
+  REAR_CENTRE_FULL: 0.25,
+  REAR_CENTRE_OFF: 0.5,
   SIDE_REAR_SPIN_MPH: 20,
   PENALTY_S: 2,
   PENALTY_INCIDENT_S: 3,

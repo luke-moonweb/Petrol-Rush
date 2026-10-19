@@ -60,7 +60,7 @@ describe('grip model: corner assist from curvature', () => {
 describe('grip model: straight assist', () => {
   it('straightens a small angle when not steering, turning nose and travel direction together', () => {
     const car = carAt(S_BOTTOM + 100, 0, 150);
-    // (micro-drift only: STRAIGHT_FULL_DEG is 1 deg)
+    // (within STRAIGHT_FULL_DEG)
     car.heading = 0.015;
     car.moveAngle = 0.012;
     for (let i = 0; i < 60; i++) {
@@ -76,7 +76,9 @@ describe('grip model: straight assist', () => {
       stepCar(car, { steer: 0, gas: true, brake: false, toggleReverse: false, straightTo: 0 }, 1 / 60, OVAL);
       return ((deg * Math.PI) / 180 - car.heading) * 60;
     };
-    const rates = [0.5, 1, 1.25, 1.5, 1.75, 2, 3].map(turned);
+    const { STRAIGHT_FULL_DEG: full, STRAIGHT_OFF_DEG: off } = CONFIG.GRIP;
+    const fade = (x: number) => full + (off - full) * x;
+    const rates = [full / 2, full, fade(0.25), fade(0.5), fade(0.75), off, off + 1].map(turned);
     for (let i = 1; i < rates.length; i++) expect(rates[i]!).toBeLessThanOrEqual(rates[i - 1]! + 1e-9);
     expect(rates[0]).toBeCloseTo(CONFIG.STRAIGHT_ASSIST_RATE, 6);
     expect(rates[2]).toBeGreaterThan(0.2);

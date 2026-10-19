@@ -451,6 +451,13 @@ function rearLoaded(car: Car): boolean {
   return car.gripUse >= CONFIG.GRIP.LOADED_USE;
 }
 
+/** How much harder a rear hit must be to spin the car, by the contact's angle off its axis (sine, t). */
+function rearCentre(t: number): number {
+  const C = CONFIG;
+  const square = Math.max(0, Math.min(1, (C.REAR_CENTRE_OFF - Math.abs(t)) / (C.REAR_CENTRE_OFF - C.REAR_CENTRE_FULL)));
+  return 1 + (C.REAR_CENTRE_X - 1) * square;
+}
+
 export type CrashHandler = (culprit: Car | null, victims: Car[]) => void;
 
 function blameFor(
@@ -554,8 +561,9 @@ export function collideCars(cars: Car[], track: Track, mode: CollisionMode = 're
       } else if (!inPits && fast && closing > 0) {
         const za = zoneOf(a, nx, ny, px, py);
         const zb = zoneOf(b, -nx, -ny, px, py);
-        const hitSpins = (v: Car, zv: Zone): boolean => {
-          if (zv === 'rear') return closing > (rearLoaded(v) ? C.REAR_SPIN_TURN_MPH : C.REAR_SPIN_MPH);
+        // (t: the contact's angle off v's axis as a sine, ta or tb)
+        const hitSpins = (v: Car, zv: Zone, t: number): boolean => {
+          if (zv === 'rear') return closing > (rearLoaded(v) ? C.REAR_SPIN_TURN_MPH : C.REAR_SPIN_MPH) * rearCentre(t);
           if (zv === 'sideRear') return closing > C.SIDE_REAR_SPIN_MPH;
           return false;
         };
@@ -566,13 +574,13 @@ export function collideCars(cars: Car[], track: Track, mode: CollisionMode = 're
             if (spinB()) victims.push(b);
           }
         } else if (za === 'front' || (a.spinTime > 0 && zb !== 'front')) {
-          if (hitSpins(b, zb)) {
+          if (hitSpins(b, zb, tb)) {
             isCrash = true;
             if (spinB()) victims.push(b);
             culprit = a.spinTime > 0 ? null : a;
           }
         } else if (zb === 'front' || b.spinTime > 0) {
-          if (hitSpins(a, za)) {
+          if (hitSpins(a, za, ta)) {
             isCrash = true;
             if (spinA()) victims.push(a);
             culprit = b.spinTime > 0 ? null : b;

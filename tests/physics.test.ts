@@ -198,14 +198,27 @@ describe('crashes', () => {
   });
 
   it('realistic mode: a rear hit spins a car with loaded tyres (cornering) at a lower closing speed', () => {
-    // closing at 18 mph: above REAR_SPIN_TURN_MPH, below REAR_SPIN_MPH
-    const [a, b] = crashPair(150, 132);
+    // closing at 24 mph, square on the middle: above REAR_SPIN_TURN_MPH, below REAR_SPIN_MPH (both x REAR_CENTRE_X)
+    const [a, b] = crashPair(150, 126);
     b.gripUse = CONFIG.GRIP.LOADED_USE;
     collideCars([a, b], OVAL, 'realistic');
     expect(b.spinTime).toBeGreaterThan(0);
-    const [c, d] = crashPair(150, 132);
+    const [c, d] = crashPair(150, 126);
     collideCars([c, d], OVAL, 'realistic');
     expect(d.spinTime).toBe(0);
+  });
+
+  it('realistic mode: a rear hit square on the middle spins only at REAR_CENTRE_X x the speed, on the corner as before', () => {
+    // 30 mph faster: over REAR_SPIN_MPH, under REAR_CENTRE_X x it
+    const [a, b] = crashPair(150, 120);
+    collideCars([a, b], OVAL, 'realistic');
+    expect(b.spinTime).toBe(0);
+    // 8 px across (over half a car's width): about 23 mph of it closes along the contact
+    const [c, d] = crashPair(150, 120);
+    const pd = pointAt(230, 8);
+    Object.assign(d, { x: pd.x, y: pd.y, s: 230, d: 8 });
+    collideCars([c, d], OVAL, 'realistic');
+    expect(d.spinTime).toBeGreaterThan(0);
   });
 
   it('realistic mode: side-by-side rubbing does not cause a spin', () => {
