@@ -3,7 +3,17 @@ import type { AiView } from '../race/ai';
 import type { Car } from '../race/car';
 import { fillTarget } from '../race/fuel';
 import { CAR_R, type Constrainable, HALF_W, LANES, type PitLane, type PitPlan, type WallNormal } from './common';
-import { driveToBox, followInPits, mergeClear, type PitRoad, pitDriveLaneBusy } from './pitAi';
+import {
+  DRIVE_WALLWARD,
+  driveToBox,
+  followInPits,
+  leaveBox,
+  mergeClear,
+  type PitRoad,
+  PULL_LOOK_PX,
+  queueMph,
+  yieldToPullers,
+} from './pitAi';
 
 /**
  * Cross-section of a pit lane north of an east-bound straight, as offsets from the straight's
@@ -28,6 +38,8 @@ const DECIDE_FROM = 900;
 const DECIDE_TO = 300;
 const EXIT_D = -HALF_W + 13;
 const ENTRY_LOOK = 70;
+/** On the entry road a car queues behind a car this close (px) to the line along its heading. */
+const ENTRY_PATH_PX = 15;
 /** Right of this near the pit wall's end, a car still has the track lane to itself and can stay out. */
 const STILL_ON_TRACK_D = -44;
 const JAM_S = 6;
@@ -85,7 +97,9 @@ export class StraightPit implements PitLane {
       numBoxes: NUM_BOXES,
       boxPitch: geo.boxPitch,
       boxY: geo.y0 + PIT_D.BOX,
-      driveY: geo.y0 + PIT_D.DRIVE,
+      // (the AI drives the drive row a little towards the pit wall: more room past the boxes)
+      driveY: geo.y0 + PIT_D.DRIVE + DRIVE_WALLWARD,
+      onRoad: (x, y) => this.onRoad(x, y),
     };
   }
 
@@ -116,6 +130,12 @@ export class StraightPit implements PitLane {
     const u = this.u(x);
     const d = this.d(y);
     return u >= this.geo.entry0 && u <= this.geo.box1 && d > PIT_D.BOX_TOP - 4 && d < PIT_D.SEP - 4;
+  }
+
+  onRoad(x: number, y: number): boolean {
+    const u = this.u(x);
+    const d = this.d(y);
+    return u >= this.geo.entry0 && u <= this.geo.exit1 && d > PIT_D.BOX_TOP - 4 && d < PIT_D.SEP - 4;
   }
 
   inBox(x: number, y: number): boolean {
@@ -262,12 +282,7 @@ export class StraightPit implements PitLane {
         break;
       case 'exiting':
         if (car.pitSide && du < g.wall1) {
-          lane = road.driveY;
-          target = CONFIG.AI_PIT_MPH;
-          if (car.y < road.driveY - 8 && pitDriveLaneBusy(road, car, view.cars)) {
-            lane = road.boxY;
-            target = 0;
-          }
+          ({ target, lane } = leaveBox(road, car, view.cars, CONFIG.AI_PIT_MPH));
         } else {
           laneD = mergeClear(view.track, car, LANES[0]!, view.cars) ? LANES[0]! : EXIT_D;
           target = Math.min(target, CONFIG.AI_PIT_MPH + 30);
@@ -288,26 +303,32 @@ export class StraightPit implements PitLane {
       followInPits(this.road, car, view.cars, plan);
       return;
     }
-    // Single file on the entry road: queue behind whoever is ahead, never swap rows here.
+    // Single file on the entry road: queue behind whoever is ahead, never swap rows here. (Ahead along the
+    // car's heading too: the road runs across, so a car ahead on it can be well off to the side.)
     let gap = Infinity;
     let ahead: Car | null = null;
+    const hx = Math.cos(car.heading);
+    const hy = Math.sin(car.heading);
     for (const o of view.cars) {
       const dx = o.x - car.x;
-      if (o === car || dx <= 0 || dx > 150 || Math.abs(o.y - car.y) > 16) continue;
-      if (dx < gap) {
-        gap = dx;
+      const dy = o.y - car.y;
+      const along = dx * hx + dy * hy;
+      const level = dx > 0 && Math.abs(dy) <= 16;
+      const inPath = along > 0 && Math.abs(dy * hx - dx * hy) <= ENTRY_PATH_PX;
+      if (o === car || dx > 150 || !(level || inPath)) continue;
+      const d = level ? dx : along;
+      if (d < gap) {
+        gap = d;
         ahead = o;
       }
     }
-    if (ahead) {
-      const v0 = Math.max(0, ahead.speed);
-      const room = Math.max(0, gap - 46);
-      plan.target = Math.min(plan.target, Math.sqrt(v0 * v0 + (2 * CONFIG.BRAKE_MPH_S * 0.7 * room) / CONFIG.PX_PER_MPH));
-    }
+    // (closer than queueing distance, side by side included, it drops back)
+    if (ahead) plan.target = Math.min(plan.target, queueMph(ahead.speed, gap));
+    yieldToPullers(this.road, car, view.cars, plan);
   }
 
   aim(car: Car, lane: number, look: number): { x: number; y: number } {
     const nearBox = car.ai.pitPhase === 'entering' && this.boxX(car.ai.box) - car.x < 60;
-    return { x: car.x + (nearBox ? 22 : Math.max(look, 50)), y: lane };
+    return { x: car.x + (nearBox ? 22 : car.ai.pullOut === 2 ? PULL_LOOK_PX : Math.max(look, 50)), y: lane };
   }
 }

@@ -63,6 +63,7 @@ export function aiInput(car: Car, view: AiView, dt: number): DriveInput {
   if (ai.pitPhase !== 'exiting') {
     ai.merging = false;
     ai.mergeWait = 0;
+    ai.pullOut = 0;
   }
   const pit = track.pit.plan(car, view, ai.topMph, ai.lane, dt);
   const plan: Plan = {
@@ -869,6 +870,11 @@ function watchStuck(car: Car, view: AiView, dt: number): void {
   const herr = wrapAngle(track.headingAt(car.x, car.y) - car.heading);
   const misaligned = Math.abs(herr) > (car.contactPrev > 0 ? 0.35 : 0.7);
   if (view.started && !servicing && car.spinTime <= 0 && Math.abs(car.speed) < 4 && !car.finished) {
+    // (on the pit road a car waits its turn: no backing out or creeping into the cars round it)
+    if (ai.pitPhase !== 'none' && !misaligned && track.pit.onRoad(car.x, car.y)) {
+      ai.stuckTime = 0;
+      return;
+    }
     ai.stuckTime += dt;
     // (right behind a standing car, with no room to steer round it: back out first)
     const nose = noseBlocked(car, view.cars);

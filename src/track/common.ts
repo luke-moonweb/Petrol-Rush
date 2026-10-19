@@ -55,6 +55,8 @@ export interface PitLane {
   /** On pit lane tarmac: no crashes and no oil here. */
   inLane(x: number, y: number): boolean;
   inBox(x: number, y: number): boolean;
+  /** On the pit side of the road from the pit entry to the pit exit (not on the track). */
+  onRoad(x: number, y: number): boolean;
   /** Two cars on opposite sides of the pit wall cannot touch. */
   walled(a: Constrainable, b: Constrainable): boolean;
   /** The stretch of track on which AI drivers decide whether to pit this lap. */

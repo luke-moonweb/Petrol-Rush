@@ -133,6 +133,7 @@ function pedals(x: Ctx): { gas: boolean; brake: boolean } {
 const NO_PIT: PitLane = {
   inLane: () => false,
   inBox: () => false,
+  onRoad: () => false,
   walled: () => false,
   decideAt: () => false,
   autoIn: () => false,

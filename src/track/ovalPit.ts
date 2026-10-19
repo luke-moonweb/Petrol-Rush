@@ -20,6 +20,7 @@ import {
   PIT_LINE_IN_X,
   PIT_LINE_OUT_X,
   PIT_ROAD_Y,
+  PIT_WALL_TOP,
   PIT_X0,
   PIT_X1,
   RC,
@@ -29,7 +30,17 @@ import {
   WALL_X0,
   WALL_X1,
 } from './oval';
-import { driveToBox, exitRoadAhead, followInPits, mergeClear, PIT_FUEL_MARGIN_LAPS, type PitRoad, pitDriveLaneBusy } from './pitAi';
+import {
+  DRIVE_WALLWARD,
+  driveToBox,
+  exitRoadAhead,
+  followInPits,
+  leaveBox,
+  mergeClear,
+  PIT_FUEL_MARGIN_LAPS,
+  type PitRoad,
+  PULL_LOOK_PX,
+} from './pitAi';
 
 const EXIT_D = -HALF_W + 13;
 /** Grip model: the innermost line a merging car keeps to while the lane is not clear (clear of the island). */
@@ -89,13 +100,15 @@ const ROAD: PitRoad = {
   numBoxes: NUM_BOXES,
   boxPitch: BOX_PITCH,
   boxY: PIT_BOX_Y,
-  driveY: PIT_DRIVE_Y,
+  driveY: PIT_DRIVE_Y + DRIVE_WALLWARD,
   onExitRoad: (x, y) => y > CY && x < WALL_X1 + 20,
+  onRoad: (x, y) => y > CY && y < PIT_WALL_TOP + 4 && x >= CX_L && x < WALL_X1 + 20,
 };
 
 export const OVAL_PIT: PitLane = {
   inLane: inPitLane,
   inBox: inPitBox,
+  onRoad: ROAD.onRoad,
 
   walled(a: Constrainable, b: Constrainable): boolean {
     return inWallRange(a.x) && inWallRange(b.x) && a.wasInPit && b.wasInPit && a.pitSide !== b.pitSide;
@@ -209,12 +222,7 @@ export const OVAL_PIT: PitLane = {
         break;
       case 'exiting':
         if (car.x < WALL_X1 && car.y > CY) {
-          pitY = PIT_DRIVE_Y;
-          target = CONFIG.AI_PIT_MPH;
-          if (car.y < PIT_DRIVE_Y - 8 && pitDriveLaneBusy(ROAD, car, view.cars)) {
-            pitY = PIT_BOX_Y;
-            target = 0;
-          }
+          ({ target, lane: pitY } = leaveBox(ROAD, car, view.cars, CONFIG.AI_PIT_MPH));
           // Give way at the end of the pit road until the inside lane is clear, instead
           // of merging into turn 1 alongside (or just ahead of) a car that cannot slow down in time.
           // After MERGE_MAX_WAIT_S stopped it goes as soon as nobody is alongside, after MERGE_FORCE_S
@@ -266,6 +274,6 @@ export const OVAL_PIT: PitLane = {
 
   aim(car: Car, lane: number, look: number): { x: number; y: number } {
     const nearBox = car.ai.pitPhase === 'entering' && boxX(car.ai.box) - car.x < 60;
-    return { x: car.x + (nearBox ? 22 : Math.max(look, 50)), y: lane };
+    return { x: car.x + (nearBox ? 22 : car.ai.pullOut === 2 ? PULL_LOOK_PX : Math.max(look, 50)), y: lane };
   },
 };
