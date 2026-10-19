@@ -51,8 +51,9 @@ export function pitCarAhead(
     const dx = o.x - car.x;
     if (dx <= from || dx > 150) continue;
     const alongside = from === 0 && dx < AHEAD_PX;
-    // (a car pulling out of its box clears the car in the next one: it only looks along the drive row)
-    if (alongside ? car.ai.pullOut === 2 || Math.abs(o.y - car.y) > SIDE_BY_SIDE_PX : !inRow(o, laneY)) continue;
+    // (a car pulling out of its box clears the car in the next one: it only looks along the drive row; a car
+    // crossing over ahead is on its way into the drive row from either)
+    if (alongside ? car.ai.pullOut === 2 || Math.abs(o.y - car.y) > SIDE_BY_SIDE_PX : !inRow(o, laneY) && o.ai.pullOut !== 2) continue;
     if (!best || dx < best.gap) best = { car: o, gap: dx };
   }
   return best;
@@ -126,8 +127,10 @@ export function exitRoadAhead(car: Car, cars: Car[]): { car: Car; gap: number } 
 /** Parking: the turn into the box row starts this far before the box (px)... */
 const PARK_TURN_PX = 60;
 /** ...at this speed (mph), braking at this share of the full rate on the way. */
-const PARK_MPH = 14;
-const PARK_BRAKE = 0.5;
+const PARK_MPH = 30;
+const PARK_BRAKE = 0.7;
+/** Steering look-ahead (px) for the turn into the box. */
+export const PARK_LOOK_PX = 15;
 /** A car this close (px) to the box row's centre line is in it. */
 const PARK_IN_PX = 5;
 /** A car still out of its box row next to the box rolls on into it at this speed (mph). */

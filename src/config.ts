@@ -208,7 +208,7 @@ export const CONFIG = {
   AI_FILL_MARGIN_LAPS: 0.6,
   /** Saving fuel: what lifting is counted on to gain (at fuelSave 1), the top speed given up, the margin. */
   AI_ECO: { GAIN: 0.06, MPH: 15, MARGIN_LAPS: 0.5 },
-  AI_PIT_MPH: 70,
+  AI_PIT_MPH: 80,
   AI_FINISHED_MPH: 90,
   AI_REACTION_S: [0.25, 0.7] as [number, number],
   AI_HAZARD_RANGE: 260,

@@ -9,6 +9,7 @@ import {
   followInPits,
   leaveBox,
   mergeClear,
+  PARK_LOOK_PX,
   type PitRoad,
   PULL_LOOK_PX,
   queueMph,
@@ -329,6 +330,6 @@ export class StraightPit implements PitLane {
 
   aim(car: Car, lane: number, look: number): { x: number; y: number } {
     const nearBox = car.ai.pitPhase === 'entering' && this.boxX(car.ai.box) - car.x < 60;
-    return { x: car.x + (nearBox ? 22 : car.ai.pullOut === 2 ? PULL_LOOK_PX : Math.max(look, 50)), y: lane };
+    return { x: car.x + (nearBox ? PARK_LOOK_PX : car.ai.pullOut === 2 ? PULL_LOOK_PX : Math.max(look, 50)), y: lane };
   }
 }
