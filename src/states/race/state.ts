@@ -21,6 +21,7 @@ import { drawHudPanel, drawHudTop, drawSkidLamp, fuelOutlook } from '../../ui/hu
 import { drawPause, drawRaceMenu, drawRaceSettings, drawResults } from '../../ui/overlays';
 import { ordinal } from '../../ui/text';
 import { PR } from '../../ui/theme';
+import { toKph } from '../../units';
 import { type Game, type State, saveOptions, tapSide } from '../game';
 import { HelpState } from '../info';
 import { RaceCamera } from './camera';
@@ -564,9 +565,9 @@ export class RaceState implements State {
     return [
       `fps ${this.fps.toFixed(0)}  time x${this.game.timeScale} (])`,
       `x ${p.x.toFixed(0)} y ${p.y.toFixed(0)}  s ${p.s.toFixed(0)} d ${p.d.toFixed(1)}`,
-      `mph ${p.speed.toFixed(1)}  fuel ${(p.fuel * 100).toFixed(1)}%  spin ${p.spinTime.toFixed(2)}`,
+      `km/h ${toKph(p.speed).toFixed(1)}  fuel ${(p.fuel * 100).toFixed(1)}%  spin ${p.spinTime.toFixed(2)}`,
       `sector ${p.lastSector} passed ${p.sectorsPassed}  t ${this.race.time.toFixed(1)}`,
-      `grip ${p.gripUse.toFixed(2)} slip ${((wrapAngle(p.heading - p.moveAngle) * 180) / Math.PI).toFixed(1)}° rear ${p.rearLoose ? 'LOOSE' : p.rearStress.toFixed(2)} limit ${warnings(p, this.race.track).vRef.toFixed(0)}`,
+      `grip ${p.gripUse.toFixed(2)} slip ${((wrapAngle(p.heading - p.moveAngle) * 180) / Math.PI).toFixed(1)}° rear ${p.rearLoose ? 'LOOSE' : p.rearStress.toFixed(2)} limit ${toKph(warnings(p, this.race.track).vRef).toFixed(0)}`,
       this.controls.debugLine(),
       ...(this.cockpit ? [this.overlayLine()] : []),
     ];

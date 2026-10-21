@@ -62,6 +62,24 @@ describe('module structure', () => {
     expect(offenders).toEqual([]);
   });
 
+  // Every speed the player reads is in km/h, converted at the edge by src/units.ts; the simulation stays in
+  // mph. A screen that printed a raw Car.speed, or a dial captioned MPH, would show the wrong unit.
+  const SCREEN = ['../src/ui/', '../src/gfx/', '../src/states/'];
+
+  it('the screens show no mph: speeds reach them through src/units.ts', () => {
+    const offenders = Object.entries(SOURCES)
+      .filter(([path]) => SCREEN.some((p) => path.startsWith(p)))
+      .flatMap(([path, code]) => [...code.matchAll(/'MPH'|"MPH"|\d\s?mph\b/gi)].map((m) => `${path}: ${m[0]}`));
+    expect(offenders).toEqual([]);
+  });
+
+  it('the conversion factors live only in src/units.ts', () => {
+    const offenders = Object.entries(SOURCES)
+      .filter(([path]) => path !== '../src/units.ts')
+      .flatMap(([path, code]) => [...code.matchAll(/1\.609|0\.447|0\.263/g)].map((m) => `${path}: ${m[0]}`));
+    expect(offenders).toEqual([]);
+  });
+
   it('only the screens (states) and main import the screens', () => {
     const offenders = Object.entries(SOURCES)
       .filter(([path]) => !path.startsWith('../src/states/') && path !== '../src/main.ts')

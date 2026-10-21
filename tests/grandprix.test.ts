@@ -191,6 +191,40 @@ describe('saved championship', () => {
     expect(parseGp(JSON.stringify(silly), ids)).toBeNull();
   });
 
+  // A championship the game saved on 2026-10-21 (format 1): newGrandPrix with 3 cars and seed 1234, one race run.
+  // The skills are the simulation's speeds in mph, and the save keeps that name and unit: whatever unit the game
+  // shows later, a reader must still give these drivers these numbers (a new unit means format 2 and a reader
+  // that converts, never a reinterpretation), and the season must go on from the same next race.
+  const SAVED_2026_10_21 =
+    '{"version":1,"seed":1234,"cars":3,"laps":3,"playerColor":4,"qualifying":"last","difficulty":"normal","tracks":["harbour","desert","city","forest","finale"],"entries":[{"colorIdx":4},{"colorIdx":0,"skill":{"topMph":177.462048481917,"turnMph":146.56431506201625,"pitFuelLaps":1.7376990455202759,"reaction":0.5541875434340908,"fuelSave":0.0817739050835371,"temper":0.78556117718108}},{"colorIdx":1,"skill":{"topMph":172.94175889715552,"turnMph":145.96905256062746,"pitFuelLaps":4.739406910701655,"reaction":0.46482107839547093,"fuelSave":0.9129431215114892,"temper":0.5880564274266362}}],"results":[{"order":[0,4,1],"dnf":[]}],"restarts":0}';
+
+  it('reads a championship saved on 2026-10-21 driver for driver, and goes on from its next race', () => {
+    const read = parseGp(SAVED_2026_10_21, ids);
+    expect(read).not.toBeNull();
+    expect(read!.entries.map((e) => e.skill)).toEqual([
+      undefined,
+      {
+        topMph: 177.462048481917,
+        turnMph: 146.56431506201625,
+        pitFuelLaps: 1.7376990455202759,
+        reaction: 0.5541875434340908,
+        fuelSave: 0.0817739050835371,
+        temper: 0.78556117718108,
+      },
+      {
+        topMph: 172.94175889715552,
+        turnMph: 145.96905256062746,
+        pitFuelLaps: 4.739406910701655,
+        reaction: 0.46482107839547093,
+        fuelSave: 0.9129431215114892,
+        temper: 0.5880564274266362,
+      },
+    ]);
+    expect(round(read!)).toBe(1);
+    expect(raceSeed(read!, 1)).toBe(17072);
+    expect(standings(read!)[0]!.colorIdx).toBe(0);
+  });
+
   it('rejects missing, corrupt, foreign and inconsistent data', () => {
     const g = gp();
     const bad = (patch: Partial<GrandPrix> | Record<string, unknown>) => parseGp(JSON.stringify({ ...g, ...patch }), ids);
