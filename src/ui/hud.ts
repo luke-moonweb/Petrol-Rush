@@ -5,6 +5,7 @@ import { lapsCompleted, progress } from '../race/car';
 import { lapsOfFuel, lapsToFinish } from '../race/fuel';
 import type { Race } from '../race/race';
 import type { Warn } from '../race/warnings';
+import { fmtKph, toKph } from '../units';
 import { FONT_UI } from './text';
 import { FONT_BLACK, PR } from './theme';
 
@@ -357,7 +358,18 @@ function needle(g: CanvasRenderingContext2D, cx: number, cy: number, a: number, 
   g.stroke();
 }
 
-/** `redFrom`: where the red arc starts (in a race: the next corner's limit speed). */
+// The dial reads km/h, 0 to DIAL_MAX_KPH: top speed (290) sits at 90 % of the sweep, where 180 of 200 sat in mph.
+const DIAL_MAX_KPH = 320;
+const DIAL_TICK_KPH = 20;
+const DIAL_MAJOR_KPH = 40;
+/** Three-digit labels at 6 px do not fit every 40 on the 54 px dial, so every other major tick is labelled. */
+const DIAL_LABEL_KPH = 80;
+const DIAL_RED_TICK_KPH = 10;
+
+/**
+ * The speedometer. `mph` and `redFrom` are the simulation's speeds (mph); the dial converts them and shows
+ * km/h, so no caller has to. `redFrom`: where the red arc starts (in a race: the next corner's limit speed).
+ */
 export function drawSpeedo(
   g: CanvasRenderingContext2D,
   mph: number,
@@ -366,31 +378,31 @@ export function drawSpeedo(
   r: number,
   redFrom: number = CONFIG.SPIN_MPH,
 ): void {
-  const v = Math.min(200, Math.abs(mph));
-  const ang = (val: number) => Math.PI + (val / 200) * Math.PI;
-  const red = Math.max(0, Math.min(200, redFrom));
+  const v = Math.min(DIAL_MAX_KPH, Math.abs(toKph(mph)));
+  const ang = (kph: number) => Math.PI + (kph / DIAL_MAX_KPH) * Math.PI;
+  const red = Math.max(0, Math.min(DIAL_MAX_KPH, toKph(redFrom)));
   g.save();
   semiDial(g, cx, cy, r);
   g.strokeStyle = PR.red;
   g.lineWidth = 3;
   g.beginPath();
-  g.arc(cx, cy, r - 8, ang(red), ang(200));
+  g.arc(cx, cy, r - 8, ang(red), ang(DIAL_MAX_KPH));
   g.stroke();
   const hot = v > red;
   g.strokeStyle = hot ? '#FF6A4A' : PR.red;
   g.lineWidth = 1.2;
-  for (let val = Math.ceil(red / 5) * 5; val <= 200; val += 5) {
-    const a = ang(val);
+  for (let kph = Math.ceil(red / DIAL_RED_TICK_KPH) * DIAL_RED_TICK_KPH; kph <= DIAL_MAX_KPH; kph += DIAL_RED_TICK_KPH) {
+    const a = ang(kph);
     g.beginPath();
     g.moveTo(cx + Math.cos(a) * (r - 15), cy + Math.sin(a) * (r - 15));
     g.lineTo(cx + Math.cos(a) * (r - 9.5), cy + Math.sin(a) * (r - 9.5));
     g.stroke();
   }
   g.strokeStyle = PR.amber;
-  for (let val = 0; val <= 200; val += 20) {
-    if (val > red) continue;
-    const a = ang(val);
-    const major = val % 40 === 0;
+  for (let kph = 0; kph <= DIAL_MAX_KPH; kph += DIAL_TICK_KPH) {
+    if (kph > red) continue;
+    const a = ang(kph);
+    const major = kph % DIAL_MAJOR_KPH === 0;
     g.lineWidth = major ? 2 : 1;
     const r0 = r - (major ? 12 : 9);
     g.beginPath();
@@ -402,17 +414,18 @@ export function drawSpeedo(
   g.font = `6px ${FONT_BLACK}`;
   g.textAlign = 'center';
   g.textBaseline = 'middle';
-  for (let val = 0; val <= 200; val += 40) {
-    const a = ang(val);
-    g.fillText(String(val), cx + Math.cos(a) * (r - 19), cy + Math.sin(a) * (r - 19) + (val === 0 || val === 200 ? -3 : 0));
+  for (let kph = 0; kph <= DIAL_MAX_KPH; kph += DIAL_LABEL_KPH) {
+    const a = ang(kph);
+    const lift = kph === 0 || kph === DIAL_MAX_KPH ? -3 : 0;
+    g.fillText(String(kph), cx + Math.cos(a) * (r - 19), cy + Math.sin(a) * (r - 19) + lift);
   }
   g.fillStyle = PR.tealLight;
   g.font = `bold 12px "Courier New", monospace`;
-  g.fillText(String(Math.round(Math.abs(mph))), cx, cy - 14);
+  g.fillText(fmtKph(mph), cx, cy - 14);
   needle(g, cx, cy, ang(v), r - 7);
   g.fillStyle = PR.muted;
   g.font = `6px ${FONT_BLACK}`;
-  g.fillText('MPH', cx, cy + 7);
+  g.fillText('KM/H', cx, cy + 7);
   g.restore();
 }
 

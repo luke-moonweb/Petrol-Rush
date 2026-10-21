@@ -112,7 +112,7 @@ function geom(w: number, h: number, touch: boolean): Geom {
   bead.quadraticCurveTo(w * 0.5, dip - h * 0.022, w * 0.92, top * 0.72);
   const ledBot = h * 0.618 + 6;
   const lampTop = h * 0.772 - 11 / 2;
-  // The speedo's dial top sits at cy - 54k and its MPH caption ends near cy + 10k.
+  // The speedo's dial top sits at cy - 54k and its KM/H caption ends near cy + 10k.
   const dialK = Math.min(
     1.4,
     (lampTop - ledBot - 6) / (SPEEDO_R + 10),

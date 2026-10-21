@@ -5,6 +5,7 @@ import type { Race } from '../../race/race';
 import type { Warn } from '../../race/warnings';
 import type { FuelOutlook } from '../../ui/hud';
 import { PR } from '../../ui/theme';
+import { toKph } from '../../units';
 
 export const LED_COUNT = 9;
 export const LED_GREEN = '#52E252';
@@ -134,13 +135,13 @@ function ledColor(i: number): string {
   return i < 4 ? PR.teal : i < 7 ? PR.amber : PR.red;
 }
 
-/** The speed (mph) that lights LED i; all of them at MAX_MPH. */
-export function ledMph(i: number): number {
-  return CONFIG.MAX_MPH - LED_MPH_STEP * (LED_COUNT - 1 - i);
+/** The speed (km/h) that lights LED i: one LED per LED_KPH_STEP, all of them at MAX_MPH (290 km/h). */
+export function ledKph(i: number): number {
+  return toKph(CONFIG.MAX_MPH) - LED_KPH_STEP * (LED_COUNT - 1 - i);
 }
-const LED_MPH_STEP = 5;
+const LED_KPH_STEP = 10;
 
-function leds(s: CabinInput, mph: number): (string | null)[] {
+function leds(s: CabinInput, kph: number): (string | null)[] {
   const out: (string | null)[] = new Array(LED_COUNT).fill(null);
   if (s.lights && !s.lights.out) {
     for (let i = 0; i < s.lights.lit && i < 5; i++) out[2 + i] = PR.red;
@@ -148,12 +149,12 @@ function leds(s: CabinInput, mph: number): (string | null)[] {
   }
   if (s.lights && s.lights.since < GREEN_S) return out.fill(LED_GREEN);
   // the strip only shows how close the car is to top speed (the user's decision)
-  for (let i = 0; i < LED_COUNT; i++) if (mph >= ledMph(i)) out[i] = ledColor(i);
+  for (let i = 0; i < LED_COUNT; i++) if (kph >= ledKph(i)) out[i] = ledColor(i);
   return out;
 }
 
 export function cabinReadout(s: CabinInput): Readout {
-  const mph = Math.round(Math.abs(s.speed));
+  const kph = toKph(Math.abs(s.speed));
   const t = s.time;
   const fuelLaps = s.fuelOut.laps;
   const low = s.fuel < CONFIG.LOW_FUEL;
@@ -189,7 +190,7 @@ export function cabinReadout(s: CabinInput): Readout {
     if (s.interval < 0.5) podColor = PR.amber;
   }
   return {
-    leds: leds(s, mph),
+    leds: leds(s, kph),
     lamps,
     podTop,
     podBottom,

@@ -63,7 +63,7 @@ are no image, audio or font files in the project.
 <table>
   <tr>
     <td><img src="docs/screenshots/race.png" alt="Race HUD: timing tower, semicircular speedometer and fuel gauge, night track"></td>
-    <td><img src="docs/screenshots/crash.png" alt="Crash ahead: yellow caution banner, oil slicks and a penalty in the timing tower"></td>
+    <td><img src="docs/screenshots/crash.png" alt="Crash ahead: yellow caution banner, oil slicks and cars spinning at the end of the straight"></td>
   </tr>
   <tr>
     <td align="center"><sub>Packed night oval – live tower, fuel on the edge, one bad corner from disaster</sub></td>
@@ -134,8 +134,8 @@ browser does not support it (iPhone Safari).
 ## 🏆 How to race
 
 - **Corner speed depends on the radius.** The tyres have a fixed amount of grip: a tight corner or
-  the inside lane needs less speed than a wide one (the centre of the oval goes at about 160 mph,
-  the outside lane at about 174). A held steering key asks for about all the grip there is, so you
+  the inside lane needs less speed than a wide one (the centre of the oval goes at about 257 km/h,
+  the outside lane at about 280). A held steering key asks for about all the grip there is, so you
   can drive right at the limit. A little too fast and the car runs wide and scrubs speed; keep
   steering into a corner you are clearly too fast for and the tail steps out – steer against it (a
   quick tap is enough for a small slide) or it spins. A slide costs more time than braking would
@@ -144,7 +144,7 @@ browser does not support it (iPhone Safari).
 - **Warnings:** the red zone on the speedometer shows the limit
   speed of the next corner; the **SKID** lamp lights only when the car really slides, blinks faster
   the more it slides and stays lit through a spin. The cockpit LED strip shows the start lights,
-  then how close you are to top speed (one LED per 5 mph from 140, all lit at 180).
+  then how close you are to top speed (one LED per 10 km/h from 210, all lit at top speed, 290).
 - **Hold the throttle to keep your speed** – release it and the car slowly coasts down, like
   lifting off the pedal. Braking is stronger at high speed.
 - **Overtake on the straights.** Steering builds up while you hold a key: tap for small corrections,

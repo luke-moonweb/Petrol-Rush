@@ -1,7 +1,7 @@
 import './sim/browser';
 import { describe, expect, it } from 'vitest';
 import { CONFIG, DEFAULT_OPTIONS } from '../src/config';
-import { type CabinInput, cabinFor, cabinReadout, JOLT_GAP_S, joltOffset, LED_COUNT, ledMph, stepCabin } from '../src/gfx/fpv/cabin';
+import { type CabinInput, cabinFor, cabinReadout, JOLT_GAP_S, joltOffset, LED_COUNT, ledKph, stepCabin } from '../src/gfx/fpv/cabin';
 import { Camera, clipProject, outX, outY, visible } from '../src/gfx/fpv/engine';
 import { upright } from '../src/gfx/fpv/geom';
 import { OVAL_SPEC } from '../src/gfx/fpv/oval';
@@ -13,6 +13,7 @@ import { HALF_W } from '../src/track/common';
 import { allTracks } from '../src/track/tracks';
 import { fuelCall, fuelOutlook } from '../src/ui/hud';
 import { PR } from '../src/ui/theme';
+import { KPH_PER_MPH, toKph } from '../src/units';
 
 function camera(): Camera {
   const c = new Camera();
@@ -183,13 +184,17 @@ describe('cockpit readout', () => {
   };
   const read = (s: Partial<CabinInput>) => cabinReadout({ ...base, ...s });
   const lit = (s: Partial<CabinInput>) => read(s).leds.filter(Boolean).length;
-  it('the strip only shows how close the car is to top speed: 140 to 180 mph, 5 mph per LED', () => {
-    expect(lit({ speed: 139 })).toBe(0);
-    expect(lit({ speed: 140 })).toBe(1);
-    expect(lit({ speed: 162 })).toBe(5);
-    expect(lit({ speed: 175 })).toBe(8);
+  it('the strip only shows how close the car is to top speed: one LED per 10 km/h from 210, all lit at 290', () => {
+    // (the cabin reads the simulation's speed in mph and converts; the thresholds are in km/h)
+    const atKph = (kph: number) => ({ speed: kph / KPH_PER_MPH });
+    expect(lit(atKph(209))).toBe(0);
+    expect(lit(atKph(210))).toBe(1);
+    expect(lit(atKph(250))).toBe(5);
+    expect(lit(atKph(280))).toBe(8);
     expect(lit({ speed: CONFIG.MAX_MPH })).toBe(LED_COUNT);
-    for (let i = 0; i < LED_COUNT; i++) expect(ledMph(i)).toBe(140 + 5 * i);
+    expect(lit({ speed: -CONFIG.MAX_MPH })).toBe(LED_COUNT);
+    for (let i = 0; i < LED_COUNT; i++) expect(ledKph(i)).toBeCloseTo(209.68 + 10 * i, 2);
+    expect(ledKph(LED_COUNT - 1)).toBe(toKph(CONFIG.MAX_MPH));
     // teal, amber, red along the strip, as before
     expect(read({ speed: 180 }).leds).toEqual([...Array(4).fill(PR.teal), ...Array(3).fill(PR.amber), PR.red, PR.red]);
     // nothing else: no skid, spin, pit-limiter, slide or finish patterns
